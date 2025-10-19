@@ -16,6 +16,23 @@ interface ChatPageProps {
   openDeleteModal: (title: string, onConfirm: () => void) => void;
 }
 
+function formatAIResponse(text: string): string {
+    if (!text) return '';
+    // Basic sanitization to prevent HTML injection.
+    let safeText = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Format **bold** text
+    safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Convert newlines to <br> tags for display.
+    safeText = safeText.replace(/\n/g, '<br />');
+
+    return safeText;
+}
+
 const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -25,9 +42,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
     const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [isAnalysisMode, setAnalysisMode] = useState(false);
     const [analysisFile, setAnalysisFile] = useState<File | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
      useEffect(() => {
         if (!user) return;
+        setError(null);
         const sessionsRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions`);
         const q = query(sessionsRef, orderBy('updatedAt', 'desc'));
 
@@ -54,6 +73,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
             if (snapshot.empty) {
                  createNewSessionForUser();
             }
+        }, (err) => {
+            console.error("Firebase session listener error:", err);
+            if (err.code === 'permission-denied') {
+                setError("You don't have permission to view chats. This is likely a security rule misconfiguration.");
+            } else {
+                setError("Failed to load chat sessions.");
+            }
         });
 
         return () => unsubscribe();
@@ -71,6 +97,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
             setMessages(fetchedMessages);
+        }, (err) => {
+            console.error("Firebase messages listener error:", err);
         });
 
         return () => unsubscribe();
@@ -235,7 +263,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
     };
 
     return (
-        <div className="flex h-screen -mt-[68px] pt-[68px] bg-white w-full overflow-hidden">
+        <div className="flex h-screen -mt-[68px] pt-[68px] bg-primary w-full overflow-hidden">
              {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
             <ChatSidebar
                 sessions={sessions}
@@ -247,27 +275,28 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                 userProfile={userProfile}
                 isOpen={isSidebarOpen}
                 isCollapsed={isSidebarCollapsed}
+                error={error}
             />
-            <div className="flex-1 flex flex-col overflow-hidden h-full bg-white">
-                <header className="p-4 border-b border-gray-200 flex items-center justify-between bg-white z-10 flex-shrink-0">
+            <div className="flex-1 flex flex-col overflow-hidden h-full bg-secondary">
+                <header className="p-4 border-b border-primary flex items-center justify-between bg-secondary z-10 flex-shrink-0">
                      <div className="flex items-center">
                         <button onClick={() => {
                             if (window.innerWidth < 768) setSidebarOpen(!isSidebarOpen)
                             else setSidebarCollapsed(!isSidebarCollapsed)
-                        }} id="sidebar-toggle-btn" className="p-2 rounded-full hover:bg-gray-100">
-                            <svg className="w-6 h-6 transition-transform text-gray-600"><use href="#icon-sidebar-toggle"></use></svg>
+                        }} id="sidebar-toggle-btn" className="p-2 rounded-full hover:bg-muted">
+                            <svg className="w-6 h-6 transition-transform text-muted"><use href="#icon-sidebar-toggle"></use></svg>
                         </button>
-                         <button onClick={() => createNewSession(true)} id="collapsed-new-chat-btn" className={`${isSidebarCollapsed ? 'inline-flex' : 'hidden'} p-2 rounded-full hover:bg-gray-100 ml-2`}>
-                             <svg className="w-6 h-6 text-gray-600"><use href="#icon-plus-square"></use></svg>
+                         <button onClick={() => createNewSession(true)} id="collapsed-new-chat-btn" className={`${isSidebarCollapsed ? 'inline-flex' : 'hidden'} p-2 rounded-full hover:bg-muted ml-2`}>
+                             <svg className="w-6 h-6 text-muted"><use href="#icon-plus-square"></use></svg>
                         </button>
                     </div>
                 </header>
                 <ChatMessages messages={messages} isLoading={isLoading} userProfile={userProfile}/>
                  {analysisFile && (
                     <div className="px-4 md:px-8 pb-2 flex justify-center">
-                        <div className="relative bg-gray-100 border border-gray-300 rounded-lg p-3 flex items-center space-x-3 max-w-sm w-full">
-                            <svg className="w-6 h-6 text-gray-500 flex-shrink-0"><use href="#icon-file-text"></use></svg>
-                            <span className="text-sm text-gray-700 truncate">{analysisFile.name}</span>
+                        <div className="relative bg-muted border border-secondary rounded-lg p-3 flex items-center space-x-3 max-w-sm w-full">
+                            <svg className="w-6 h-6 text-muted flex-shrink-0"><use href="#icon-file-text"></use></svg>
+                            <span className="text-sm text-secondary truncate">{analysisFile.name}</span>
                             <button onClick={() => setAnalysisFile(null)} className="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full p-1 leading-none">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
@@ -294,32 +323,40 @@ const ChatSidebar: React.FC<{
     onSelectSession: (id: string) => void,
     onNewChat: () => void,
     onDeleteSession: (id: string, title: string) => void,
-    onRenameSession: (id: string, title: string) => void,
+    onRenameSession: (id: string, newTitle: string) => void,
     userProfile: UserProfile | null,
     isOpen: boolean,
     isCollapsed: boolean,
-}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed }) => {
+    error: string | null,
+}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed, error }) => {
     return (
-        <div id="chat-sidebar" className={`transition-all duration-300 ease-in-out bg-gray-50/70 border-r border-gray-200 flex flex-col w-full sm:w-72 flex-shrink-0 z-40 md:relative md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
-             <div className="p-4 flex-shrink-0 border-b border-gray-200">
-                    <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-black text-white rounded-lg font-medium hover:bg-gray-800 transition">
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+        <div id="chat-sidebar" className={`fixed top-[68px] bottom-0 left-0 h-auto z-40 md:relative md:top-auto md:bottom-auto md:left-auto md:h-full transition-all duration-300 ease-in-out bg-primary border-r border-primary flex flex-col w-full sm:w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
+             <div className="p-4 flex-shrink-0 border-b border-primary">
+                    <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-lg font-medium hover:bg-accent-hover transition">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                         New Chat
                     </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-2 pt-2">
-                {sessions.filter(s => !s.title.startsWith(TEMP_TITLE_PREFIX)).map(session => (
-                    <SidebarItem 
-                        key={session.id} 
-                        session={session} 
-                        isActive={session.id === activeSessionId}
-                        onSelect={() => onSelectSession(session.id)}
-                        onDelete={() => onDeleteSession(session.id, session.title)}
-                        onRename={onRenameSession}
-                    />
-                ))}
-            </div>
-             <div className="p-4 border-t border-gray-200 text-sm text-gray-600 flex-shrink-0">
+            {error ? (
+                <div className="p-4 m-2 text-sm text-red-700 bg-red-100 rounded-lg">
+                    <strong>Error</strong>
+                    <p>{error}</p>
+                </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto px-2 pt-2">
+                    {sessions.filter(s => !s.title.startsWith(TEMP_TITLE_PREFIX)).map(session => (
+                        <SidebarItem 
+                            key={session.id} 
+                            session={session} 
+                            isActive={session.id === activeSessionId}
+                            onSelect={() => onSelectSession(session.id)}
+                            onDelete={() => onDeleteSession(session.id, session.title)}
+                            onRename={onRenameSession}
+                        />
+                    ))}
+                </div>
+            )}
+             <div className="p-4 border-t border-primary text-sm text-secondary flex-shrink-0">
                     <p className="mb-2 truncate">Logged in as: {userProfile?.username ?? '...'}</p>
              </div>
         </div>
@@ -369,16 +406,16 @@ const SidebarItem: React.FC<{
                         onChange={(e) => setTitle(e.target.value)}
                         onBlur={handleRename}
                         onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                        className="session-text text-sm w-full bg-white border border-gray-300 rounded px-1 py-0.5"
+                        className="session-text text-sm w-full bg-secondary border border-secondary rounded px-1 py-0.5"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <span className={`session-text text-sm block truncate ${isActive ? 'text-black font-semibold' : 'text-gray-600 group-hover:text-black'}`}>{session.title}</span>
+                    <span className={`session-text text-sm block truncate ${isActive ? 'text-primary font-semibold' : 'text-secondary group-hover:text-primary'}`}>{session.title}</span>
                 )}
             </div>
              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <button title="Rename" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1.5 text-gray-500 hover:text-black rounded"><svg className="w-4 h-4"><use href="#icon-rename"></use></svg></button>
-                <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 text-gray-500 hover:text-black rounded"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
+                <button title="Rename" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-rename"></use></svg></button>
+                <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
             </div>
         </div>
     );
@@ -397,7 +434,7 @@ const ChatMessages: React.FC<{ messages: ChatMessage[], isLoading: boolean, user
                 {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile}/>)}
                 {isLoading && <ChatMessageItem message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} userProfile={userProfile}/>}
                 {messages.length === 0 && !isLoading && (
-                    <div className="text-center text-gray-500 italic pt-20">
+                    <div className="text-center text-muted italic pt-20">
                         Start a new chat or select a session to continue.
                     </div>
                 )}
@@ -420,7 +457,7 @@ const ChatMessageItem: React.FC<{ message: ChatMessage, isLoading?: boolean, use
     const userInitial = userProfile?.username ? userProfile.username.charAt(0).toUpperCase() : 'U';
 
     const renderAvatar = (role: 'user' | 'ai') => (
-        <div className={`chat-avatar text-sm ${role === 'user' ? 'bg-gray-700' : 'bg-blue-500'}`}>
+        <div className={`chat-avatar text-sm ${role === 'user' ? 'bg-muted text-secondary' : 'bg-blue-500'}`}>
             {role === 'user' ? userInitial : 'AI'}
         </div>
     );
@@ -430,11 +467,11 @@ const ChatMessageItem: React.FC<{ message: ChatMessage, isLoading?: boolean, use
         return (
              <div className="flex items-start gap-3 justify-start">
                 {renderAvatar('ai')}
-                <div className="chat-message-bubble ai-message">
+                <div className="chat-message-bubble bg-muted">
                     <div className="flex items-center justify-center space-x-1.5 p-2">
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
+                        <span className="w-2 h-2 bg-secondary rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                        <span className="w-2 h-2 bg-secondary rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                        <span className="w-2 h-2 bg-secondary rounded-full animate-bounce"></span>
                     </div>
                 </div>
             </div>
@@ -442,37 +479,45 @@ const ChatMessageItem: React.FC<{ message: ChatMessage, isLoading?: boolean, use
     }
 
     const messageAlignmentClass = isUser ? 'justify-end' : 'justify-start';
-    const messageContainerClass = isUser ? 'user-message' : 'ai-message';
+
+    const renderFilePreview = (msg: ChatMessage) => {
+        let content = null;
+        if (msg.analysisFile) {
+            content = (
+                <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3">
+                    <svg className="w-6 h-6 text-muted flex-shrink-0"><use href="#icon-file-text"></use></svg>
+                    <span className="text-sm text-secondary truncate">{msg.analysisFile.name}</span>
+                </div>
+            );
+        } else if (msg.imageUrl && !msg.imageUrls) {
+            content = <img src={msg.imageUrl} alt="Uploaded content" className="rounded-lg max-w-xs max-h-48" />;
+        } else if (msg.imageUrls) {
+            content = (
+                <div className={`grid gap-2 ${msg.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {msg.imageUrls.map((url, index) => <img key={index} src={url} alt={`Uploaded content ${index + 1}`} className="rounded-lg w-full h-auto object-cover" />)}
+                </div>
+            );
+        }
+        return content ? <div className="mb-2">{content}</div> : null;
+    }
 
     return (
         <div className={`flex items-start gap-3 ${messageAlignmentClass} chat-message-container`}>
             {!isUser && renderAvatar('ai')}
             <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
-                <div className={`chat-message-bubble relative ${messageContainerClass}`}>
-                     {message.analysisFile && (
-                        <div className="relative bg-gray-200 border border-gray-300 rounded-lg p-3 flex items-center space-x-3 mb-2">
-                            <svg className="w-6 h-6 text-gray-500 flex-shrink-0"><use href="#icon-file-text"></use></svg>
-                            <span className="text-sm text-gray-700 truncate">{message.analysisFile.name}</span>
-                        </div>
-                     )}
-                     {message.imageUrl && !message.imageUrls && (
-                         <img src={message.imageUrl} alt="Uploaded content" className="rounded-lg max-w-xs max-h-48 mb-2" />
-                     )}
-                     {message.imageUrls && (
-                        <div className={`grid gap-2 mb-2 ${message.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                            {message.imageUrls.map((url, index) => <img key={index} src={url} alt={`Uploaded content ${index + 1}`} className="rounded-lg w-full h-auto object-cover" />)}
-                        </div>
-                     )}
-                     {message.text && (
-                        <div className={message.role === 'ai' ? 'ai-text-content' : ''} dangerouslySetInnerHTML={{__html: message.text.replace(/\n/g, '<br />')}}></div>
-                     )}
-                </div>
-                 <div className={`chat-actions flex items-center text-sm text-gray-500 mt-2 space-x-2 `}>
-                    {message.text && <button title="Copy" onClick={(e) => copyToClipboard(message.text, e.currentTarget)} className="p-1 hover:text-black"><svg className="w-4 h-4"><use href="#icon-copy"></use></svg></button>}
+                {renderFilePreview(message)}
+                
+                {message.text && (
+                    <div className={`chat-message-bubble relative ${isUser ? 'user-message' : 'ai-message'}`}>
+                        <div className={message.role === 'ai' ? 'ai-text-content' : ''} dangerouslySetInnerHTML={{__html: formatAIResponse(message.text)}}></div>
+                    </div>
+                )}
+                 <div className={`chat-actions flex items-center text-sm text-muted mt-2 space-x-2 `}>
+                    {message.text && <button title="Copy" onClick={(e) => copyToClipboard(message.text, e.currentTarget)} className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-copy"></use></svg></button>}
                     {!isUser && (
                         <>
-                            <button title="Good" className="p-1 hover:text-black"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
-                            <button title="Bad" className="p-1 hover:text-black"><svg className="w-4 h-4"><use href="#icon-flag"></use></svg></button>
+                            <button title="Good" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
+                            <button title="Bad" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-flag"></use></svg></button>
                         </>
                     )}
                 </div>
@@ -505,15 +550,15 @@ const ChatInput: React.FC<{
     };
     
     return (
-         <div className="p-4 md:p-6 border-t border-gray-200 flex justify-center flex-shrink-0 bg-white">
-            <form onSubmit={handleSubmit} className="w-full max-w-3xl flex items-center bg-gray-100 rounded-2xl shadow-sm p-2 space-x-2">
+         <div className="p-4 md:p-6 border-t border-primary flex justify-center flex-shrink-0 bg-secondary">
+            <form onSubmit={handleSubmit} className="w-full max-w-3xl flex items-center bg-muted rounded-2xl shadow-sm p-2 space-x-2">
                 <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden accept="image/*,video/*,audio/*,application/pdf" />
 
-                <button type="button" title="Analyze File" onClick={onToggleAnalysisMode} className={`p-2 rounded-full text-gray-500 hover:bg-gray-200 hover:text-black transition ${isAnalysisMode ? 'text-blue-500 bg-blue-100' : ''}`}>
+                <button type="button" title="Analyze File" onClick={onToggleAnalysisMode} className={`p-2 rounded-full text-muted hover:bg-hover hover:text-primary transition ${isAnalysisMode ? 'text-secondary-accent bg-secondary-accent/20' : ''}`}>
                     <svg className="w-6 h-6"><use href="#icon-gemini-sparkle"></use></svg>
                 </button>
                  {isAnalysisMode && (
-                    <button type="button" title="Add File for Analysis" onClick={() => analysisInputRef.current?.click()} className={`p-2 rounded-full text-gray-500 hover:bg-gray-200 hover:text-black transition`}>
+                    <button type="button" title="Add File for Analysis" onClick={() => analysisInputRef.current?.click()} className={`p-2 rounded-full text-muted hover:bg-hover hover:text-primary transition`}>
                         <svg className="w-6 h-6"><use href="#icon-plus-square"></use></svg>
                     </button>
                  )}
@@ -522,13 +567,13 @@ const ChatInput: React.FC<{
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={isAnalysisMode ? "Add a file and ask a question..." : "Ask a question..."} 
-                    className="flex-1 p-2 text-base bg-transparent border-none focus:ring-0 focus:outline-none placeholder-gray-500"
+                    className="flex-1 p-2 text-base bg-transparent border-none focus:ring-0 focus:outline-none placeholder-muted text-primary"
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e);
                     }}
                 />
-                <button type="submit" className="bg-black text-white p-3 rounded-xl hover:bg-gray-800 transition disabled:opacity-50" disabled={isLoading || (!input.trim() && !analysisFile)}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button type="submit" className="bg-primary-accent text-on-primary-accent p-3 rounded-xl hover:bg-accent-hover transition disabled:opacity-50" disabled={isLoading || (!input.trim() && !analysisFile)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
                 </button>

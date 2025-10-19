@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-// FIX: Import UserProfile type to be used for casting Firestore data.
 import { User, CommunityPost, Comment, Reply, Author, UserProfile } from '../../types';
 import { db } from '../../services/firebase';
-import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import Avatar from '../Avatar';
+
+interface ProfileNavigable {
+    onViewProfile: (userId: string) => void;
+}
 
 // --- Comment-related Components (scoped to this file) ---
 const CommentForm: React.FC<{ user: User, onSubmit: (text: string) => void, placeholder: string, autoFocus?: boolean }> = ({ user, onSubmit, placeholder, autoFocus }) => {
@@ -25,17 +28,24 @@ const CommentForm: React.FC<{ user: User, onSubmit: (text: string) => void, plac
                 value={text}
                 onChange={e => setText(e.target.value)}
                 placeholder={placeholder}
-                className="flex-1 p-2 text-sm bg-gray-100 border border-transparent rounded-lg focus:bg-white focus:border-gray-300 focus:ring-0 transition"
+                className="flex-1 p-2 text-sm bg-muted border border-transparent rounded-lg focus:bg-secondary focus:border-secondary focus:ring-0 transition text-primary"
                 autoFocus={autoFocus}
             />
-            <button type="submit" className="text-sm text-black font-semibold hover:text-gray-500 transition disabled:text-gray-300 disabled:cursor-not-allowed" disabled={!text.trim()}>
+            <button type="submit" className="text-sm text-primary font-semibold hover:text-muted transition disabled:text-secondary disabled:cursor-not-allowed" disabled={!text.trim()}>
                 Reply
             </button>
         </form>
     );
 };
 
-const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: Comment) => void }> = ({ comment, user, onDelete }) => {
+interface CommentItemProps extends ProfileNavigable {
+    comment: Comment;
+    user: User;
+    onDelete: (comment: Comment) => void;
+    author: Author | null;
+}
+
+const CommentItem: React.FC<CommentItemProps> = ({ comment, user, onDelete, author, onViewProfile }) => {
     const [replies, setReplies] = useState<Reply[]>([]);
     const [showReplyForm, setShowReplyForm] = useState(false);
     const timeAgo = comment.createdAt ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : '...';
@@ -47,7 +57,8 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
             return;
         }
         const q = query(
-            collection(db, 'user-comments-and-replies'),
+            collection(db, 'usercomments'),
+            where('postId', '==', comment.postId),
             where('commentId', '==', comment.id),
             orderBy('createdAt', 'asc')
         );
@@ -55,35 +66,20 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
             setReplies(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reply)));
         });
         return unsubscribe;
-    }, [comment.id, user]);
+    }, [comment.id, comment.postId, user]);
     
-    const getAuthor = async (user: User): Promise<Author> => {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        // FIX: Cast userDoc.data() to UserProfile to access username property safely.
-        const username = userDoc.exists() ? (userDoc.data() as UserProfile).username : user.email!.split('@')[0];
-        return { id: user.uid, email: user.email!, username };
-    };
-
     const handleAddReply = async (text: string) => {
-        if (!user || !text.trim()) return;
-        const author = await getAuthor(user);
+        if (!user || !text.trim() || !author) return;
          await runTransaction(db, async (transaction) => {
-            const commentRef = doc(db, 'user-comments-and-replies', comment.id);
+            const commentRef = doc(db, 'usercomments', comment.id);
             const postRef = doc(db, 'community-posts', comment.postId);
-            const newReplyRef = doc(collection(db, 'user-comments-and-replies'));
+            const newReplyRef = doc(collection(db, 'usercomments'));
             
-            // --- READ FIRST ---
             const postDoc = await transaction.get(postRef);
             if (!postDoc.exists()) throw "Parent post does not exist!";
 
-            // --- THEN WRITE ---
             transaction.set(newReplyRef, {
-                author,
-                text,
-                postId: comment.postId,
-                commentId: comment.id,
-                createdAt: serverTimestamp(),
+                author, text, postId: comment.postId, commentId: comment.id, createdAt: serverTimestamp(),
             });
             transaction.update(commentRef, { replyCount: (comment.replyCount || 0) + 1 });
             transaction.update(postRef, { commentCount: (postDoc.data().commentCount || 0) + 1 });
@@ -96,17 +92,15 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
         if (!user || !replyToDelete || user.uid !== replyToDelete.author.id) return;
         
         await runTransaction(db, async (transaction) => {
-            const commentRef = doc(db, 'user-comments-and-replies', comment.id);
+            const commentRef = doc(db, 'usercomments', comment.id);
             const postRef = doc(db, 'community-posts', comment.postId);
-            const replyRef = doc(db, 'user-comments-and-replies', replyId);
+            const replyRef = doc(db, 'usercomments', replyId);
             
-            // --- READ FIRST ---
             const commentDoc = await transaction.get(commentRef);
             if (!commentDoc.exists()) throw "Parent comment does not exist!";
             const postDoc = await transaction.get(postRef);
             if (!postDoc.exists()) throw "Parent post does not exist!";
 
-            // --- THEN WRITE ---
             transaction.delete(replyRef);
             transaction.update(commentRef, { replyCount: Math.max(0, (commentDoc.data().replyCount || 1) - 1) });
             transaction.update(postRef, { commentCount: Math.max(0, (postDoc.data().commentCount || 1) - 1) });
@@ -118,21 +112,21 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
             <div className="flex space-x-3">
                 <div className="flex flex-col items-center flex-shrink-0 pt-1">
                     <Avatar email={comment.author.email} size="sm"/>
-                    {replies.length > 0 && <div className="w-0.5 grow bg-gray-200/80 mt-2 rounded"></div>}
+                    {replies.length > 0 && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                      <header className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                             <p className="font-bold truncate text-sm hover:underline cursor-pointer">{comment.author.username}</p>
+                             <p onClick={() => onViewProfile(comment.author.id)} className="font-bold truncate text-sm text-primary hover:underline cursor-pointer">{comment.author.username}</p>
                              {isAiComment && <span className="ai-badge">AI</span>}
-                             <p className="text-xs text-gray-500 flex-shrink-0">{timeAgo}</p>
+                             <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                         </div>
                         {user?.uid === comment.author.id && (
-                            <button onClick={() => onDelete(comment)} className="text-gray-400 hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
+                            <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
                         )}
                     </header>
-                    <p className="text-gray-800 text-sm whitespace-pre-wrap">{comment.text}</p>
-                    <div className="flex items-center space-x-4 text-gray-500 mt-2">
+                    <p className="text-primary text-sm whitespace-pre-wrap">{comment.text}</p>
+                    <div className="flex items-center space-x-4 text-muted mt-2">
                         <button className="hover:text-red-500 transition-colors"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
                         <button onClick={() => setShowReplyForm(!showReplyForm)} className="hover:text-blue-500 transition-colors"><svg className="w-4 h-4"><use href="#icon-comment"></use></svg></button>
                     </div>
@@ -152,15 +146,15 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
                                 <div className="flex-1 min-w-0">
                                     <header className="flex items-center justify-between">
                                         <div className="flex items-center space-x-2">
-                                            <p className="font-bold truncate text-sm hover:underline cursor-pointer">{reply.author.username}</p>
-                                            <p className="text-xs text-gray-500 flex-shrink-0">{reply.createdAt ? formatDistanceToNow(reply.createdAt.toDate(), { addSuffix: true }) : '...'}</p>
+                                            <p onClick={() => onViewProfile(reply.author.id)} className="font-bold truncate text-sm text-primary hover:underline cursor-pointer">{reply.author.username}</p>
+                                            <p className="text-xs text-muted flex-shrink-0">{reply.createdAt ? formatDistanceToNow(reply.createdAt.toDate(), { addSuffix: true }) : '...'}</p>
                                         </div>
                                         {user?.uid === reply.author.id && (
-                                            <button onClick={() => handleDeleteReply(reply.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
+                                            <button onClick={() => handleDeleteReply(reply.id)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
                                         )}
                                     </header>
-                                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{reply.text}</p>
-                                     <div className="flex items-center space-x-4 text-gray-500 mt-2">
+                                    <p className="text-sm text-primary whitespace-pre-wrap">{reply.text}</p>
+                                     <div className="flex items-center space-x-4 text-muted mt-2">
                                         <button className="hover:text-red-500 transition-colors"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
                                     </div>
                                 </div>
@@ -173,7 +167,13 @@ const CommentItem: React.FC<{ comment: Comment, user: User, onDelete: (comment: 
     );
 };
 
-const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, user }) => {
+interface CommentSectionProps extends ProfileNavigable {
+    post: CommunityPost;
+    user: User;
+    author: Author | null;
+}
+
+const CommentSection: React.FC<CommentSectionProps> = ({ post, user, author, onViewProfile }) => {
     const [comments, setComments] = useState<Comment[]>([]);
 
     useEffect(() => {
@@ -182,7 +182,7 @@ const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, u
             return;
         }
         const q = query(
-            collection(db, 'user-comments-and-replies'),
+            collection(db, 'usercomments'),
             where('postId', '==', post.id),
             where('commentId', '==', null), // Ensure we only fetch top-level comments
             orderBy('createdAt', 'asc')
@@ -193,33 +193,17 @@ const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, u
         return unsubscribe;
     }, [post.id, user]);
     
-    const getAuthor = async (user: User): Promise<Author> => {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        // FIX: Cast userDoc.data() to UserProfile to access username property safely.
-        const username = userDoc.exists() ? (userDoc.data() as UserProfile).username : user.email!.split('@')[0];
-        return { id: user.uid, email: user.email!, username };
-    };
-
     const handleAddComment = async (text: string) => {
-        if (!user || !text.trim()) return;
-        const author = await getAuthor(user);
+        if (!user || !text.trim() || !author) return;
         await runTransaction(db, async (transaction) => {
             const postRef = doc(db, 'community-posts', post.id);
-            const newCommentRef = doc(collection(db, 'user-comments-and-replies'));
+            const newCommentRef = doc(collection(db, 'usercomments'));
             
-            // --- READ FIRST ---
             const postDoc = await transaction.get(postRef);
             if (!postDoc.exists()) throw "Parent post does not exist!";
 
-            // --- THEN WRITE ---
             transaction.set(newCommentRef, {
-                author,
-                text,
-                postId: post.id,
-                createdAt: serverTimestamp(),
-                replyCount: 0,
-                commentId: null, // Explicitly null for top-level comments
+                author, text, postId: post.id, createdAt: serverTimestamp(), replyCount: 0, commentId: null,
             });
             transaction.update(postRef, { commentCount: (postDoc.data().commentCount || 0) + 1 });
         });
@@ -227,27 +211,28 @@ const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, u
 
     const handleDeleteComment = async (comment: Comment) => {
         if (!user || user.uid !== comment.author.id) return;
+
+        const repliesQuery = query(
+            collection(db, 'usercomments'),
+            where('postId', '==', post.id),
+            where('commentId', '==', comment.id)
+        );
+        const repliesSnapshot = await getDocs(repliesQuery);
+        const totalReplies = repliesSnapshot.size;
+
         await runTransaction(db, async (transaction) => {
             const postRef = doc(db, 'community-posts', post.id);
-            const commentRef = doc(db, 'user-comments-and-replies', comment.id);
+            const commentRef = doc(db, 'usercomments', comment.id);
 
-            // --- READ FIRST ---
             const postDoc = await transaction.get(postRef);
             if (!postDoc.exists()) throw "Parent post does not exist!";
-            
-            // This is a non-transactional read, but required to know how many replies to decrement.
-            // It must happen before writes.
-            const repliesQuery = query(
-                collection(db, 'user-comments-and-replies'),
-                where('commentId', '==', comment.id)
-            );
-            const repliesSnapshot = await getDocs(repliesQuery);
-            const totalReplies = repliesSnapshot.size;
 
-            // --- THEN WRITE ---
             repliesSnapshot.docs.forEach(replyDoc => transaction.delete(replyDoc.ref));
             transaction.delete(commentRef);
-            transaction.update(postRef, { commentCount: Math.max(0, (postDoc.data().commentCount || 1) - 1 - totalReplies) });
+            
+            const currentCount = postDoc.data().commentCount || 0;
+            const newCount = Math.max(0, currentCount - 1 - totalReplies);
+            transaction.update(postRef, { commentCount: newCount });
         });
     };
 
@@ -256,7 +241,7 @@ const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, u
             <CommentForm user={user} onSubmit={handleAddComment} placeholder="Post your reply..." />
             <div className="space-y-1 mt-1">
                 {comments.map(comment => (
-                    <CommentItem key={comment.id} comment={comment} user={user} onDelete={handleDeleteComment} />
+                    <CommentItem key={comment.id} comment={comment} user={user} author={author} onDelete={handleDeleteComment} onViewProfile={onViewProfile} />
                 ))}
             </div>
         </div>
@@ -264,12 +249,23 @@ const CommentSection: React.FC<{ post: CommunityPost, user: User }> = ({ post, u
 };
 
 // --- Main PostItem Component ---
-const PostItem: React.FC<{ post: CommunityPost, user: User, onDelete: (post: CommunityPost) => void }> = ({ post, user, onDelete }) => {
+interface PostItemProps extends ProfileNavigable {
+    post: CommunityPost;
+    user: User;
+    userProfile: UserProfile | null;
+    onDelete: (post: CommunityPost) => void;
+    savedPostIds: Set<string>;
+    onToggleSave: (postId: string) => void;
+}
+
+const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, onViewProfile }) => {
     const [showComments, setShowComments] = useState(false);
     const [isMenuOpen, setMenuOpen] = useState(false);
     const timeAgo = post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : '...';
     const menuRef = useRef<HTMLDivElement>(null);
     
+    const isSaved = savedPostIds.has(post.id);
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -280,24 +276,26 @@ const PostItem: React.FC<{ post: CommunityPost, user: User, onDelete: (post: Com
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    const author = user && userProfile ? { id: user.uid, email: user.email!, username: userProfile.username } : null;
+
     return (
-        <article className="hover:bg-gray-50/50 transition-colors duration-200 border-b border-gray-200/80">
+        <article className="hover:bg-primary/50 transition-colors duration-200 border-b border-primary">
              <div className="flex space-x-4 p-4">
                  <div className="flex flex-col items-center flex-shrink-0 pt-1">
                      <Avatar email={post.author.email}/>
-                     {showComments && post.commentCount > 0 && <div className="w-0.5 grow bg-gray-200/80 mt-2 rounded"></div>}
+                     {(showComments || post.aiReply) && post.commentCount > 0 && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                     <header className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                            <p className="font-bold text-base truncate hover:underline cursor-pointer">{post.author.username}</p>
-                            <p className="text-sm text-gray-500 flex-shrink-0">{timeAgo}</p>
+                            <p onClick={() => onViewProfile(post.author.id)} className="font-bold text-base truncate hover:underline cursor-pointer text-primary">{post.author.username}</p>
+                            <p className="text-sm text-muted flex-shrink-0">{timeAgo}</p>
                         </div>
                          <div className="relative" ref={menuRef}>
-                            <button onClick={() => setMenuOpen(!isMenuOpen)} className="text-gray-500 hover:text-black p-1 rounded-full"><svg className="w-5 h-5"><use href="#icon-ellipsis"></use></svg></button>
+                            <button onClick={() => setMenuOpen(!isMenuOpen)} className="text-muted hover:text-primary p-1 rounded-full"><svg className="w-5 h-5"><use href="#icon-ellipsis"></use></svg></button>
                             {isMenuOpen && user?.uid === post.author.id && (
-                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-md z-10 w-32">
-                                    <button onClick={() => {onDelete(post); setMenuOpen(false);}} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2">
+                                <div className="absolute right-0 top-full mt-1 bg-secondary border border-primary rounded-lg shadow-md z-10 w-32">
+                                    <button onClick={() => {onDelete(post); setMenuOpen(false);}} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-500/10 flex items-center space-x-2">
                                          <svg className="w-4 h-4"><use href="#icon-trash"></use></svg>
                                          <span>Delete</span>
                                     </button>
@@ -305,9 +303,9 @@ const PostItem: React.FC<{ post: CommunityPost, user: User, onDelete: (post: Com
                             )}
                         </div>
                     </header>
-                    <p className="text-gray-800 whitespace-pre-wrap mt-1 text-base">{post.text}</p>
+                    <p className="text-primary whitespace-pre-wrap mt-1 text-base">{post.text}</p>
                     {post.mediaUrl && (
-                        <div className="mt-3 rounded-xl w-full border border-gray-200/80 shadow-sm overflow-hidden bg-gray-100 flex justify-center">
+                        <div className="mt-3 rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center">
                             {post.mediaType === 'video' ? (
                                 <video
                                     src={post.mediaUrl}
@@ -320,7 +318,28 @@ const PostItem: React.FC<{ post: CommunityPost, user: User, onDelete: (post: Com
                             )}
                         </div>
                     )}
-                    <footer className="mt-4 flex items-center justify-around text-gray-500 max-w-xs">
+                    
+                    {post.aiReply && (
+                        <div className="mt-4 ml-2 pl-4 border-l-2 border-blue-500/30">
+                            <div className="flex items-start space-x-3">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center ring-2 ring-secondary">
+                                    <svg className="w-5 h-5 text-white"><use href="#icon-gemini-sparkle"></use></svg>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center space-x-2">
+                                        <span className="font-bold text-sm text-primary">AI Assistant</span>
+                                        <span className="ai-badge">AI</span>
+                                    </div>
+                                    <p className="text-primary text-base mt-1 whitespace-pre-wrap">{post.aiReply.text}</p>
+                                    <p className="text-xs text-muted mt-2">
+                                        {post.aiReply.createdAt ? formatDistanceToNow(post.aiReply.createdAt.toDate(), { addSuffix: true }) : 'just now'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <footer className="mt-4 flex items-center justify-around text-muted max-w-xs">
                          <button className="flex items-center space-x-2 hover:text-red-500 transition-colors group">
                             <svg className="w-5 h-5 group-hover:text-red-500"><use href="#icon-heart"></use></svg>
                          </button>
@@ -330,18 +349,21 @@ const PostItem: React.FC<{ post: CommunityPost, user: User, onDelete: (post: Com
                          <button className="flex items-center space-x-2 hover:text-green-500 transition-colors group">
                              <svg className="w-5 h-5 group-hover:text-green-500"><use href="#icon-repost"></use></svg>
                          </button>
-                         <button className="flex items-center space-x-2 hover:text-yellow-500 transition-colors group">
-                             <svg className="w-5 h-5 group-hover:text-yellow-500"><use href="#icon-bookmark"></use></svg>
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); onToggleSave(post.id); }} 
+                            className={`flex items-center space-x-2 transition-colors group ${isSaved ? 'text-yellow-500' : 'hover:text-yellow-500'}`}
+                         >
+                             <svg className="w-5 h-5"><use href={isSaved ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>
                          </button>
                     </footer>
                     {post.commentCount > 0 && (
-                        <p className="text-sm text-gray-500 mt-3 cursor-pointer hover:underline" onClick={() => setShowComments(!showComments)}>
-                            {post.commentCount} {post.commentCount === 1 ? 'reply' : 'replies'}
+                        <p className="text-sm text-muted mt-3 cursor-pointer hover:underline" onClick={() => setShowComments(!showComments)}>
+                            View {post.commentCount} {post.commentCount === 1 ? 'reply' : 'replies'}
                         </p>
                     )}
                 </div>
             </div>
-             {showComments && <CommentSection post={post} user={user} />}
+             {showComments && <CommentSection post={post} user={user} author={author} onViewProfile={onViewProfile} />}
         </article>
     );
 };

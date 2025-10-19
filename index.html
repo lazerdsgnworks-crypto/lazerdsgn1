@@ -1,3 +1,16 @@
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/",
+    "pdf-lib/": "https://aistudiocdn.com/pdf-lib@^1.17.1/",
+    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.296/",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0"
+  }
+}
+</script>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,11 +27,72 @@
             --scroll-speed-v2: 38s;
             --scroll-speed-v3: 43s;
             --scroll-height: -50%;
+
+            /* Light Theme Colors */
+            --bg-primary: #f9fafb; /* gray-50 */
+            --bg-secondary: #ffffff; /* white */
+            --bg-muted: #f3f4f6; /* gray-100 */
+            --bg-hover: #e5e7eb; /* gray-200 */
+            --bg-primary-accent: #000000;
+            --bg-secondary-accent: #3b82f6; /* blue-500 */
+            --bg-accent-hover: #1f2937; /* gray-800 */
+            --text-primary: #0f1419;
+            --text-secondary: #4b5563; /* gray-600 */
+            --text-muted: #6b7280; /* gray-500 */
+            --text-on-primary-accent: #ffffff;
+            --border-primary: #e5e7eb; /* gray-200 */
+            --border-secondary: #d1d5db; /* gray-300 */
         }
+
+        html.dark {
+            /* Dark Theme Colors */
+            --bg-primary: #000000; /* True black */
+            --bg-secondary: #000000; /* True black for headers, footers, cards */
+            --bg-muted: #1f2937; /* gray-800 for muted elements */
+            --bg-hover: #374151; /* gray-700 for hover states */
+            --bg-primary-accent: #ffffff;
+            --bg-secondary-accent: #60a5fa; /* blue-400 */
+            --bg-accent-hover: #d1d5db; /* gray-300 */
+            --text-primary: #f9fafb; /* gray-50 */
+            --text-secondary: #d1d5db; /* gray-300 */
+            --text-muted: #9ca3af; /* gray-400 */
+            --text-on-primary-accent: #000000;
+            --border-primary: #374151; /* gray-700 */
+            --border-secondary: #4b5563; /* gray-600 */
+        }
+
+        /* --- Global Styles using CSS Variables --- */
+        .no-transition * {
+            transition: none !important;
+        }
+
         body {
             font-family: var(--font-inter);
-            color: #0f1419;
-            background-color: #f9fafb; 
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Reusable color classes */
+        .bg-primary { background-color: var(--bg-primary); }
+        .bg-secondary { background-color: var(--bg-secondary); }
+        .bg-muted { background-color: var(--bg-muted); }
+        .bg-primary-accent { background-color: var(--bg-primary-accent); }
+        .hover\:bg-hover:hover { background-color: var(--bg-hover); }
+        .hover\:bg-primary-accent-hover:hover { background-color: var(--bg-accent-hover); }
+
+        .text-primary { color: var(--text-primary); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-muted { color: var(--text-muted); }
+        .text-on-primary-accent { color: var(--text-on-primary-accent); }
+        
+        .border-primary { border-color: var(--border-primary); }
+        .border-secondary { border-color: var(--border-secondary); }
+
+        /* Component-specific overrides */
+        header {
+            background-color: color-mix(in srgb, var(--bg-secondary) 95%, transparent);
+            border-color: var(--border-primary);
         }
         .hero-headline {
             font-size: clamp(3rem, 8vw, 5rem);
@@ -60,14 +134,12 @@
             height: 150px;
             z-index: 10;
             pointer-events: none;
-        }
-        .reviews-scroll-container::before {
-            top: 0;
-            background: linear-gradient(to bottom, #ffffff 30%, rgba(255, 255, 255, 0));
+            background: linear-gradient(to bottom, var(--bg-primary) 30%, transparent);
         }
         .reviews-scroll-container::after {
             bottom: 0;
-            background: linear-gradient(to top, #ffffff 30%, rgba(255, 255, 255, 0));
+            top: auto;
+            background: linear-gradient(to top, var(--bg-primary) 30%, transparent);
         }
         .review-column {
             display: flex;
@@ -93,283 +165,188 @@
         body.sidebar-collapsed #sidebar-toggle-btn svg {
             transform: rotate(180deg);
         }
-        #voice-button.recording {
-            color: #ef4444;
-        }
-        
         #chat-sidebar.collapsed {
             width: 0;
             padding: 0;
             border: none;
             overflow: hidden;
         }
-        .chat-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 9999px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 500;
-            color: white;
-            flex-shrink: 0;
-        }
-        .chat-message-bubble {
-            padding: 0.75rem 1rem;
-            border-radius: 1.25rem;
-            max-width: 100%;
-            word-wrap: break-word;
-        }
-        .user-message .chat-message-bubble {
-            background-color: #f3f4f6; /* Light gray */
-            color: #1a1a1a;
-            border-bottom-right-radius: 0.5rem;
-        }
-        .ai-message .chat-message-bubble {
-            background-color: #ffffff;
-            color: #1a1a1a;
-            border-bottom-left-radius: 0.5rem;
-            border: 1px solid #e5e7eb;
-        }
-        .chat-actions {
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out;
-            display: flex;
-            align-items: center;
-        }
-        .chat-message-container:hover .chat-actions {
-            opacity: 1;
-        }
-        .session-item-container {
-            position: relative;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.5rem;
-            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
-            cursor: pointer;
-        }
-        .session-item-container .session-text {
-            color: #4b5563;
-            transition: color 0.2s ease-in-out, font-weight 0.2s ease-in-out;
-        }
-        .session-item-container:hover .session-text {
-            color: #000000;
-        }
-        .session-item-container.active .session-text {
-            color: #000000;
-            font-weight: 600;
-        }
         .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 50;
-            opacity: 0;
-            visibility: hidden;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 50; opacity: 0; visibility: hidden;
             transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
         }
-        .modal-overlay.open {
-            opacity: 1;
-            visibility: visible;
-            transition: opacity 0.3s ease-in-out;
-        }
-        .modal-content {
-            opacity: 0;
-            transform: translateY(20px) scale(0.98);
-            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease-in-out;
-        }
-        .modal-overlay.open .modal-content {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-        .shimmer-bg {
-            background-color: #e2e8f0;
-            background-image: linear-gradient( to right, #e2e8f0 0%, #f8fafc 20%, #e2e8f0 40%, #e2e8f0 100% );
-            background-repeat: no-repeat;
-            background-size: 800px 100%;
-            display: inline-block;
-            position: relative;
-            animation: shimmer 2s infinite linear;
-        }
-        @keyframes shimmer {
-            0% { background-position: -468px 0; }
-            100% { background-position: 468px 0; }
-        }
-        .image-reveal {
-            opacity: 0;
-            transform: scale(0.98);
-            animation: reveal 0.5s ease-out forwards;
-        }
-        @keyframes reveal {
-            from { opacity: 0; transform: scale(0.98); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .ai-badge {
-            background-color: #e0f2fe;
-            color: #0c4a6e;
-            padding: 2px 6px;
-            border-radius: 9999px;
-            font-size: 0.7rem;
-            font-weight: 500;
-            line-height: 1;
+        .modal-overlay.open { opacity: 1; visibility: visible; transition: opacity 0.3s ease-in-out; }
+        .modal-content { transform: translateY(-20px) scale(0.95); transition: transform 0.3s ease-in-out; }
+        .modal-overlay.open .modal-content { transform: translateY(0) scale(1); }
+        .ai-toggle-switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+        .ai-toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .ai-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--bg-muted); transition: .4s; border-radius: 22px; }
+        .ai-toggle-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .ai-toggle-slider { background-color: var(--bg-secondary-accent); }
+        input:checked + .ai-toggle-slider:before { transform: translateX(16px); }
+        .ask-ai-active { border: 2px solid var(--bg-secondary-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg-secondary-accent) 20%, transparent); }
+        .ai-badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; background: linear-gradient(to right, #60a5fa, #3b82f6); color: white; padding: 2px 6px; border-radius: 9999px; line-height: 1; }
+        .chat-message-container { display: flex; width: 100%; }
+        .chat-avatar { width: 32px; height: 32px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-weight: 600; color: white; flex-shrink: 0; }
+        .chat-message-bubble { padding: 0.75rem 1rem; border-radius: 1.25rem; font-size: 0.95rem; line-height: 1.5; }
+        /* UPDATED: AI message now has no background for a cleaner look */
+        .ai-message { background-color: transparent; padding-left: 0; padding-right: 0; color: var(--text-primary); }
+        .user-message { background-color: var(--bg-primary-accent); color: var(--text-on-primary-accent); border-bottom-right-radius: 0.25rem; }
+        .chat-actions button { transition: color 0.2s; }
+        .session-item-container { position: relative; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin: 0.25rem 0; cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+        .session-item-container:hover { background-color: var(--bg-hover); }
+        .session-item-container.active { background-color: var(--bg-hover); }
+        .session-item-container.active .session-text { font-weight: 600; color: var(--text-primary); }
+        .shimmer-bg { animation: shimmer 2s infinite linear; background: linear-gradient(to right, #f6f7f8 4%, #edeef1 25%, #f6f7f8 36%); background-size: 1000px 100%; }
+        html.dark .shimmer-bg { background: linear-gradient(to right, #374151 4%, #4b5563 25%, #374151 36%); background-size: 1000px 100%; }
+        @keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
+        .image-reveal { animation: fadeIn 0.5s ease-in-out; }
+
+        html.dark .user-message {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
         }
 
-        /* Animated border for Ask AI mode */
-        .ask-ai-active {
-            position: relative;
-            border-radius: 1.5rem; 
-            padding: 2px;
-            background: linear-gradient(90deg, #60a5fa, #3b82f6, #93c5fd, #2563eb);
-            background-size: 400% 400%;
-            animation: gradient-animation 6s ease infinite;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+        /* Dark Mode Toggle Styles */
+        .theme-toggle-switch {
+            width: 48px; height: 24px; background-color: var(--bg-muted);
         }
-
-        @keyframes gradient-animation {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        .theme-toggle-circle {
+            width: 16px; height: 16px; background-color: var(--bg-primary-accent);
         }
-
-        /* Custom AI Toggle Switch */
-        .ai-toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 40px;
-            height: 22px;
-        }
-        .ai-toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .ai-toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #e5e7eb; /* gray-200 */
-            transition: .4s;
-            border-radius: 22px;
-        }
-        .ai-toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 18px;
-            width: 18px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s cubic-bezier(0.68, -0.55, 0.27, 1.55); /* Bounce effect */
-            border-radius: 50%;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .ai-toggle-switch input:checked + .ai-toggle-slider {
-            background-color: #3b82f6; /* blue-500 */
-        }
-        .ai-toggle-switch input:checked + .ai-toggle-slider:before {
-            transform: translateX(18px);
+        html.dark .theme-toggle-circle {
+            transform: translateX(24px);
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/",
-    "pdf-lib/": "https://aistudiocdn.com/pdf-lib@^1.17.1/",
-    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.296/",
-    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0"
-  }
-}
-</script>
+    <script>
+      // IIFE to set theme instantly, preventing flash of wrong theme
+      (function() {
+        document.documentElement.classList.add('no-transition');
+        try {
+          const theme = localStorage.getItem('theme');
+          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {
+          console.error("Could not set initial theme:", e);
+        }
+        setTimeout(() => {
+            document.documentElement.classList.remove('no-transition');
+        }, 100);
+      })();
+    </script>
 </head>
 <body class="antialiased">
-    <div id="root"></div>
     <svg style="display: none;">
-        <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+        <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
         </symbol>
-        <symbol id="icon-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+        <symbol id="icon-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
         </symbol>
-        <symbol id="icon-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 4.5v-1.5" />
-        </symbol>
-        <symbol id="icon-rename" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-        </symbol>
-        <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-        </symbol>
-        <symbol id="icon-sidebar-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
-        </symbol>
-        <symbol id="icon-plus-square" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </symbol>
-        <symbol id="icon-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-        </symbol>
-        <symbol id="icon-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m12 7.5v-1.5a6 6 0 00-6-6v-1.5a6 6 0 00-6 6v1.5m6-13.5v-1.5a6 6 0 00-6 6v1.5" />
-        </symbol>
-        <symbol id="icon-image" viewBox="0 0 24 24" fill="currentColor">
-            <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12A2.25 2.25 0 0120.25 20.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.689a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clip-rule="evenodd" />
-        </symbol>
-        <symbol id="icon-video" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 8.598a.75.75 0 00-1.06 0l-3.38 3.379V9.75a.75.75 0 00-1.5 0v7.5a.75.75 0 001.5 0v-2.226l3.38 3.379a.75.75 0 001.06 0 12.313 12.313 0 000-7.404z" />
-        </symbol>
-        <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </symbol>
-        <symbol id="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L6.228 6.228" />
-        </symbol>
-        <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-        </symbol>
-        <symbol id="icon-gemini-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18l-1.813-2.096a4.5 4.5 0 01-.41-4.282L10.5 3l5.228 6.622a4.5 4.5 0 01-.41 4.282L15 18l-1.813-2.096a4.5 4.5 0 01-3.374 0zM12 21l-1.125-1.125M12 3L10.875 4.125m0 0L9.75 3l-1.125 1.125M12 21l1.125-1.125m0 0L14.25 21l1.125-1.125M3 10.5l1.125 1.125m0 0L3 12.75l1.125-1.125M21 10.5l-1.125 1.125m0 0L21 12.75l-1.125-1.125" />
-        </symbol>
-        <symbol id="icon-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </symbol>
-        <!-- Community Icons -->
-        <symbol id="icon-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l3.652-3.978c.26-.282.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.344 48.344 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-        </symbol>
-        <symbol id="icon-repost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.092 1.21-.138 2.43-.138 3.662m18 0c0 1.232-.046 2.453-.138 3.662a4.006 4.006 0 01-3.7 3.7 48.678 48.678 0 01-7.324 0 4.006 4.006 0 01-3.7-3.7c-.092 1.21-.138 2.43-.138 3.662m18 0h-18" />
-        </symbol>
-        <symbol id="icon-bookmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.5 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+        <symbol id="icon-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>
         </symbol>
         <symbol id="icon-ellipsis" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path>
+            <circle cx="12" cy="12" r="1.5"/><circle cx="6" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/>
         </symbol>
-        <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" />
+        <symbol id="icon-rename" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
         </symbol>
-        <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+        <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
         </symbol>
-        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+        <symbol id="icon-sidebar-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+            <path d="m13 16-3-4 3-4"></path>
         </symbol>
-        <symbol id="icon-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+        <symbol id="icon-plus-square" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line>
+        </symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+        </symbol>
+        <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+        </symbol>
+        <symbol id="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+        </symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+        </symbol>
+        <symbol id="icon-gemini-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3L9.5 8.5L4 11L9.5 13.5L12 19L14.5 13.5L20 11L14.5 8.5L12 3Z" />
+            <path d="M5 3L6 5" />
+            <path d="M18 19L19 21" />
+            <path d="M3 18L5 19" />
+            <path d="M21 5L19 6" />
+        </symbol>
+        <symbol id="icon-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+        </symbol>
+        <symbol id="icon-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+        </symbol>
+        <symbol id="icon-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </symbol>
+        <symbol id="icon-repost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </symbol>
+        <symbol id="icon-bookmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </symbol>
+        <symbol id="icon-bookmark-filled" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </symbol>
+         <symbol id="icon-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+        </symbol>
+        <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </symbol>
+        <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </symbol>
+        <!-- NEW SOCIAL ICONS -->
+        <symbol id="icon-x" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </symbol>
+        <symbol id="icon-instagram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+        </symbol>
+        <symbol id="icon-behance" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7.938 10.5H12.5c0-2.062-.688-3.375-2.188-3.375-1.562 0-2.375 1.312-2.375 3.375zm12.562-1.875c0-3.313-1.625-6.375-5.5-6.375H3.5v17.25h11.25c4.125 0 6.25-2.875 6.25-6.375zm-3.75 0c0 2.125-1 3.5-3 3.5H7.25V13h5.75c1.875 0 2.75-1.312 2.75-3.375s-.875-3.375-2.75-3.375H7.25V4.75h5.5c2.25 0 3.25 1.312 3.25 3.875zM12 16.125H7.25v2.625H12c1.75 0 2.5-1 2.5-2.25s-.75-2.25-2.5-2.25z"/>
         </symbol>
     </svg>
+    <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

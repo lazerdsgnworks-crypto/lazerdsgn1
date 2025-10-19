@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 
 interface ModalProps {
@@ -51,15 +50,15 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
             role="dialog"
         >
             <div 
-                className="modal-content bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full relative"
+                className="modal-content bg-secondary p-8 rounded-xl shadow-2xl max-w-sm w-full relative"
                 onClick={(e) => e.stopPropagation()}
             >
                 <button 
-                    className="absolute top-4 right-4 text-gray-500 hover:text-black"
+                    className="absolute top-4 right-4 text-muted hover:text-primary"
                     onClick={onClose}
                     aria-label="Close modal"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>

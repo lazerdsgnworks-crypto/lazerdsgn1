@@ -1,3 +1,4 @@
+
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Timestamp } from 'firebase/firestore';
 
@@ -14,6 +15,7 @@ export enum Page {
 export type User = FirebaseUser | null;
 
 export interface UserProfile {
+  id?: string; // Optional because it's the doc ID, not in the doc data itself
   username: string;
   bio: string;
   email: string;

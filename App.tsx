@@ -17,11 +17,16 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import Modal from './components/Modal';
 
+type Theme = 'light' | 'dark';
+
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
     const [user, setUser] = useState<User>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+    const [viewedProfileId, setViewedProfileId] = useState<string | null>(null);
+    const [theme, setTheme] = useState<Theme>('light');
+
 
     const [isLoginModalOpen, setLoginModalOpen] = useState(false);
     const [isSignupModalOpen, setSignupModalOpen] = useState(false);
@@ -30,6 +35,23 @@ const App: React.FC = () => {
 
     const [loginError, setLoginError] = useState('');
     const [signupError, setSignupError] = useState('');
+
+    useEffect(() => {
+        const storedTheme = localStorage.getItem('theme') as Theme | null;
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = storedTheme || (prefersDark ? 'dark' : 'light');
+        setTheme(initialTheme);
+        document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+    }, []);
+
+     const toggleTheme = () => {
+        setTheme(prevTheme => {
+            const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('theme', newTheme);
+            document.documentElement.classList.toggle('dark', newTheme === 'dark');
+            return newTheme;
+        });
+    };
 
     useEffect(() => {
         let unsubscribeProfile: Unsubscribe | null = null;
@@ -67,9 +89,18 @@ const App: React.FC = () => {
             setLoginModalOpen(true);
             return;
         }
+        // When navigating away from a viewed profile, reset it
+        if (page !== Page.Profile) {
+            setViewedProfileId(null);
+        }
         setCurrentPage(page);
         window.scrollTo(0, 0);
     }, [user]);
+    
+    const handleViewProfile = useCallback((userId: string | null) => {
+        setViewedProfileId(userId);
+        navigateTo(Page.Profile);
+    }, [navigateTo]);
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -79,14 +110,24 @@ const App: React.FC = () => {
     const handleDeletePost = useCallback(async (post: CommunityPost) => {
         if (!user || user.uid !== post.author.id) return;
         try {
-            const batch = writeBatch(db);
-            const interactionsQuery = query(collection(db, 'user-comments-and-replies'), where('postId', '==', post.id));
+            // Find all comments and replies for the post
+            const interactionsQuery = query(collection(db, 'usercomments'), where('postId', '==', post.id));
             const interactionsSnapshot = await getDocs(interactionsQuery);
+            
+            // Create a single atomic batch write
+            const batch = writeBatch(db);
+
+            // Add all comment/reply deletions to the batch
             interactionsSnapshot.docs.forEach(interactionDoc => {
                 batch.delete(interactionDoc.ref);
             });
+
+            // Add the post deletion to the SAME batch
+            const postRef = doc(db, 'community-posts', post.id);
+            batch.delete(postRef);
+
+            // Commit all deletions at once
             await batch.commit();
-            await deleteDoc(doc(db, 'community-posts', post.id));
 
         } catch (error) {
             console.error("Error deleting post and its content:", error);
@@ -159,9 +200,9 @@ const App: React.FC = () => {
             case Page.ImageGen:
                 return <ImageGenPage />;
             case Page.Community:
-                return <CommunityPage user={user} onDeletePost={handleDeletePost} />;
+                return <CommunityPage user={user} userProfile={userProfile} onDeletePost={handleDeletePost} onViewProfile={handleViewProfile} />;
             case Page.Profile:
-                return <ProfilePage user={user} onDeletePost={handleDeletePost} onLogout={handleLogout} />;
+                return <ProfilePage loggedInUser={user} viewedProfileId={viewedProfileId} onDeletePost={handleDeletePost} onLogout={handleLogout} onViewProfile={handleViewProfile} />;
             case Page.Home:
             default:
                 return <HomePage navigateTo={navigateTo} openSignupModal={() => setSignupModalOpen(true)} />;
@@ -169,14 +210,14 @@ const App: React.FC = () => {
     };
     
     if (loading) {
-        return <div className="flex items-center justify-center h-screen">Loading...</div>;
+        return <div className="flex items-center justify-center h-screen bg-primary">Loading...</div>;
     }
 
     return (
         <>
-            <Header user={user} userProfile={userProfile} navigateTo={navigateTo} onLogout={handleLogout} onLogin={() => setLoginModalOpen(true)} />
+            <Header user={user} userProfile={userProfile} navigateTo={navigateTo} onLogout={handleLogout} onLogin={() => setLoginModalOpen(true)} onViewProfile={() => handleViewProfile(null)} />
             <main>{renderPage()}</main>
-            { ![Page.Chat, Page.ImageGen, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} /> }
+            { ![Page.Chat, Page.ImageGen, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
             
             <Modal isOpen={isLoginModalOpen} onClose={() => setLoginModalOpen(false)}>
                  <LoginForm 
@@ -214,8 +255,8 @@ const PasswordInput: React.FC<{id: string}> = ({ id }) => {
     const [isVisible, setIsVisible] = useState(false);
     return (
         <div className="relative">
-            <input type={isVisible ? 'text' : 'password'} id={id} required className="w-full p-3 border border-gray-300 rounded-lg focus:ring-black focus:border-black transition" />
-            <button type="button" onClick={() => setIsVisible(!isVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500">
+            <input type={isVisible ? 'text' : 'password'} id={id} required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
+            <button type="button" onClick={() => setIsVisible(!isVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-muted">
                 <svg className="w-5 h-5"><use href={isVisible ? '#icon-eye' : '#icon-eye-off'}></use></svg>
             </button>
         </div>
@@ -226,23 +267,23 @@ const PasswordInput: React.FC<{id: string}> = ({ id }) => {
 const LoginForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => void, onGoogleSignIn: () => void, error: string, onSwitchToSignup: () => void}> = 
     ({onSubmit, onGoogleSignIn, error, onSwitchToSignup}) => (
     <div>
-        <h3 className="text-3xl font-extrabold mb-6">Log In</h3>
+        <h3 className="text-3xl font-extrabold mb-6 text-primary">Log In</h3>
         <form onSubmit={onSubmit}>
             <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <input type="email" id="email" required className="w-full p-3 border border-gray-300 rounded-lg focus:ring-black focus:border-black transition" />
+                <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1">Email Address</label>
+                <input type="email" id="email" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
             </div>
             <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1">Password</label>
                 <PasswordInput id="password" />
             </div>
             {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
-            <button type="submit" className="w-full py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition">Sign In</button>
-            <p className="text-center text-sm text-gray-500 mt-4">
-                Don't have an account? <a href="#" className="text-black font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToSignup();}}>Sign up</a>
+            <button type="submit" className="w-full py-3 bg-primary-accent text-on-primary-accent font-medium rounded-lg hover:bg-accent-hover transition">Sign In</button>
+            <p className="text-center text-sm text-muted mt-4">
+                Don't have an account? <a href="#" className="text-primary font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToSignup();}}>Sign up</a>
             </p>
-            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300"></div></div><div className="relative flex justify-center text-sm"><span className="bg-white px-2 text-gray-500">OR</span></div></div>
-            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-secondary"></div></div><div className="relative flex justify-center text-sm"><span className="bg-secondary px-2 text-muted">OR</span></div></div>
+            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-secondary rounded-md shadow-sm bg-secondary text-sm font-medium text-muted hover:bg-hover">
                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 48 48"><path d="M44.5,20.9H24v8.5h11.8C34.7,35.9,30.1,40,24,40c-6.6,0-12-5.4-12-12s5.4-12,12-12c3.6,0,6.8,1.6,9,4.2l6.4-6.4C35.8,5.5,30.3,3,24,3C12.4,3,3,12.4,3,24s9.4,21,21,21c11.2,0,20.2-9.2,20.2-20.5C44.2,22.7,44.5,20.9,44.5,20.9z"></path></svg>
                 <span>Continue with Google</span>
             </button>
@@ -253,27 +294,27 @@ const LoginForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => vo
 const SignupForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => void, onGoogleSignIn: () => void, error: string, onSwitchToLogin: () => void}> = 
     ({onSubmit, onGoogleSignIn, error, onSwitchToLogin}) => (
     <div>
-        <h3 className="text-3xl font-extrabold mb-6">Create Account</h3>
+        <h3 className="text-3xl font-extrabold mb-6 text-primary">Create Account</h3>
         <form onSubmit={onSubmit}>
             <div className="mb-4">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" id="name" required className="w-full p-3 border border-gray-300 rounded-lg focus:ring-black focus:border-black transition" />
+                <label htmlFor="name" className="block text-sm font-medium text-secondary mb-1">Full Name</label>
+                <input type="text" id="name" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
             </div>
             <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <input type="email" id="email" required className="w-full p-3 border border-gray-300 rounded-lg focus:ring-black focus:border-black transition" />
+                <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1">Email Address</label>
+                <input type="email" id="email" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
             </div>
             <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1">Password</label>
                 <PasswordInput id="password" />
             </div>
             {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
-            <button type="submit" className="w-full py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition">Get Started</button>
-            <p className="text-center text-sm text-gray-500 mt-4">
-                Already have an account? <a href="#" className="text-black font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToLogin();}}>Log in</a>
+            <button type="submit" className="w-full py-3 bg-primary-accent text-on-primary-accent font-medium rounded-lg hover:bg-accent-hover transition">Get Started</button>
+            <p className="text-center text-sm text-muted mt-4">
+                Already have an account? <a href="#" className="text-primary font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToLogin();}}>Log in</a>
             </p>
-            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300"></div></div><div className="relative flex justify-center text-sm"><span className="bg-white px-2 text-gray-500">OR</span></div></div>
-            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-secondary"></div></div><div className="relative flex justify-center text-sm"><span className="bg-secondary px-2 text-muted">OR</span></div></div>
+            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-secondary rounded-md shadow-sm bg-secondary text-sm font-medium text-muted hover:bg-hover">
                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 48 48"><path d="M44.5,20.9H24v8.5h11.8C34.7,35.9,30.1,40,24,40c-6.6,0-12-5.4-12-12s5.4-12,12-12c3.6,0,6.8,1.6,9,4.2l6.4-6.4C35.8,5.5,30.3,3,24,3C12.4,3,3,12.4,3,24s9.4,21,21,21c11.2,0,20.2-9.2,20.2-20.5C44.2,22.7,44.5,20.9,44.5,20.9z"></path></svg>
                 <span>Continue with Google</span>
             </button>
@@ -283,10 +324,10 @@ const SignupForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => v
 
 const DeleteConfirmContent: React.FC<{ title: string, onConfirm: () => void, onCancel: () => void }> = ({ title, onConfirm, onCancel }) => (
     <div>
-        <h3 className="text-2xl font-bold mb-4">Confirm Deletion</h3>
-        <p className="text-gray-600 mb-6">Are you sure you want to permanently delete this item: "<strong>{title}</strong>"? This action cannot be undone.</p>
+        <h3 className="text-2xl font-bold mb-4 text-primary">Confirm Deletion</h3>
+        <p className="text-secondary mb-6">Are you sure you want to permanently delete this item: "<strong>{title}</strong>"? This action cannot be undone.</p>
         <div className="flex justify-end space-x-4">
-            <button className="px-4 py-2 bg-gray-200 text-black rounded-lg hover:bg-gray-300 transition" onClick={onCancel}>
+            <button className="px-4 py-2 bg-muted text-primary rounded-lg hover:bg-hover transition" onClick={onCancel}>
                 Cancel
             </button>
             <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition" onClick={onConfirm}>
