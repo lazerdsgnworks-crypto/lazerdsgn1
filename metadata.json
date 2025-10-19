@@ -1,0 +1,7 @@
+{
+  "name": "LazerDsgn - AI Digital Studio",
+  "description": "A responsive website for the LazerDsgn digital design studio, featuring a portfolio, testimonials, an AI-powered image generator, and an interactive chat assistant built with Firebase.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

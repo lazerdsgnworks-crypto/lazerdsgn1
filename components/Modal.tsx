@@ -1,0 +1,72 @@
+
+import React, { useEffect, useState } from 'react';
+
+interface ModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    children: React.ReactNode;
+}
+
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
+    // This state controls rendering. We keep it in the DOM a bit longer to allow the exit animation.
+    const [isRendered, setIsRendered] = useState(isOpen);
+
+    useEffect(() => {
+        if (isOpen) {
+            setIsRendered(true);
+        } else {
+            // When closing, wait for the animation to finish before removing from the DOM
+            const timer = setTimeout(() => {
+                setIsRendered(false);
+            }, 300); // This duration must match the CSS transition duration
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        const handleEsc = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        // Only listen for Esc key when the modal is intended to be open
+        if (isOpen) {
+            window.addEventListener('keydown', handleEsc);
+        }
+        return () => {
+            window.removeEventListener('keydown', handleEsc);
+        };
+    }, [isOpen, onClose]);
+
+    // Don't render anything if the component is not supposed to be visible
+    if (!isRendered) {
+        return null;
+    }
+
+    return (
+        <div 
+            className={`modal-overlay ${isOpen ? 'open' : ''}`}
+            onClick={onClose}
+            aria-modal="true"
+            role="dialog"
+        >
+            <div 
+                className="modal-content bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full relative"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button 
+                    className="absolute top-4 right-4 text-gray-500 hover:text-black"
+                    onClick={onClose}
+                    aria-label="Close modal"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                {children}
+            </div>
+        </div>
+    );
+};
+
+export default Modal;

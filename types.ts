@@ -1,0 +1,80 @@
+import type { User as FirebaseUser } from 'firebase/auth';
+import type { Timestamp } from 'firebase/firestore';
+
+export enum Page {
+  Home = 'home',
+  Portfolio = 'portfolio',
+  About = 'about',
+  Chat = 'chat',
+  ImageGen = 'image-gen',
+  Community = 'community',
+  Profile = 'profile',
+}
+
+export type User = FirebaseUser | null;
+
+export interface UserProfile {
+  username: string;
+  bio: string;
+  email: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  text: string;
+  role: 'user' | 'ai';
+  createdAt: Timestamp;
+  imageUrls?: string[];
+  imageUrl?: string;
+  analysisFile?: {
+    name: string;
+    type: string;
+  };
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// --- NEW TYPES FOR COMMUNITY PAGE ---
+
+export interface Author {
+  id: string;
+  email: string;
+  username: string;
+}
+
+export interface CommunityPost {
+  id: string;
+  author: Author;
+  text: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
+  createdAt: Timestamp;
+  commentCount: number;
+  aiReply?: {
+      text: string;
+      createdAt: Timestamp;
+  };
+}
+
+export interface Comment {
+    id: string;
+    author: Author;
+    text: string;
+    createdAt: Timestamp;
+    postId: string;
+    replyCount: number;
+}
+
+export interface Reply {
+    id:string;
+    author: Author;
+    text: string;
+    createdAt: Timestamp;
+    postId: string;
+    commentId: string;
+}
