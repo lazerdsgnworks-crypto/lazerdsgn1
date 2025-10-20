@@ -117,7 +117,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, onDelete, auth
                 <div className="flex-1 min-w-0">
                      <header className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                             <p onClick={() => onViewProfile(comment.author.id)} className="font-bold truncate text-sm text-primary hover:underline cursor-pointer">{comment.author.username}</p>
+                             <p onClick={() => !isAiComment && onViewProfile(comment.author.id)} className={`font-bold truncate text-sm text-primary ${!isAiComment ? 'hover:underline cursor-pointer' : ''}`}>{comment.author.username}</p>
                              {isAiComment && <span className="ai-badge">AI</span>}
                              <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                         </div>
@@ -235,11 +235,36 @@ const CommentSection: React.FC<CommentSectionProps> = ({ post, user, author, onV
             transaction.update(postRef, { commentCount: newCount });
         });
     };
+    
+    const aiAuthor: Author = {
+        id: 'ai-assistant',
+        email: 'ai@lazerdsgn.com',
+        username: 'AI Assistant',
+    };
+
+    const aiComment: Comment | null = post.aiReply ? {
+        id: 'ai-reply-' + post.id,
+        author: aiAuthor,
+        text: post.aiReply.text,
+        createdAt: post.aiReply.createdAt,
+        postId: post.id,
+        replyCount: 0,
+    } : null;
 
     return (
         <div className="pl-10 pr-4 pb-2">
             <CommentForm user={user} onSubmit={handleAddComment} placeholder="Post your reply..." />
             <div className="space-y-1 mt-1">
+                 {aiComment && (
+                    <CommentItem 
+                        key={aiComment.id} 
+                        comment={aiComment} 
+                        user={user} 
+                        author={author}
+                        onDelete={() => {}} // No-op for AI
+                        onViewProfile={onViewProfile} 
+                    />
+                )}
                 {comments.map(comment => (
                     <CommentItem key={comment.id} comment={comment} user={user} author={author} onDelete={handleDeleteComment} onViewProfile={onViewProfile} />
                 ))}
@@ -283,7 +308,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
              <div className="flex space-x-4 p-4">
                  <div className="flex flex-col items-center flex-shrink-0 pt-1">
                      <Avatar email={post.author.email}/>
-                     {(showComments || post.aiReply) && post.commentCount > 0 && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
+                     {(showComments || (post.aiReply && post.commentCount === 0)) && (post.commentCount > 0 || post.aiReply) && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                     <header className="flex items-center justify-between">
@@ -318,26 +343,6 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                             )}
                         </div>
                     )}
-                    
-                    {post.aiReply && (
-                        <div className="mt-4 ml-2 pl-4 border-l-2 border-blue-500/30">
-                            <div className="flex items-start space-x-3">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center ring-2 ring-secondary">
-                                    <svg className="w-5 h-5 text-white"><use href="#icon-gemini-sparkle"></use></svg>
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center space-x-2">
-                                        <span className="font-bold text-sm text-primary">AI Assistant</span>
-                                        <span className="ai-badge">AI</span>
-                                    </div>
-                                    <p className="text-primary text-base mt-1 whitespace-pre-wrap">{post.aiReply.text}</p>
-                                    <p className="text-xs text-muted mt-2">
-                                        {post.aiReply.createdAt ? formatDistanceToNow(post.aiReply.createdAt.toDate(), { addSuffix: true }) : 'just now'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     <footer className="mt-4 flex items-center justify-around text-muted max-w-xs">
                          <button className="flex items-center space-x-2 hover:text-red-500 transition-colors group">
@@ -356,9 +361,10 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                              <svg className="w-5 h-5"><use href={isSaved ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>
                          </button>
                     </footer>
-                    {post.commentCount > 0 && (
+                    
+                    { (post.commentCount > 0 || post.aiReply) && (
                         <p className="text-sm text-muted mt-3 cursor-pointer hover:underline" onClick={() => setShowComments(!showComments)}>
-                            View {post.commentCount} {post.commentCount === 1 ? 'reply' : 'replies'}
+                            View replies {post.commentCount > 0 ? `(${post.commentCount})` : ''}
                         </p>
                     )}
                 </div>

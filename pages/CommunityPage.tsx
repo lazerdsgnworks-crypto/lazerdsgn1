@@ -243,7 +243,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [isSearchSidebarOpen, setSearchSidebarOpen] = useState(false);
-    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // FIX: Using `ReturnType<typeof setTimeout>` is a browser-compatible way to type the return value of `setTimeout`.
+    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const timer = setTimeout(() => pageRef.current?.classList.add('visible'), 10);
