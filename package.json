@@ -1,7 +1,7 @@
 {
   "name": "lazerdsgn---ai-digital-studio",
   "homepage": "https://lazerdsgnworks-crypto.github.io/lazerdsgn1/",
-  "private": true,
+ 
   "version": "0.0.0",
   "type": "module",
   "scripts": {
