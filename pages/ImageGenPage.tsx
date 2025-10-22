@@ -15,27 +15,63 @@ const ImageGenPage: React.FC = () => {
         return () => clearTimeout(timer);
     }, []);
 
+    // This effect hook handles the lifecycle of any blob URL.
+    // When the component unmounts, or when imageUrl changes to something else,
+    // the cleanup function is called for the old URL if it was a blob URL to prevent memory leaks.
+    useEffect(() => {
+        return () => {
+            if (imageUrl && imageUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(imageUrl);
+            }
+        };
+    }, [imageUrl]);
+
     const handleGenerate = async () => {
         if (!prompt.trim()) {
             setError("Please enter a prompt.");
             return;
         }
         setIsLoading(true);
-        setImageUrl('');
+        setImageUrl(''); // This will trigger the cleanup for the old URL if it was a blob URL
         setError('');
+
         try {
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
-            // Preload the image to ensure it's generated before showing
-            await new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = resolve;
-                img.onerror = reject;
-                img.src = url;
+            const response = await fetch('https://umarworks1.app.n8n.cloud/webhook/imagegen', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt }),
             });
-            setImageUrl(url); 
+
+            if (!response.ok) {
+                 try {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.message || `Webhook failed with status ${response.status}`);
+                } catch {
+                    const errorText = await response.text();
+                    throw new Error(`Webhook failed with status ${response.status}: ${errorText}`);
+                }
+            }
+            
+            const result = await response.json();
+            const newImageUrl = result.url;
+
+            if (!newImageUrl || typeof newImageUrl !== 'string') {
+                throw new Error("The AI service did not return a valid image URL.");
+            }
+            
+            // Preload the image to ensure it's loaded before showing
+            await new Promise<void>((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error("The generated image could not be loaded. It might be an invalid URL or a network issue."));
+                img.src = newImageUrl;
+            });
+            setImageUrl(newImageUrl);
         } catch (err) {
             console.error("Image generation error:", err);
-            setError("Failed to generate image. The service may be busy. Please try again.");
+            setError(err instanceof Error ? err.message : "Failed to generate image. The service may be busy. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -44,19 +80,27 @@ const ImageGenPage: React.FC = () => {
     const handleDownload = async () => {
         if (!imageUrl) return;
         try {
+            // Fetch the image data to handle potential CORS issues with the download attribute.
             const response = await fetch(imageUrl);
+            if (!response.ok) {
+                throw new Error('Network response was not ok while fetching image for download.');
+            }
             const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
+            const blobUrl = URL.createObjectURL(blob);
+
             const link = document.createElement('a');
             link.href = blobUrl;
             link.download = `lazerdsgn-${prompt.slice(0, 20).replace(/\s+/g, '_') || 'image'}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(blobUrl);
+
+            // Revoke the temporary blob URL to free up memory.
+            URL.revokeObjectURL(blobUrl);
+
         } catch (error) {
             console.error('Download failed:', error);
-            setError('Could not download the image. Please try again.');
+            setError('Could not download the image. Try right-clicking the image to save it.');
         }
     };
 

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Page, User, UserProfile } from '../types';
 import Avatar from './Avatar';
@@ -35,7 +36,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
             return (
                 <div className={`flex items-center ${isMobile ? 'flex-col space-y-4' : 'space-x-4'}`}>
                     <button onClick={handleProfileNav} className="flex items-center space-x-2 group">
-                        <Avatar email={user.email!} size="sm" />
+                        <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
                         <span className="text-sm font-medium text-secondary group-hover:text-primary">
                             {userProfile?.username ?? 'Profile'}
                         </span>
@@ -58,7 +59,6 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
-                        <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.ImageGen, e)}>Image Gen</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
                         <AuthLinks isMobile={false} />
                     </nav>
@@ -89,7 +89,6 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
-                    <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.ImageGen, e)}>Image Gen</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
                     <div className="pt-4">
                         <AuthLinks isMobile={true} />

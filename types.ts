@@ -7,7 +7,6 @@ export enum Page {
   Portfolio = 'portfolio',
   About = 'about',
   Chat = 'chat',
-  ImageGen = 'image-gen',
   Community = 'community',
   Profile = 'profile',
 }
@@ -19,6 +18,7 @@ export interface UserProfile {
   username: string;
   bio: string;
   email: string;
+  photoURL?: string | null;
 }
 
 export interface ChatMessage {
@@ -47,20 +47,23 @@ export interface Author {
   id: string;
   email: string;
   username: string;
+  photoURL?: string | null;
 }
 
 export interface CommunityPost {
   id: string;
   author: Author;
   text: string;
-  mediaUrl?: string;
+  mediaUrls?: string[];
   mediaType?: 'image' | 'video';
   createdAt: Timestamp;
   commentCount: number;
+  likeCount?: number;
   aiReply?: {
       text: string;
       createdAt: Timestamp;
   };
+  isAiPost?: boolean;
 }
 
 export interface Comment {

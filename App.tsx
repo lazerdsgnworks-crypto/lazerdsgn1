@@ -1,16 +1,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe } from 'firebase/auth';
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser } from 'firebase/auth';
 import { auth, db } from './services/firebase';
 import { Page, User, CommunityPost, UserProfile } from './types';
-import { doc, deleteDoc, writeBatch, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 
 import HomePage from './pages/HomePage';
 import PortfolioPage from './pages/PortfolioPage';
 import AboutPage from './pages/AboutPage';
 import ChatPage from './pages/ChatPage';
-import ImageGenPage from './pages/ImageGenPage';
 import CommunityPage from './pages/CommunityPage';
 import ProfilePage from './pages/ProfilePage';
 import Header from './components/Header';
@@ -18,6 +17,209 @@ import Footer from './components/Footer';
 import Modal from './components/Modal';
 
 type Theme = 'light' | 'dark';
+type AuthState = 'idle' | 'loading' | 'success';
+
+const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
+
+const AuthFeedback: React.FC<{ title: string, message: string }> = ({ title, message }) => (
+    <div className="text-center py-8 flex flex-col items-center justify-center min-h-[300px]">
+        <svg className="w-16 h-16 text-green-500 mb-4">
+            <use href="#icon-check-circle"></use>
+        </svg>
+        <h2 className="text-2xl font-bold text-primary">{title}</h2>
+        <p className="text-secondary mt-2">{message}</p>
+    </div>
+);
+
+const LoginForm: React.FC<{
+    onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    onGoogleSignIn: () => void;
+    error: string;
+    onSwitchToSignup: () => void;
+    authState: AuthState;
+}> = ({ onSubmit, onGoogleSignIn, error, onSwitchToSignup, authState }) => {
+    const [showPassword, setShowPassword] = useState(false);
+    const isLoading = authState === 'loading';
+
+    if (authState === 'success') {
+        return <AuthFeedback title="Login Successful!" message="Welcome back." />;
+    }
+    
+    return (
+        <div>
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold tracking-tight text-primary">LazerDsgn.</h1>
+            </div>
+            <h2 className="text-3xl font-bold text-center text-primary mb-2">Welcome Back</h2>
+            <p className="text-center text-secondary mb-8">Log in to continue your journey.</p>
+            {error && <p className="bg-red-500/10 text-red-500 text-sm rounded-lg p-3 mb-4 text-center">{error}</p>}
+            <form onSubmit={onSubmit} className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="email-login">Email</label>
+                    <input type="email" name="email" id="email-login" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="password-login">Password</label>
+                    <div className="relative mt-1">
+                        <input 
+                            type={showPassword ? 'text' : 'password'} 
+                            name="password" 
+                            id="password-login" 
+                            required 
+                            className="w-full px-4 py-2.5 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors pr-10" 
+                        />
+                        <button 
+                            type="button" 
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-muted hover:text-primary"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                            <svg className="h-5 w-5" aria-hidden="true">
+                                <use href={showPassword ? "#icon-eye-off" : "#icon-eye"}></use>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading}>
+                    {isLoading ? (
+                        <span className="flex items-center justify-center">
+                            <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                            Processing...
+                        </span>
+                    ) : (
+                        'Login'
+                    )}
+                </button>
+            </form>
+            <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-primary"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                    <span className="px-3 bg-secondary text-muted">OR</span>
+                </div>
+            </div>
+            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-lg hover:bg-hover transition-all duration-300 hover:shadow-md">
+                <svg className="w-5 h-5 mr-3"><use href="#icon-google"></use></svg>
+                <span className="text-sm font-medium text-primary">Sign in with Google</span>
+            </button>
+            <p className="text-sm text-center text-secondary mt-8">
+                Don't have an account? <button onClick={onSwitchToSignup} className="font-semibold text-blue-500 hover:underline">Sign up</button>
+            </p>
+        </div>
+    );
+};
+
+const SignupForm: React.FC<{
+    onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    onGoogleSignIn: () => void;
+    error: string;
+    onSwitchToLogin: () => void;
+    authState: AuthState;
+}> = ({ onSubmit, onGoogleSignIn, error, onSwitchToLogin, authState }) => {
+    const [showPassword, setShowPassword] = useState(false);
+    const isLoading = authState === 'loading';
+
+    if (authState === 'success') {
+        return <AuthFeedback title="Account Created!" message="Welcome to the community." />;
+    }
+    
+    return (
+        <div>
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold tracking-tight text-primary">LazerDsgn.</h1>
+            </div>
+            <h2 className="text-3xl font-bold text-center text-primary mb-2">Create Account</h2>
+            <p className="text-center text-secondary mb-8">Join our community of designers.</p>
+            {error && <p className="bg-red-500/10 text-red-500 text-sm rounded-lg p-3 mb-4 text-center">{error}</p>}
+            <form onSubmit={onSubmit} className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="name-signup">Full Name</label>
+                    <input type="text" name="name" id="name-signup" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="email-signup">Email</label>
+                    <input type="email" name="email" id="email-signup" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="password-signup">Password</label>
+                    <div className="relative mt-1">
+                        <input 
+                            type={showPassword ? 'text' : 'password'} 
+                            name="password" 
+                            id="password-signup" 
+                            required 
+                            minLength={6} 
+                            className="w-full px-4 py-2.5 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors pr-10" 
+                        />
+                        <button 
+                            type="button" 
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5 text-muted hover:text-primary"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                            <svg className="h-5 w-5" aria-hidden="true">
+                                <use href={showPassword ? "#icon-eye-off" : "#icon-eye"}></use>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading}>
+                    {isLoading ? (
+                        <span className="flex items-center justify-center">
+                            <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                            Processing...
+                        </span>
+                    ) : (
+                        'Create Account'
+                    )}
+                </button>
+            </form>
+            <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-primary"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                    <span className="px-3 bg-secondary text-muted">OR</span>
+                </div>
+            </div>
+            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-lg hover:bg-hover transition-all duration-300 hover:shadow-md">
+                <svg className="w-5 h-5 mr-3"><use href="#icon-google"></use></svg>
+                <span className="text-sm font-medium text-primary">Sign up with Google</span>
+            </button>
+            <p className="text-sm text-center text-secondary mt-8">
+                Already have an account? <button onClick={onSwitchToLogin} className="font-semibold text-blue-500 hover:underline">Log in</button>
+            </p>
+        </div>
+    );
+};
+
+
+const ensureUserProfileExists = async (user: FirebaseUser) => {
+    const profileDocRef = doc(db, 'users', user.uid);
+    try {
+        const docSnap = await getDoc(profileDocRef);
+        if (!docSnap.exists()) {
+            console.log(`Profile for ${user.uid} not found, creating...`);
+            const newProfile: Omit<UserProfile, 'id'> = {
+                username: user.displayName || user.email!.split('@')[0],
+                email: user.email!,
+                bio: 'A passionate designer and creator.',
+                photoURL: user.photoURL || null,
+            };
+            await setDoc(profileDocRef, newProfile);
+        } else {
+            // Profile exists, check if photoURL needs to be updated.
+            const profileData = docSnap.data() as UserProfile;
+            if (user.photoURL && user.photoURL !== profileData.photoURL) {
+                 await updateDoc(profileDocRef, { photoURL: user.photoURL });
+            }
+        }
+    } catch (e) {
+        console.error("Failed to ensure user profile exists:", e);
+    }
+};
+
 
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
@@ -35,6 +237,7 @@ const App: React.FC = () => {
 
     const [loginError, setLoginError] = useState('');
     const [signupError, setSignupError] = useState('');
+    const [authState, setAuthState] = useState<AuthState>('idle');
 
     useEffect(() => {
         const storedTheme = localStorage.getItem('theme') as Theme | null;
@@ -55,20 +258,25 @@ const App: React.FC = () => {
 
     useEffect(() => {
         let unsubscribeProfile: Unsubscribe | null = null;
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (unsubscribeProfile) unsubscribeProfile();
             setUser(user);
 
             if (user) {
+                // Centralized profile creation/check
+                await ensureUserProfileExists(user);
+
                 const profileDocRef = doc(db, 'users', user.uid);
                 unsubscribeProfile = onSnapshot(profileDocRef, (doc) => {
                     if (doc.exists()) {
                         setUserProfile(doc.data() as UserProfile);
                     } else {
+                        // This fallback can be simplified as ensureUserProfileExists should have run
                         setUserProfile({
-                            username: user.email!.split('@')[0],
+                            username: user.displayName || user.email!.split('@')[0],
                             bio: 'A passionate designer and creator.',
                             email: user.email!,
+                            photoURL: user.photoURL || null,
                         });
                     }
                 });
@@ -85,7 +293,7 @@ const App: React.FC = () => {
     }, []);
 
     const navigateTo = useCallback((page: Page) => {
-        if ((page === Page.Chat || page === Page.ImageGen || page === Page.Community || page === Page.Profile) && !user) {
+        if ((page === Page.Chat || page === Page.Community || page === Page.Profile) && !user) {
             setLoginModalOpen(true);
             return;
         }
@@ -108,40 +316,34 @@ const App: React.FC = () => {
     };
     
     const handleDeletePost = useCallback(async (post: CommunityPost) => {
-        if (!user || user.uid !== post.author.id) return;
+        if (!user || (user.uid !== post.author.id && user.uid !== ADMIN_UID)) return;
         try {
-            // Find all comments and replies for the post
-            const interactionsQuery = query(collection(db, 'usercomments'), where('postId', '==', post.id));
-            const interactionsSnapshot = await getDocs(interactionsQuery);
-            
-            // Create a single atomic batch write
-            const batch = writeBatch(db);
-
-            // Add all comment/reply deletions to the batch
-            interactionsSnapshot.docs.forEach(interactionDoc => {
-                batch.delete(interactionDoc.ref);
-            });
-
-            // Add the post deletion to the SAME batch
+            // Deleting a post should only delete the post document itself.
+            // Associated comments will be orphaned but no longer accessible through the app.
+            // This prevents permission errors where a post author tries to delete comments from other users.
             const postRef = doc(db, 'community-posts', post.id);
-            batch.delete(postRef);
-
-            // Commit all deletions at once
-            await batch.commit();
-
+            await deleteDoc(postRef);
         } catch (error) {
-            console.error("Error deleting post and its content:", error);
+            console.error("Error deleting post:", error);
         }
     }, [user]);
 
     const handleGoogleSignIn = async () => {
         const provider = new GoogleAuthProvider();
+        setAuthState('loading');
         try {
-            await signInWithPopup(auth, provider);
-            setLoginModalOpen(false);
-            setSignupModalOpen(false);
+            const result = await signInWithPopup(auth, provider);
+            await ensureUserProfileExists(result.user);
+            setAuthState('success');
+
+            setTimeout(() => {
+                setLoginModalOpen(false);
+                setSignupModalOpen(false);
+                setAuthState('idle');
+            }, 1500);
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
+            setAuthState('idle');
             if (error.code === 'auth/popup-blocked') {
                 alert("Popup blocked! Please allow popups for this site to sign in with Google.");
             } else if (error.code !== 'auth/cancelled-popup-request' && error.code !== 'auth/popup-closed-by-user') {
@@ -153,10 +355,15 @@ const App: React.FC = () => {
     const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setLoginError('');
+        setAuthState('loading');
         const { email, password } = event.currentTarget.elements as any;
         try {
             await signInWithEmailAndPassword(auth, email.value, password.value);
-            setLoginModalOpen(false);
+            setAuthState('success');
+            setTimeout(() => {
+                setLoginModalOpen(false);
+                setAuthState('idle');
+            }, 1500);
         } catch (error: any) {
             console.error("Login error:", error.code, error.message);
             if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -164,16 +371,33 @@ const App: React.FC = () => {
             } else {
                 setLoginError("An unexpected error occurred during login.");
             }
+            setAuthState('idle');
         }
     };
 
     const handleSignup = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setSignupError('');
-        const { email, password } = event.currentTarget.elements as any;
+        setAuthState('loading');
+        const { name, email, password } = event.currentTarget.elements as any;
         try {
-            await createUserWithEmailAndPassword(auth, email.value, password.value);
-            setSignupModalOpen(false);
+            const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
+            
+            const user = userCredential.user;
+            const profileDocRef = doc(db, 'users', user.uid);
+            const newProfile: Omit<UserProfile, 'id'> = {
+                username: name.value || user.email!.split('@')[0],
+                email: user.email!,
+                bio: 'A passionate designer and creator.',
+                photoURL: null,
+            };
+            await setDoc(profileDocRef, newProfile);
+
+            setAuthState('success');
+            setTimeout(() => {
+                setSignupModalOpen(false);
+                setAuthState('idle');
+            }, 1500);
         } catch (error: any) {
              console.error("Signup error:", error.code, error.message);
              if (error.code === 'auth/email-already-in-use') {
@@ -181,6 +405,7 @@ const App: React.FC = () => {
              } else {
                 setSignupError(error.message.replace('Firebase:', ''));
              }
+             setAuthState('idle');
         }
     };
 
@@ -197,15 +422,13 @@ const App: React.FC = () => {
                 return <AboutPage />;
             case Page.Chat:
                 return <ChatPage user={user} userProfile={userProfile} openDeleteModal={openDeleteModal} />;
-            case Page.ImageGen:
-                return <ImageGenPage />;
             case Page.Community:
                 return <CommunityPage user={user} userProfile={userProfile} onDeletePost={handleDeletePost} onViewProfile={handleViewProfile} />;
             case Page.Profile:
                 return <ProfilePage loggedInUser={user} viewedProfileId={viewedProfileId} onDeletePost={handleDeletePost} onLogout={handleLogout} onViewProfile={handleViewProfile} />;
             case Page.Home:
             default:
-                return <HomePage navigateTo={navigateTo} openSignupModal={() => setSignupModalOpen(true)} />;
+                return <HomePage user={user} navigateTo={navigateTo} openSignupModal={() => setSignupModalOpen(true)} openLoginModal={() => setLoginModalOpen(true)} />;
         }
     };
     
@@ -217,125 +440,29 @@ const App: React.FC = () => {
         <>
             <Header user={user} userProfile={userProfile} navigateTo={navigateTo} onLogout={handleLogout} onLogin={() => setLoginModalOpen(true)} onViewProfile={() => handleViewProfile(null)} />
             <main>{renderPage()}</main>
-            { ![Page.Chat, Page.ImageGen, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
+            { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
             
-            <Modal isOpen={isLoginModalOpen} onClose={() => setLoginModalOpen(false)}>
+            <Modal isOpen={isLoginModalOpen} onClose={() => { setLoginModalOpen(false); setLoginError(''); setAuthState('idle'); }}>
                  <LoginForm 
                     onSubmit={handleLogin} 
                     onGoogleSignIn={handleGoogleSignIn} 
                     error={loginError} 
-                    onSwitchToSignup={() => { setLoginModalOpen(false); setSignupModalOpen(true); }}
+                    onSwitchToSignup={() => { setLoginModalOpen(false); setSignupModalOpen(true); setLoginError(''); setAuthState('idle'); }}
+                    authState={authState}
                 />
             </Modal>
             
-             <Modal isOpen={isSignupModalOpen} onClose={() => setSignupModalOpen(false)}>
+             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); setSignupError(''); setAuthState('idle'); }}>
                 <SignupForm
                     onSubmit={handleSignup}
                     onGoogleSignIn={handleGoogleSignIn}
                     error={signupError}
-                    onSwitchToLogin={() => { setSignupModalOpen(false); setLoginModalOpen(true); }}
-                />
-            </Modal>
-            
-            <Modal isOpen={isDeleteModalOpen} onClose={() => setDeleteModalOpen(false)}>
-                <DeleteConfirmContent
-                    title={deleteModalProps.title}
-                    onConfirm={() => {
-                        deleteModalProps.onConfirm();
-                        setDeleteModalOpen(false);
-                    }}
-                    onCancel={() => setDeleteModalOpen(false)}
+                    onSwitchToLogin={() => { setSignupModalOpen(false); setLoginModalOpen(true); setSignupError(''); setAuthState('idle'); }}
+                    authState={authState}
                 />
             </Modal>
         </>
     );
 };
-
-const PasswordInput: React.FC<{id: string}> = ({ id }) => {
-    const [isVisible, setIsVisible] = useState(false);
-    return (
-        <div className="relative">
-            <input type={isVisible ? 'text' : 'password'} id={id} required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
-            <button type="button" onClick={() => setIsVisible(!isVisible)} className="absolute inset-y-0 right-0 px-3 flex items-center text-muted">
-                <svg className="w-5 h-5"><use href={isVisible ? '#icon-eye' : '#icon-eye-off'}></use></svg>
-            </button>
-        </div>
-    );
-};
-
-
-const LoginForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => void, onGoogleSignIn: () => void, error: string, onSwitchToSignup: () => void}> = 
-    ({onSubmit, onGoogleSignIn, error, onSwitchToSignup}) => (
-    <div>
-        <h3 className="text-3xl font-extrabold mb-6 text-primary">Log In</h3>
-        <form onSubmit={onSubmit}>
-            <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1">Email Address</label>
-                <input type="email" id="email" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
-            </div>
-            <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1">Password</label>
-                <PasswordInput id="password" />
-            </div>
-            {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
-            <button type="submit" className="w-full py-3 bg-primary-accent text-on-primary-accent font-medium rounded-lg hover:bg-accent-hover transition">Sign In</button>
-            <p className="text-center text-sm text-muted mt-4">
-                Don't have an account? <a href="#" className="text-primary font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToSignup();}}>Sign up</a>
-            </p>
-            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-secondary"></div></div><div className="relative flex justify-center text-sm"><span className="bg-secondary px-2 text-muted">OR</span></div></div>
-            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-secondary rounded-md shadow-sm bg-secondary text-sm font-medium text-muted hover:bg-hover">
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 48 48"><path d="M44.5,20.9H24v8.5h11.8C34.7,35.9,30.1,40,24,40c-6.6,0-12-5.4-12-12s5.4-12,12-12c3.6,0,6.8,1.6,9,4.2l6.4-6.4C35.8,5.5,30.3,3,24,3C12.4,3,3,12.4,3,24s9.4,21,21,21c11.2,0,20.2-9.2,20.2-20.5C44.2,22.7,44.5,20.9,44.5,20.9z"></path></svg>
-                <span>Continue with Google</span>
-            </button>
-        </form>
-    </div>
-);
-
-const SignupForm: React.FC<{onSubmit: (e: React.FormEvent<HTMLFormElement>) => void, onGoogleSignIn: () => void, error: string, onSwitchToLogin: () => void}> = 
-    ({onSubmit, onGoogleSignIn, error, onSwitchToLogin}) => (
-    <div>
-        <h3 className="text-3xl font-extrabold mb-6 text-primary">Create Account</h3>
-        <form onSubmit={onSubmit}>
-            <div className="mb-4">
-                <label htmlFor="name" className="block text-sm font-medium text-secondary mb-1">Full Name</label>
-                <input type="text" id="name" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
-            </div>
-            <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1">Email Address</label>
-                <input type="email" id="email" required className="w-full p-3 border border-secondary rounded-lg focus:ring-black focus:border-black transition bg-primary text-primary" />
-            </div>
-            <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-secondary mb-1">Password</label>
-                <PasswordInput id="password" />
-            </div>
-            {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
-            <button type="submit" className="w-full py-3 bg-primary-accent text-on-primary-accent font-medium rounded-lg hover:bg-accent-hover transition">Get Started</button>
-            <p className="text-center text-sm text-muted mt-4">
-                Already have an account? <a href="#" className="text-primary font-medium hover:underline" onClick={(e) => {e.preventDefault(); onSwitchToLogin();}}>Log in</a>
-            </p>
-            <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-secondary"></div></div><div className="relative flex justify-center text-sm"><span className="bg-secondary px-2 text-muted">OR</span></div></div>
-            <button type="button" onClick={onGoogleSignIn} className="w-full inline-flex justify-center py-2 px-4 border border-secondary rounded-md shadow-sm bg-secondary text-sm font-medium text-muted hover:bg-hover">
-                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 48 48"><path d="M44.5,20.9H24v8.5h11.8C34.7,35.9,30.1,40,24,40c-6.6,0-12-5.4-12-12s5.4-12,12-12c3.6,0,6.8,1.6,9,4.2l6.4-6.4C35.8,5.5,30.3,3,24,3C12.4,3,3,12.4,3,24s9.4,21,21,21c11.2,0,20.2-9.2,20.2-20.5C44.2,22.7,44.5,20.9,44.5,20.9z"></path></svg>
-                <span>Continue with Google</span>
-            </button>
-        </form>
-    </div>
-);
-
-const DeleteConfirmContent: React.FC<{ title: string, onConfirm: () => void, onCancel: () => void }> = ({ title, onConfirm, onCancel }) => (
-    <div>
-        <h3 className="text-2xl font-bold mb-4 text-primary">Confirm Deletion</h3>
-        <p className="text-secondary mb-6">Are you sure you want to permanently delete this item: "<strong>{title}</strong>"? This action cannot be undone.</p>
-        <div className="flex justify-end space-x-4">
-            <button className="px-4 py-2 bg-muted text-primary rounded-lg hover:bg-hover transition" onClick={onCancel}>
-                Cancel
-            </button>
-            <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition" onClick={onConfirm}>
-                Delete
-            </button>
-        </div>
-    </div>
-);
-
 
 export default App;

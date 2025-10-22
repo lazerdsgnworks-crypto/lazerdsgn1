@@ -1,21 +1,33 @@
 import React from 'react';
 
-const Avatar: React.FC<{ email: string, size?: 'sm' | 'md' | 'lg'}> = ({ email, size = 'md' }) => {
+const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 'md' | 'lg'}> = ({ email, photoURL, size = 'md' }) => {
     const sizeClasses = {
-        sm: 'w-8 h-8 text-sm',
-        md: 'w-10 h-10 text-base',
-        lg: 'w-12 h-12 text-lg',
+        sm: 'w-8 h-8',
+        md: 'w-10 h-10',
+        lg: 'w-12 h-12',
+    };
+
+    if (photoURL) {
+        return (
+            <img 
+                src={photoURL} 
+                alt={email} 
+                className={`rounded-full object-cover flex-shrink-0 ${sizeClasses[size]}`}
+            />
+        );
     }
-    let colorClass = 'bg-gray-200 text-gray-700'; // Default
-    
-    // Special case for AI avatar
+
     if (email === 'ai@lazerdsgn.com') {
-        colorClass = 'bg-blue-500 text-white';
+        return (
+            <div className={`rounded-full flex items-center justify-center flex-shrink-0 bg-primary-accent text-on-primary-accent ${sizeClasses[size]}`}>
+                <svg className="w-3/4 h-3/4"><use href="#icon-gemini-sparkle"></use></svg>
+            </div>
+        );
     }
 
     return (
-        <div className={`rounded-full flex items-center justify-center font-bold flex-shrink-0 ${sizeClasses[size]} ${colorClass}`}>
-            {email.charAt(0).toUpperCase()}
+        <div className={`rounded-full flex items-center justify-center flex-shrink-0 bg-muted text-secondary border border-primary ${sizeClasses[size]}`}>
+            <svg className="w-3/4 h-3/4"><use href="#icon-user-default"></use></svg>
         </div>
     );
 };

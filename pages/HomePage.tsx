@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Page } from '../types';
+import { Page, User } from '../types';
 
 interface HomePageProps {
+    user: User;
     navigateTo: (page: Page) => void;
     openSignupModal: () => void;
+    openLoginModal: () => void;
 }
 
 const projectImages = [
@@ -59,7 +61,7 @@ const testimonials = [
 ];
 
 
-const HomePage: React.FC<HomePageProps> = ({ navigateTo, openSignupModal }) => {
+const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, openLoginModal }) => {
     const pageRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -81,12 +83,25 @@ const HomePage: React.FC<HomePageProps> = ({ navigateTo, openSignupModal }) => {
                         We specialize in sharp, modern graphic design and brand strategy. Stop settling for mediocre visuals and let LazerDsgn create an identity that genuinely connects with your audience.
                     </p>
                     <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-                         <button onClick={() => navigateTo(Page.Portfolio)} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
-                            View Projects
-                        </button>
-                        <button onClick={openSignupModal} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
-                            Start Your Project
-                        </button>
+                        {user ? (
+                            <>
+                                <button onClick={() => navigateTo(Page.Chat)} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
+                                    Let's Chat
+                                </button>
+                                <button onClick={() => navigateTo(Page.Community)} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
+                                    Join Community
+                                </button>
+                            </>
+                        ) : (
+                             <>
+                                <button onClick={openLoginModal} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
+                                    Let's Chat
+                                </button>
+                                <button onClick={openSignupModal} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
+                                    Start Your Project
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </section>

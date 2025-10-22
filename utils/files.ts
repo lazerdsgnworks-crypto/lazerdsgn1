@@ -1,3 +1,4 @@
+
 // @ts-ignore
 import { PDFDocument } from 'pdf-lib/dist/pdf-lib.esm.js';
 // @ts-ignore
@@ -91,8 +92,8 @@ export function compressImage(file: File, targetSizeInBytes = 1 * 1024 * 1024): 
                 const ctx = canvas.getContext('2d')!;
                 
                 // --- OPTIMIZATION: Resize before compression ---
-                const MAX_WIDTH = 1920;
-                const MAX_HEIGHT = 1080;
+                const MAX_WIDTH = 1280;
+                const MAX_HEIGHT = 1280;
                 let { width, height } = img;
 
                 if (width > height) {

@@ -72,7 +72,7 @@ const AboutPage: React.FC = () => {
               <div key={member.name} className="text-center">
                 <img className="mx-auto h-32 w-32 rounded-full object-cover mb-4 shadow-md" src={member.imageUrl} alt={member.name} />
                 <h3 className="text-lg font-semibold text-primary">{member.name}</h3>
-                <p className="text-blue-500 dark:text-blue-400 font-medium">{member.role}</p>
+                <p className="text-secondary font-medium">{member.role}</p>
                 <p className="mt-2 text-secondary text-sm">{member.bio}</p>
               </div>
             ))}

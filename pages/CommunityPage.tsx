@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, QuerySnapshot, DocumentData, doc, updateDoc, where, getDocs, startAt, endAt, limit, deleteDoc, setDoc } from 'firebase/firestore';
@@ -16,26 +16,30 @@ const AI_QUERY_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/queries";
 
 // Reusable & Standalone Components
 const PostSkeleton: React.FC = () => (
-    <div className="flex space-x-4 p-4 border-b border-primary animate-pulse">
-        <div className="w-10 h-10 bg-muted rounded-full flex-shrink-0"></div>
-        <div className="flex-1 space-y-3">
-            <div className="h-4 bg-muted rounded w-1/3"></div>
-            <div className="h-4 bg-muted rounded w-full"></div>
-            <div className="h-4 bg-muted rounded w-3/4"></div>
+    <div className="bg-secondary border-b sm:border border-primary sm:rounded-xl p-4 animate-pulse">
+        <div className="flex space-x-4">
+            <div className="w-12 h-12 bg-muted rounded-full flex-shrink-0"></div>
+            <div className="flex-1 space-y-3">
+                <div className="h-4 bg-muted rounded w-1/3"></div>
+                <div className="h-4 bg-muted rounded w-full"></div>
+                <div className="h-4 bg-muted rounded w-3/4"></div>
+            </div>
         </div>
     </div>
 );
 
+
 const CreatePostForm: React.FC<{
     user: User;
-    onCreatePost: (text: string, mediaUrl: string | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => void;
+    userProfile: UserProfile | null;
+    onCreatePost: (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => void;
     isAiQuery: boolean;
     onAiQueryChange: (isAi: boolean) => void;
-}> = ({ user, onCreatePost, isAiQuery, onAiQueryChange }) => {
+}> = ({ user, userProfile, onCreatePost, isAiQuery, onAiQueryChange }) => {
     const [text, setText] = useState('');
-    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [videoFile, setVideoFile] = useState<File | null>(null);
-    const [preview, setPreview] = useState<string | null>(null);
+    const [previews, setPreviews] = useState<string[]>([]);
     const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
     const [status, setStatus] = useState<'idle' | 'compressing' | 'uploading' | 'submitting'>('idle');
     
@@ -51,48 +55,52 @@ const CreatePostForm: React.FC<{
     };
     
     const removeMedia = () => {
-        setImageFile(null);
+        setImageFiles([]);
         setVideoFile(null);
-        if (preview) URL.revokeObjectURL(preview);
-        setPreview(null);
+        previews.forEach(p => URL.revokeObjectURL(p));
+        setPreviews([]);
         setMediaType(null);
         if(imageInputRef.current) imageInputRef.current.value = "";
         if(videoInputRef.current) videoInputRef.current.value = "";
     };
 
     const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
 
-        setVideoFile(null);
-        if (preview) URL.revokeObjectURL(preview);
-        if(videoInputRef.current) videoInputRef.current.value = "";
+        removeMedia();
 
-        if (file.size > 10 * 1024 * 1024) { 
-            alert("File is too large. Please select an image under 10MB.");
-            removeMedia();
+        if (files.length > 4) {
+            alert("You can upload a maximum of 4 images.");
             return;
         }
 
-        if (file.size > 1024 * 1024) { 
-            setStatus('compressing');
-            try {
-                const compressedDataUrl = await compressImage(file, 1024 * 1024);
-                const compressedFile = dataURLtoFile(compressedDataUrl, file.name);
-                setImageFile(compressedFile);
-                setPreview(URL.createObjectURL(compressedFile));
-                setMediaType('image');
-            } catch (err) {
-                console.error("Image compression failed", err);
-                alert("Image compression failed. Please try a different image.");
-                removeMedia();
-            } finally {
-                setStatus('idle');
-            }
-        } else {
-            setImageFile(file);
-            setPreview(URL.createObjectURL(file));
+        // FIX: Explicitly type the return value of reduce to ensure `totalSize` is a number.
+        const totalSize = files.reduce<number>((acc, file: File) => acc + file.size, 0);
+        if (totalSize > 20 * 1024 * 1024) { // 20MB total limit
+            alert("Total image size exceeds 20MB. Please select smaller files.");
+            return;
+        }
+        
+        setStatus('compressing');
+        try {
+            // FIX: Explicitly type 'file' as File to access its properties and pass it to functions.
+            const compressedFiles = await Promise.all(files.map((file: File) => {
+                 if (file.size > 1024 * 1024) {
+                    return compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name));
+                }
+                return Promise.resolve(file);
+            }));
+
+            setImageFiles(compressedFiles);
+            setPreviews(compressedFiles.map(f => URL.createObjectURL(f)));
             setMediaType('image');
+        } catch (err) {
+            console.error("Image processing failed", err);
+            alert("An error occurred while processing images. Please try again.");
+            removeMedia();
+        } finally {
+            setStatus('idle');
         }
     };
     
@@ -100,54 +108,55 @@ const CreatePostForm: React.FC<{
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setImageFile(null);
-        if (preview) URL.revokeObjectURL(preview);
-        if(imageInputRef.current) imageInputRef.current.value = "";
+        removeMedia();
 
         if (file.size > 50 * 1024 * 1024) { 
             alert("Video file is too large. Please select a video under 50MB.");
-            removeMedia();
             return;
         }
         setVideoFile(file);
-        setPreview(URL.createObjectURL(file));
+        setPreviews([URL.createObjectURL(file)]);
         setMediaType('video');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const mediaFile = imageFile || videoFile;
-        if (!user || (!text.trim() && !mediaFile) || status !== 'idle') return;
+        const mediaFile = videoFile;
+        if (!user || (!text.trim() && !mediaFile && imageFiles.length === 0) || status !== 'idle') return;
         
-        let finalMediaUrl: string | null = null;
+        let finalMediaUrls: string[] | null = null;
         let finalMediaType: 'image' | 'video' | null = null;
 
         try {
-            if (mediaFile) {
+             if (imageFiles.length > 0) {
                 setStatus('uploading');
-                finalMediaType = imageFile ? 'image' : 'video';
-                const resourceType = finalMediaType;
-                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
-
+                finalMediaType = 'image';
+                const uploadedUrls = await Promise.all(imageFiles.map(async file => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+                    const response = await fetch(url, { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error('Cloudinary upload failed for an image');
+                    const data = await response.json();
+                    return data.secure_url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
+                }));
+                finalMediaUrls = uploadedUrls;
+            } else if (videoFile) {
+                setStatus('uploading');
+                finalMediaType = 'video';
                 const formData = new FormData();
-                formData.append('file', mediaFile);
+                formData.append('file', videoFile);
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
+                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
                 const response = await fetch(url, { method: 'POST', body: formData });
-                if (!response.ok) throw new Error('Cloudinary upload failed');
-                
+                if (!response.ok) throw new Error('Cloudinary video upload failed');
                 const data = await response.json();
-                let optimizedUrl = data.secure_url;
-                if (finalMediaType === 'image') {
-                    optimizedUrl = optimizedUrl.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
-                } else {
-                    optimizedUrl = optimizedUrl.replace('/upload/', '/upload/w_600,c_scale/');
-                }
-                finalMediaUrl = optimizedUrl;
+                finalMediaUrls = [data.secure_url.replace('/upload/', '/upload/w_600,c_scale,q_auto/')];
             }
             
             setStatus('submitting');
-            await onCreatePost(text, finalMediaUrl, finalMediaType, isAiQuery);
+            await onCreatePost(text, finalMediaUrls, finalMediaType, isAiQuery);
             
             setText('');
             removeMedia();
@@ -166,61 +175,111 @@ const CreatePostForm: React.FC<{
     
     const buttonText = {
         idle: isAiQuery ? 'Ask AI' : 'Post',
-        compressing: 'Compressing...',
+        compressing: 'Processing...',
         uploading: 'Uploading...',
         submitting: isAiQuery ? 'Asking...' : 'Posting...',
     };
 
     return (
-        <div className="p-4 flex space-x-3">
-            <Avatar email={user.email!} />
-            <div className={`flex-1 transition-all duration-300 ${isAiQuery ? 'ask-ai-active' : ''}`}>
-                <form onSubmit={handleSubmit} className={`w-full h-full p-3 transition-colors duration-300 rounded-[calc(1.5rem-2px)] ${isAiQuery ? 'bg-secondary' : 'bg-transparent'}`}>
-                    <textarea
-                        ref={textareaRef}
-                        value={text}
-                        onChange={handleTextChange}
-                        placeholder={isAiQuery ? "Ask the AI a question..." : "Start a thread..."}
-                        className="w-full bg-transparent text-lg text-primary placeholder-muted focus:ring-0 focus:outline-none resize-none overflow-hidden transition-all duration-200 py-2 px-1"
-                        rows={1}
-                    />
-                    {preview && (
-                        <div className="mt-3 relative">
-                            {mediaType === 'image' ? (
-                                <img src={preview} alt="Preview" className="rounded-xl max-h-80 w-auto border border-primary" />
-                            ) : (
-                                 <video src={preview} controls className="rounded-xl max-h-80 w-auto border border-primary bg-black" />
-                            )}
-                             <button type="button" onClick={removeMedia} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 leading-none text-xl w-7 h-7 flex items-center justify-center hover:bg-black/80 transition-colors">&times;</button>
-                        </div>
-                    )}
-                    <div className="flex justify-between items-center mt-3 pt-2">
-                        <div className="flex items-center space-x-4">
-                            <button type="button" onClick={() => imageInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
-                                <svg className="w-5 h-5"><use href="#icon-image"></use></svg>
+        <div className={`transition-all duration-300 rounded-xl ${isAiQuery ? 'ask-ai-active' : ''}`}>
+            <div className="p-4 flex space-x-4">
+                <div className="flex-shrink-0">
+                    <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="lg" />
+                </div>
+                <div className="flex-1">
+                    <form onSubmit={handleSubmit} className="w-full h-full">
+                        <textarea
+                            ref={textareaRef}
+                            value={text}
+                            onChange={handleTextChange}
+                            placeholder={isAiQuery ? "Ask the AI a question..." : "Start a thread..."}
+                            className="w-full bg-transparent text-lg text-primary placeholder-muted focus:ring-0 focus:outline-none resize-none overflow-hidden transition-all duration-200 py-2 px-1"
+                            rows={1}
+                        />
+                        {previews.length > 0 && (
+                             <div className="mt-3 relative">
+                                <button type="button" onClick={removeMedia} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0 leading-none text-xl w-6 h-6 flex items-center justify-center hover:bg-black/80 transition-colors z-20">&times;</button>
+                                
+                                {mediaType === 'video' ? (
+                                    <div className="rounded-xl w-full max-h-72 border border-primary shadow-sm overflow-hidden bg-black flex justify-center items-center">
+                                        <video src={previews[0]} controls className="w-full h-full" />
+                                    </div>
+                                ) : (
+                                    <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                        <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
+                                        {previews.map((src, index) => (
+                                            <div key={index} className="flex-shrink-0 h-24 w-auto bg-muted rounded-lg overflow-hidden border border-primary">
+                                                <img 
+                                                    src={src} 
+                                                    alt={`Preview ${index + 1}`} 
+                                                    className="h-full w-full object-contain"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center mt-3 pt-2">
+                            <div className="flex items-center space-x-4">
+                                <button type="button" onClick={() => imageInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
+                                    <svg className="w-5 h-5"><use href="#icon-image"></use></svg>
+                                </button>
+                                <button type="button" onClick={() => videoInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
+                                    <svg className="w-5 h-5"><use href="#icon-video"></use></svg>
+                                </button>
+                                <label className="flex items-center space-x-2 cursor-pointer group">
+                                    <div className="ai-toggle-switch">
+                                        <input type="checkbox" checked={isAiQuery} onChange={() => onAiQueryChange(!isAiQuery)} />
+                                        <span className="ai-toggle-slider"></span>
+                                    </div>
+                                    <span className={`text-sm font-medium transition-colors duration-300 ${isAiQuery ? 'text-secondary-accent font-bold' : 'text-secondary group-hover:text-primary'}`}>Ask AI</span>
+                                </label>
+                            </div>
+                            <input type="file" ref={imageInputRef} onChange={handleImageChange} accept="image/jpeg,image/png,image/webp" multiple hidden disabled={status !== 'idle'} />
+                            <input type="file" ref={videoInputRef} onChange={handleVideoChange} accept="video/*" hidden disabled={status !== 'idle'} />
+                            <button type="submit" disabled={status !== 'idle' || (!text.trim() && imageFiles.length === 0 && !videoFile)} className="px-6 py-2 bg-primary-accent text-on-primary-accent border-2 border-transparent font-semibold rounded-full hover:bg-accent-hover transition disabled:opacity-30 disabled:cursor-not-allowed text-base">
+                                 {buttonText[status]}
                             </button>
-                            <button type="button" onClick={() => videoInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
-                                <svg className="w-5 h-5"><use href="#icon-video"></use></svg>
-                            </button>
-                            <label className="flex items-center space-x-2 cursor-pointer group">
-                                <div className="ai-toggle-switch">
-                                    <input type="checkbox" checked={isAiQuery} onChange={() => onAiQueryChange(!isAiQuery)} />
-                                    <span className="ai-toggle-slider"></span>
-                                </div>
-                                <span className={`text-sm font-medium transition-colors duration-300 ${isAiQuery ? 'text-secondary-accent font-bold' : 'text-secondary group-hover:text-primary'}`}>Ask AI</span>
-                            </label>
                         </div>
-                        <input type="file" ref={imageInputRef} onChange={handleImageChange} accept="image/jpeg,image/png,image/webp" hidden disabled={status !== 'idle'} />
-                        <input type="file" ref={videoInputRef} onChange={handleVideoChange} accept="video/*" hidden disabled={status !== 'idle'} />
-                        <button type="submit" disabled={status !== 'idle' || (!text.trim() && !imageFile && !videoFile)} className="px-6 py-2 bg-transparent text-primary border-2 border-primary font-semibold rounded-full hover:bg-primary-accent hover:text-on-primary-accent transition disabled:opacity-30 disabled:cursor-not-allowed text-base">
-                             {buttonText[status]}
-                        </button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
     );
 };
+
+const CreatePostModal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.ReactNode }> = ({ isOpen, onClose, children }) => {
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [isOpen]);
+
+    return (
+        <div 
+            className={`fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={onClose}
+        >
+            <div 
+                className={`bg-secondary w-full max-w-2xl rounded-2xl shadow-xl transition-all duration-300 ease-in-out transform ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="p-2 border-b border-primary flex justify-center items-center relative">
+                    <h2 className="text-lg font-bold text-primary">Create Post</h2>
+                    <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-2xl text-muted hover:text-primary">&times;</button>
+                </div>
+                {children}
+            </div>
+        </div>
+    );
+};
+
 
 // Main Page Component
 interface CommunityPageProps {
@@ -236,15 +295,24 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [isLoading, setIsLoading] = useState(true);
     const [isCreatingPostAi, setIsCreatingPostAi] = useState(false);
     const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+    const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
     const [error, setError] = useState<string | null>(null);
+    const [isCreatePostModalOpen, setCreatePostModalOpen] = useState(false);
     
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
     const [isSearchSidebarOpen, setSearchSidebarOpen] = useState(false);
-    // FIX: Using `ReturnType<typeof setTimeout>` is a browser-compatible way to type the return value of `setTimeout`.
-    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const uniqueAuthors = useMemo(() => {
+        const authors = new Map<string, Author>();
+        posts.forEach(post => {
+            if (!authors.has(post.author.id)) {
+                authors.set(post.author.id, post.author);
+            }
+        });
+        return Array.from(authors.values());
+    }, [posts]);
 
     useEffect(() => {
         const timer = setTimeout(() => pageRef.current?.classList.add('visible'), 10);
@@ -279,15 +347,26 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     useEffect(() => {
         if (!user) {
             setSavedPostIds(new Set());
+            setLikedPostIds(new Set());
             return;
         }
+
         const savedPostsRef = collection(db, 'users', user.uid, 'savedPosts');
-        // FIX: Add explicit type to snapshot to avoid incorrect type inference by TypeScript.
-        const unsubscribe = onSnapshot(savedPostsRef, (snapshot: QuerySnapshot<DocumentData>) => {
+        const unsubscribeSaved = onSnapshot(savedPostsRef, (snapshot: QuerySnapshot<DocumentData>) => {
             const ids = snapshot.docs.map(doc => doc.id);
             setSavedPostIds(new Set(ids));
         });
-        return () => unsubscribe();
+
+        const likedPostsRef = collection(db, 'users', user.uid, 'likedPosts');
+        const unsubscribeLiked = onSnapshot(likedPostsRef, (snapshot: QuerySnapshot<DocumentData>) => {
+            const ids = snapshot.docs.map(doc => doc.id);
+            setLikedPostIds(new Set(ids));
+        });
+
+        return () => {
+            unsubscribeSaved();
+            unsubscribeLiked();
+        };
     }, [user]);
 
     const handleToggleSave = async (postId: string) => {
@@ -295,7 +374,6 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         const savedPostRef = doc(db, 'users', user.uid, 'savedPosts', postId);
         const isSaved = savedPostIds.has(postId);
 
-        // Optimistic UI update for instant feedback
         const newSavedIds = new Set(savedPostIds);
         if (isSaved) {
             newSavedIds.delete(postId);
@@ -304,7 +382,6 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         }
         setSavedPostIds(newSavedIds);
 
-        // Asynchronous Firestore update
         try {
             if (isSaved) {
                 await deleteDoc(savedPostRef);
@@ -313,88 +390,112 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             }
         } catch (error) {
             console.error("Error toggling save status:", error);
-            // Revert UI on failure
             setSavedPostIds(savedPostIds);
         }
     };
 
+    const handleToggleLike = async (postId: string) => {
+        if (!user) return;
+        const likedPostRef = doc(db, 'users', user.uid, 'likedPosts', postId);
+        const isLiked = likedPostIds.has(postId);
+    
+        // Optimistically update UI
+        const newLikedIds = new Set(likedPostIds);
+        if (isLiked) {
+            newLikedIds.delete(postId);
+        } else {
+            newLikedIds.add(postId);
+        }
+        setLikedPostIds(newLikedIds);
+    
+        try {
+            if (isLiked) {
+                await deleteDoc(likedPostRef);
+            } else {
+                await setDoc(likedPostRef, { likedAt: serverTimestamp() });
+            }
+            // NOTE: We are no longer updating the public likeCount on the post
+            // to avoid permission errors if security rules are restrictive.
+        } catch (error) {
+            console.error("Error toggling like:", error);
+            // Revert UI on error
+            setLikedPostIds(likedPostIds);
+        }
+    };
+
+
     const handleSearch = useCallback((queryText: string) => {
         setSearchQuery(queryText);
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
-        }
         if (!queryText.trim()) {
             setSearchResults([]);
-            setIsSearching(false);
             return;
         }
-        setIsSearching(true);
-        searchTimeoutRef.current = setTimeout(async () => {
-            try {
-                const usersRef = collection(db, 'users');
-                // Use a range query to find usernames that start with the query text.
-                // This is a common pattern for implementing basic "starts-with" search in Firestore.
-                const q = query(
-                    usersRef,
-                    orderBy('username'),
-                    startAt(queryText),
-                    endAt(queryText + '\uf8ff'), // \uf8ff is a high-end Unicode character to create a range
-                    limit(10)
-                );
 
-                const querySnapshot = await getDocs(q);
-                const results: UserProfile[] = querySnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...(doc.data() as Omit<UserProfile, 'id'>)
-                }));
-                setSearchResults(results);
+        const lowerCaseQuery = queryText.toLowerCase();
+        const results = uniqueAuthors.filter(author =>
+            author.username.toLowerCase().includes(lowerCaseQuery)
+        );
 
-            } catch (error) {
-                console.error("Error searching users:", error);
-                setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 300); // 300ms debounce
-    }, []);
+        const profileResults: UserProfile[] = results.map(author => ({
+            id: author.id,
+            username: author.username,
+            email: author.email,
+            photoURL: author.photoURL,
+            bio: '', // Bio is not available in the Author type
+        }));
 
-    const handleCreatePost = async (text: string, mediaUrl: string | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => {
-        if (!user || !userProfile || (!text.trim() && !mediaUrl)) return;
+        setSearchResults(profileResults.slice(0, 10)); // Limit results
+    }, [uniqueAuthors]);
 
-        const author: Author = { id: user.uid, email: user.email!, username: userProfile.username };
-        const postData: { author: Author; text: string; createdAt: any; commentCount: number; mediaUrl?: string; mediaType?: 'image' | 'video'; } = {
-            author, text, createdAt: serverTimestamp(), commentCount: 0,
+
+    const handleCreatePost = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => {
+        if (!user || !userProfile || (!text.trim() && !mediaUrls)) return;
+    
+        const author: Author = { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null };
+        
+        // Using `any` to allow adding aiReply dynamically.
+        const postData: any = {
+            author,
+            text,
+            createdAt: serverTimestamp(),
+            commentCount: 0,
+            likeCount: 0,
         };
-        if (mediaUrl && mediaType) {
-            postData.mediaUrl = mediaUrl;
+        if (mediaUrls && mediaUrls.length > 0 && mediaType) {
+            postData.mediaUrls = mediaUrls;
             postData.mediaType = mediaType;
         }
-
-        const newPostRef = await addDoc(collection(db, 'community-posts'), postData);
-
-        if (isAiQuery && text.trim()) {
-            try {
-                const response = await fetch(AI_QUERY_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: text, userId: user.uid })
-                });
-                if (!response.ok) throw new Error(`AI webhook failed with status ${response.status}`);
-                
-                const result = await response.json();
-                const aiResponseText = result.output || result.text || result.response || "Sorry, I couldn't get a response from the AI.";
-
-                await updateDoc(newPostRef, {
-                    aiReply: { text: aiResponseText, createdAt: serverTimestamp() }
-                });
-
-            } catch (error) {
-                console.error("Error fetching AI response:", error);
-                await updateDoc(newPostRef, {
-                    aiReply: { text: "An error occurred while getting the AI response.", createdAt: serverTimestamp() }
-                });
+        
+        if (isAiQuery) {
+            postData.isAiPost = true;
+            
+            if (text.trim()) {
+                try {
+                    const response = await fetch(AI_QUERY_WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: text, userId: user.uid })
+                    });
+                    if (!response.ok) throw new Error(`AI webhook failed with status ${response.status}`);
+                    
+                    const result = await response.json();
+                    const aiResponseText = result.output || result.text || result.response || "Sorry, I couldn't get a response from the AI.";
+    
+                    postData.aiReply = { text: aiResponseText, createdAt: serverTimestamp() };
+                } catch (error) {
+                    console.error("Error fetching AI response:", error);
+                    postData.aiReply = { text: "An error occurred while getting the AI response.", createdAt: serverTimestamp() };
+                }
             }
         }
+    
+        // Now, create the document in one go.
+        await addDoc(collection(db, 'community-posts'), postData);
+    };
+    
+    const handleCreatePostAndCloseModal = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => {
+        await handleCreatePost(text, mediaUrls, mediaType, isAiQuery);
+        setCreatePostModalOpen(false);
     };
     
     const handleViewProfileAndCloseSidebar = (userId: string) => {
@@ -413,37 +514,31 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                             searchQuery={searchQuery}
                             onSearchChange={handleSearch}
                             searchResults={searchResults}
-                            isSearching={isSearching}
                             onViewProfile={handleViewProfileAndCloseSidebar}
                         />
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto px-0 sm:px-6 lg:px-8">
                  <div className="grid grid-cols-12 gap-8">
-                    <div className="col-span-12 lg:col-span-8">
-                        <div className="bg-secondary border border-primary rounded-3xl mt-8">
-                            <div className="p-4 border-b border-primary sticky top-[68px] bg-secondary/80 backdrop-blur-sm z-10 flex justify-between items-center">
+                    <div className="col-span-12 lg:col-span-7">
+                        <div>
+                            <div className="px-4 pb-4 sticky top-[68px] bg-secondary/80 backdrop-blur-sm z-10 flex justify-between items-center">
                                 <h1 className="text-xl font-bold text-primary">Community Feed</h1>
                                 <button className="lg:hidden p-2 -mr-2" onClick={() => setSearchSidebarOpen(true)}>
                                     <svg className="w-6 h-6 text-primary"><use href="#icon-search"></use></svg>
                                 </button>
                             </div>
-                            {user && <CreatePostForm
-                                user={user}
-                                onCreatePost={handleCreatePost}
-                                isAiQuery={isCreatingPostAi}
-                                onAiQueryChange={setIsCreatingPostAi}
-                            />}
-                            <div className="border-t border-primary">
+                            
+                            <div className="sm:space-y-4 mt-4">
                                 {error && (
                                     <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg">
                                         <strong>Loading Failed:</strong> {error}
                                     </div>
                                 )}
                                 {isLoading ? (
-                                    <div className="py-4">
+                                    <div className="space-y-4 p-4 sm:p-0">
                                         <PostSkeleton /><PostSkeleton /><PostSkeleton />
                                     </div>
                                 ) : !error && (
@@ -455,6 +550,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                         onDelete={onDeletePost}
                                         savedPostIds={savedPostIds}
                                         onToggleSave={handleToggleSave}
+                                        likedPostIds={likedPostIds}
+                                        onToggleLike={handleToggleLike}
                                         onViewProfile={onViewProfile}
                                     />)
                                 )}
@@ -463,18 +560,39 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                         </div>
                     </div>
 
-                    <div className="hidden lg:block lg:col-span-4 mt-8">
+                    <div className="hidden lg:block lg:col-span-5 mt-8">
                         <RightSidebar 
                             posts={posts}
                             searchQuery={searchQuery}
                             onSearchChange={handleSearch}
                             searchResults={searchResults}
-                            isSearching={isSearching}
                             onViewProfile={onViewProfile}
                         />
                     </div>
                 </div>
             </div>
+            
+            {user && (
+                 <button
+                    onClick={() => setCreatePostModalOpen(true)}
+                    className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-secondary/50 backdrop-blur-lg border border-primary text-primary p-4 rounded-full shadow-lg hover:scale-105 transition-transform z-40"
+                    aria-label="Create new post"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                </button>
+            )}
+
+            {user && userProfile && (
+                <CreatePostModal isOpen={isCreatePostModalOpen} onClose={() => setCreatePostModalOpen(false)}>
+                    <CreatePostForm
+                        user={user}
+                        userProfile={userProfile}
+                        onCreatePost={handleCreatePostAndCloseModal}
+                        isAiQuery={isCreatingPostAi}
+                        onAiQueryChange={setIsCreatingPostAi}
+                    />
+                </CreatePostModal>
+            )}
         </div>
     );
 };
