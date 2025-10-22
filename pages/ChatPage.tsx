@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData } from 'firebase/firestore';
-import { createThumbnail, compressImage, dataURLtoFile } from '../utils/files';
+import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../utils/files';
 import Avatar from '../components/Avatar';
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
 const WEBHOOK_URL = 'https://umarworks1.app.n8n.cloud/webhook/chatinput';
 const ANALYSIS_WEBHOOK_URL = 'https://umarworks1.app.n8n.cloud/webhook/analyze';
+const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://umarworks1.app.n8n.cloud/webhook/analysis';
 const APP_ID = 'default-lazerdsgn-app';
 const CHATS_COLLECTION = `artifacts/${APP_ID}/users/`;
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
@@ -18,6 +19,7 @@ interface ChatPageProps {
   user: User;
   userProfile: UserProfile | null;
   openDeleteModal: (title: string, onConfirm: () => void) => void;
+  onViewProfile: () => void;
 }
 
 function formatAIResponse(text: string): string {
@@ -37,7 +39,7 @@ function formatAIResponse(text: string): string {
     return safeText;
 }
 
-const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal }) => {
+const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal, onViewProfile }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -49,36 +51,40 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
     const [analysisFile, setAnalysisFile] = useState<File | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-
-     useEffect(() => {
+    
+    const createNewSession = useCallback(async (setActive = true) => {
         if (!user) return;
+        const sessionsRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions`);
+        const newSessionRef = await addDoc(sessionsRef, {
+            title: `${TEMP_TITLE_PREFIX}${new Date().toLocaleDateString()}`,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        if (setActive) {
+            setCurrentSessionId(newSessionRef.id);
+        }
+    }, [user]);
+
+    // Effect to create a new session every time the user navigates to the chat page.
+    useEffect(() => {
+        if (user) {
+            createNewSession();
+        }
+    }, [user]);
+
+    // Effect to listen for session list changes for the sidebar.
+     useEffect(() => {
+        if (!user) {
+            setSessions([]);
+            return;
+        }
         setError(null);
         const sessionsRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions`);
         const q = query(sessionsRef, orderBy('updatedAt', 'desc'));
 
-        const createNewSessionForUser = async () => {
-             const newSessionRef = await addDoc(sessionsRef, {
-                 title: `${TEMP_TITLE_PREFIX}${new Date().toLocaleDateString()}`,
-                 createdAt: serverTimestamp(),
-                 updatedAt: serverTimestamp()
-             });
-             setCurrentSessionId(newSessionRef.id);
-        }
-
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
             const fetchedSessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatSession));
             setSessions(fetchedSessions);
-            
-            setCurrentSessionId(prevId => {
-                const sessionStillExists = fetchedSessions.some(s => s.id === prevId);
-                if (sessionStillExists) return prevId;
-                if (fetchedSessions.length > 0) return fetchedSessions[0].id;
-                return null;
-            });
-            
-            if (snapshot.empty) {
-                 createNewSessionForUser();
-            }
         }, (err) => {
             console.error("Firebase session listener error:", err);
             if (err.code === 'permission-denied') {
@@ -113,31 +119,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
     useEffect(() => {
         document.body.classList.toggle('sidebar-collapsed', isSidebarCollapsed);
     }, [isSidebarCollapsed]);
-
-
-    const createNewSession = useCallback(async (setActive = true) => {
-        if (!user) return;
-        
-        const currentSession = sessions.find(s => s.id === currentSessionId);
-        if (currentSession?.title.startsWith(TEMP_TITLE_PREFIX)) {
-            const messagesInSessionQuery = query(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`));
-            const messagesSnapshot = await getDocs(messagesInSessionQuery);
-            if (messagesSnapshot.empty) {
-                if (setActive) setCurrentSessionId(currentSession.id);
-                return; 
-            }
-        }
-        
-        const sessionsRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions`);
-        const newSessionRef = await addDoc(sessionsRef, {
-            title: `${TEMP_TITLE_PREFIX}${new Date().toLocaleDateString()}`,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-        if (setActive) {
-            setCurrentSessionId(newSessionRef.id);
-        }
-    }, [user, sessions, currentSessionId]);
     
     const handleSendMessage = async (message: string, imageFiles: File[]) => {
         if (!user || !currentSessionId) return;
@@ -167,7 +148,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
             }
             if (analysisFile) {
                 userMessage.analysisFile = { name: analysisFile.name, type: analysisFile.type };
-                 if (analysisFile.type.startsWith('image/')) {
+                if (analysisFile.type.startsWith('image/')) {
                     const dataUrl = await new Promise<string>((resolve, reject) => {
                         const reader = new FileReader();
                         reader.onload = e => resolve(e.target!.result as string);
@@ -175,6 +156,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                         reader.readAsDataURL(analysisFile);
                     });
                     userMessage.imageUrl = await createThumbnail(dataUrl);
+                } else if (analysisFile.type === 'application/pdf') {
+                    try {
+                        userMessage.imageUrl = await createPdfThumbnail(analysisFile);
+                    } catch (pdfError) {
+                        console.error("Failed to generate PDF thumbnail:", pdfError);
+                        // Don't add imageUrl if thumbnail generation fails, it will fallback to an icon
+                    }
                 }
             }
 
@@ -225,11 +213,20 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                 });
             } else {
                 // Regular Text or Analysis AI Response Logic
-                const isAnalysis = isAnalysisMode && analysisFile;
-                const targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : WEBHOOK_URL;
+                const isAnalysis = isAnalysisMode;
+                let targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : WEBHOOK_URL;
                 let fetchOptions: RequestInit;
-                
-                if (isAnalysis || imageFiles.length > 0) {
+
+                if (isAnalysis && !analysisFile && message.trim()) {
+                    // Text-only analysis request
+                    targetUrl = ANALYSIS_TEXT_ONLY_WEBHOOK_URL;
+                    fetchOptions = {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: message, userId: user.uid }),
+                    };
+                } else if (isAnalysis || imageFiles.length > 0) {
+                    // This covers: analysis with file, and normal chat with files
                     const payload = new FormData();
                     payload.append('message', message);
                     payload.append('userId', user.uid);
@@ -237,13 +234,14 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                     if (isAnalysis && analysisFile) {
                         payload.append('file', analysisFile, analysisFile.name);
                     } else {
+                        // This is for normal chat with image files.
                         imageFiles.forEach((file) => {
                             payload.append(`files`, file, file.name);
                         });
                     }
                     fetchOptions = { method: 'POST', body: payload };
                 } else {
-                    // Text-only message
+                    // This handles normal text-only chat
                     fetchOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -303,12 +301,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
         if (!user) return;
         await deleteDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions`, sessionId));
         if (currentSessionId === sessionId) {
-            const remainingSessions = sessions.filter(s => s.id !== sessionId && !s.title.startsWith(TEMP_TITLE_PREFIX));
-             if (remainingSessions.length > 0) {
-                 setCurrentSessionId(remainingSessions[0].id);
-            } else {
-                createNewSession(true);
-            }
+            createNewSession(true);
         }
     };
     
@@ -331,9 +324,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                 isOpen={isSidebarOpen}
                 isCollapsed={isSidebarCollapsed}
                 error={error}
+                onViewProfile={onViewProfile}
             />
             <div className="flex-1 flex flex-col overflow-hidden h-full bg-secondary">
-                <header className="p-4 border-b border-primary flex items-center justify-between bg-secondary z-10 flex-shrink-0">
+                <header className="p-4 flex items-center justify-between bg-secondary z-10 flex-shrink-0">
                      <div className="flex items-center">
                         <button onClick={() => {
                             if (window.innerWidth < 768) setSidebarOpen(!isSidebarOpen)
@@ -345,6 +339,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal 
                              <svg className="w-6 h-6 text-muted"><use href="#icon-plus-square"></use></svg>
                         </button>
                     </div>
+                    <button onClick={() => createNewSession(true)} className="p-2 rounded-full hover:bg-muted md:hidden" aria-label="New Chat">
+                         <svg className="w-6 h-6 text-muted"><use href="#icon-plus-square"></use></svg>
+                    </button>
                 </header>
                 <ChatMessages messages={messages} isLoading={isLoading} isGeneratingImage={isGeneratingImage} userProfile={userProfile}/>
                 <ChatInput 
@@ -374,10 +371,11 @@ const ChatSidebar: React.FC<{
     isOpen: boolean,
     isCollapsed: boolean,
     error: string | null,
-}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed, error }) => {
+    onViewProfile: () => void,
+}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed, error, onViewProfile }) => {
     return (
-        <div id="chat-sidebar" className={`fixed top-[68px] bottom-0 left-0 h-auto z-40 md:relative md:top-auto md:bottom-auto md:left-auto md:h-full transition-all duration-300 ease-in-out bg-primary border-r border-primary flex flex-col w-full sm:w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
-             <div className="p-4 flex-shrink-0 border-b border-primary">
+        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-40 md:relative md:h-full transition-all duration-300 ease-in-out bg-muted flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
+             <div className="p-4 flex-shrink-0 h-[68px]">
                     <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-lg font-medium hover:bg-accent-hover transition">
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                         New Chat
@@ -402,9 +400,14 @@ const ChatSidebar: React.FC<{
                     ))}
                 </div>
             )}
-             <div className="p-4 border-t border-primary text-sm text-secondary flex-shrink-0">
-                    <p className="mb-2 truncate">Logged in as: {userProfile?.username ?? '...'}</p>
-             </div>
+             <div className="p-2 flex-shrink-0">
+                <button onClick={onViewProfile} className="p-2 w-full flex items-center space-x-3 text-left hover:bg-hover rounded-lg transition-colors">
+                    {userProfile && <Avatar email={userProfile.email} photoURL={userProfile.photoURL} size="sm" />}
+                    <div className="min-w-0">
+                        <p className="font-semibold text-primary text-sm truncate">{userProfile?.username ?? '...'}</p>
+                    </div>
+                </button>
+            </div>
         </div>
     );
 };
@@ -440,7 +443,7 @@ const SidebarItem: React.FC<{
 
     return (
         <div 
-            className={`session-item-container group ${isActive ? 'active' : ''}`}
+            className={`session-item-container group ${isActive ? 'active' : 'md:hover:bg-hover'}`}
             onClick={onSelect}
         >
             <div className="flex-grow min-w-0 pr-8">
@@ -456,7 +459,7 @@ const SidebarItem: React.FC<{
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <span className={`session-text text-sm block truncate ${isActive ? 'text-primary font-semibold' : 'text-secondary group-hover:text-primary'}`}>{session.title}</span>
+                    <span className={`session-text text-sm block truncate ${isActive ? 'text-primary font-semibold' : 'text-secondary md:group-hover:text-primary'}`}>{session.title}</span>
                 )}
             </div>
              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -525,9 +528,11 @@ const ChatMessageItem: React.FC<{ message: ChatMessage, isLoading?: boolean, isG
                 <div className="flex items-start gap-3 justify-start">
                     <Avatar email="ai@lazerdsgn.com" size="sm" />
                     <div className="p-4 bg-muted rounded-2xl">
-                        <div className="w-64 h-64 bg-secondary/50 rounded-lg flex flex-col items-center justify-center animate-pulse">
-                            <svg className="w-12 h-12 text-muted" fill="none" viewBox="0 0 24" stroke="currentColor"><use href="#icon-image"></use></svg>
-                            <p className="mt-2 text-sm text-secondary">Conjuring pixels...</p>
+                        <div className="w-64 h-64 rounded-lg flex flex-col items-center justify-center overflow-hidden">
+                            <div className="w-full h-full shimmer-bg flex flex-col items-center justify-center">
+                                <svg className="w-12 h-12 text-secondary" fill="none" viewBox="0 0 24" stroke="currentColor"><use href="#icon-image"></use></svg>
+                                <p className="mt-2 text-sm text-secondary">Conjuring pixels...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -552,12 +557,32 @@ const ChatMessageItem: React.FC<{ message: ChatMessage, isLoading?: boolean, isG
     const renderFilePreview = (msg: ChatMessage) => {
         let content = null;
         if (msg.analysisFile) {
-            content = (
-                <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3">
-                    <svg className="w-6 h-6 text-muted flex-shrink-0"><use href="#icon-file-text"></use></svg>
-                    <span className="text-sm text-secondary truncate">{msg.analysisFile.name}</span>
-                </div>
-            );
+            // If we have a thumbnail (for image or PDF), display it.
+            if (msg.imageUrl) {
+                 content = (
+                    <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-start space-x-3">
+                        <img src={msg.imageUrl} alt="File preview" className="w-16 h-16 object-cover rounded flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <span className="text-sm text-primary truncate block font-medium">{msg.analysisFile.name}</span>
+                            <span className="text-xs text-muted">{msg.analysisFile.type}</span>
+                        </div>
+                    </div>
+                );
+            } else {
+                // Otherwise, show an icon.
+                let iconHref = '#icon-file-text';
+                if (msg.analysisFile.type.startsWith('video/')) {
+                    iconHref = '#icon-video';
+                } else if (msg.analysisFile.type.startsWith('audio/')) {
+                    iconHref = '#icon-music';
+                }
+                content = (
+                    <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3">
+                        <svg className="w-8 h-8 text-muted flex-shrink-0"><use href={iconHref}></use></svg>
+                        <span className="text-sm text-secondary truncate">{msg.analysisFile.name}</span>
+                    </div>
+                );
+            }
         } else if (msg.imageUrl && !msg.imageUrls) {
             if (msg.role === 'ai') {
                 content = (
@@ -679,17 +704,17 @@ const ChatInput: React.FC<{
     };
     
     return (
-         <div className="p-4 md:px-6 border-t border-primary bg-secondary flex-shrink-0">
+         <div className="p-4 md:px-6 bg-secondary flex-shrink-0">
             <div className="w-full max-w-3xl mx-auto">
                 {/* UPDATED Active Mode Indicator */}
                 {(isImageGenMode || isAnalysisMode) && (
-                    <div className="flex justify-between items-center bg-muted px-4 py-2 rounded-t-xl border-b border-primary ai-text-content" style={{ animationDuration: '0.3s' }}>
+                    <div className="flex justify-between items-center bg-muted px-4 py-2 rounded-t-xl ai-text-content" style={{ animationDuration: '0.3s' }}>
                         <div>
                             {isImageGenMode && <span className="text-sm font-semibold text-primary">Image Generation Mode</span>}
                             {isAnalysisMode && <span className="text-sm font-semibold text-primary truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span>}
                         </div>
                         <button type="button" onClick={dismissMode} className="p-1 rounded-full hover:bg-hover flex-shrink-0">
-                            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                         </button>
                     </div>
                 )}

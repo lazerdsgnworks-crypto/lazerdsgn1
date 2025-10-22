@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Page, User, UserProfile } from '../types';
 import Avatar from './Avatar';
 
@@ -10,10 +10,24 @@ interface HeaderProps {
     onLogout: () => void;
     onLogin: () => void;
     onViewProfile: () => void;
+    currentPage: Page;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout, onLogin, onViewProfile }) => {
+const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout, onLogin, onViewProfile, currentPage }) => {
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
+    const profileMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+                setProfileMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
 
     const handleNav = (page: Page, e: React.MouseEvent) => {
         e.preventDefault();
@@ -27,20 +41,56 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
         setMobileMenuOpen(false);
     }
     
+    const handleMobileMenuToggle = () => {
+        setMobileMenuOpen(true);
+    };
+    
     const AuthLinks: React.FC<{isMobile: boolean}> = ({ isMobile }) => {
         const baseClassName = isMobile 
             ? "font-medium text-primary border border-secondary rounded-full px-5 py-2 hover:bg-hover transition" 
             : "font-medium text-primary border border-secondary rounded-full px-4 py-1.5 hover:bg-hover transition";
             
         if (user) {
+            if (isMobile) {
+                return (
+                    <div className="flex items-center flex-col space-y-4">
+                        <button onClick={(e) => { e.preventDefault(); onViewProfile(); setMobileMenuOpen(false); }} className="flex items-center space-x-2 group">
+                            <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
+                            <span className="text-sm font-medium text-secondary group-hover:text-primary">
+                                {userProfile?.username ?? 'Profile'}
+                            </span>
+                        </button>
+                    </div>
+                );
+            }
+
             return (
-                <div className={`flex items-center ${isMobile ? 'flex-col space-y-4' : 'space-x-4'}`}>
-                    <button onClick={handleProfileNav} className="flex items-center space-x-2 group">
+                <div className="relative" ref={profileMenuRef}>
+                    <button onClick={() => setProfileMenuOpen(prev => !prev)} className="flex items-center space-x-2 group">
                         <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
                         <span className="text-sm font-medium text-secondary group-hover:text-primary">
                             {userProfile?.username ?? 'Profile'}
                         </span>
                     </button>
+                    {isProfileMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-48 bg-secondary rounded-xl shadow-lg border border-primary py-1 z-20">
+                            <button
+                                onClick={() => { onViewProfile(); setProfileMenuOpen(false); }}
+                                className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover flex items-center space-x-3"
+                            >
+                                <svg className="w-4 h-4 text-muted"><use href="#icon-user-default"></use></svg>
+                                <span>My Profile</span>
+                            </button>
+                            <div className="border-t border-primary my-1"></div>
+                            <button
+                                onClick={() => { onLogout(); setProfileMenuOpen(false); }}
+                                className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-hover flex items-center space-x-3"
+                            >
+                                <svg className="w-4 h-4"><use href="#icon-logout"></use></svg>
+                                <span>Logout</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -63,7 +113,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                         <AuthLinks isMobile={false} />
                     </nav>
                     <div className="flex items-center md:hidden">
-                        <button onClick={() => setMobileMenuOpen(true)} className="p-2 rounded-full hover:bg-hover">
+                        <button onClick={handleMobileMenuToggle} className="p-2 rounded-full hover:bg-hover">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
                             </svg>

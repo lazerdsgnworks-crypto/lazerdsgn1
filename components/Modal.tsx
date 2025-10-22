@@ -7,14 +7,22 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
-    // This state controls rendering. We keep it in the DOM a bit longer to allow the exit animation.
+    // isRendered controls if the modal is in the DOM
     const [isRendered, setIsRendered] = useState(isOpen);
+    // isVisible controls the 'open' class for animations, allowing transitions to work correctly.
+    const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
             setIsRendered(true);
+            // Use a short timeout to allow the component to render before adding the 'open' class for the animation.
+            const timer = setTimeout(() => {
+                setIsVisible(true);
+            }, 10);
+            return () => clearTimeout(timer);
         } else {
-            // When closing, wait for the animation to finish before removing from the DOM
+            setIsVisible(false);
+            // Wait for the closing animation to finish before removing from the DOM.
             const timer = setTimeout(() => {
                 setIsRendered(false);
             }, 300); // This duration must match the CSS transition duration
@@ -44,7 +52,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
 
     return (
         <div 
-            className={`modal-overlay ${isOpen ? 'open' : ''}`}
+            className={`modal-overlay ${isVisible ? 'open' : ''}`}
             onClick={onClose}
             aria-modal="true"
             role="dialog"

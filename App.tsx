@@ -21,16 +21,6 @@ type AuthState = 'idle' | 'loading' | 'success';
 
 const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
 
-const AuthFeedback: React.FC<{ title: string, message: string }> = ({ title, message }) => (
-    <div className="text-center py-8 flex flex-col items-center justify-center min-h-[300px]">
-        <svg className="w-16 h-16 text-green-500 mb-4">
-            <use href="#icon-check-circle"></use>
-        </svg>
-        <h2 className="text-2xl font-bold text-primary">{title}</h2>
-        <p className="text-secondary mt-2">{message}</p>
-    </div>
-);
-
 const LoginForm: React.FC<{
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
     onGoogleSignIn: () => void;
@@ -40,9 +30,25 @@ const LoginForm: React.FC<{
 }> = ({ onSubmit, onGoogleSignIn, error, onSwitchToSignup, authState }) => {
     const [showPassword, setShowPassword] = useState(false);
     const isLoading = authState === 'loading';
+    const isSuccess = authState === 'success';
 
-    if (authState === 'success') {
-        return <AuthFeedback title="Login Successful!" message="Welcome back." />;
+    let buttonContent;
+    if (isLoading) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                Processing...
+            </span>
+        );
+    } else if (isSuccess) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-check"></use></svg>
+                Signed In
+            </span>
+        );
+    } else {
+        buttonContent = 'Login';
     }
     
     return (
@@ -80,15 +86,8 @@ const LoginForm: React.FC<{
                         </button>
                     </div>
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading}>
-                    {isLoading ? (
-                        <span className="flex items-center justify-center">
-                            <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
-                            Processing...
-                        </span>
-                    ) : (
-                        'Login'
-                    )}
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                    {buttonContent}
                 </button>
             </form>
             <div className="relative my-8">
@@ -119,9 +118,25 @@ const SignupForm: React.FC<{
 }> = ({ onSubmit, onGoogleSignIn, error, onSwitchToLogin, authState }) => {
     const [showPassword, setShowPassword] = useState(false);
     const isLoading = authState === 'loading';
+    const isSuccess = authState === 'success';
 
-    if (authState === 'success') {
-        return <AuthFeedback title="Account Created!" message="Welcome to the community." />;
+    let buttonContent;
+    if (isLoading) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                Processing...
+            </span>
+        );
+    } else if (isSuccess) {
+        buttonContent = (
+             <span className="flex items-center justify-center">
+                <svg className="h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-check"></use></svg>
+                Account Created
+            </span>
+        );
+    } else {
+        buttonContent = 'Create Account';
     }
     
     return (
@@ -164,15 +179,8 @@ const SignupForm: React.FC<{
                         </button>
                     </div>
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading}>
-                    {isLoading ? (
-                        <span className="flex items-center justify-center">
-                            <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
-                            Processing...
-                        </span>
-                    ) : (
-                        'Create Account'
-                    )}
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                    {buttonContent}
                 </button>
             </form>
             <div className="relative my-8">
@@ -421,11 +429,17 @@ const App: React.FC = () => {
             case Page.About:
                 return <AboutPage />;
             case Page.Chat:
-                return <ChatPage user={user} userProfile={userProfile} openDeleteModal={openDeleteModal} />;
+                return <ChatPage user={user} userProfile={userProfile} openDeleteModal={openDeleteModal} onViewProfile={() => handleViewProfile(null)} />;
             case Page.Community:
                 return <CommunityPage user={user} userProfile={userProfile} onDeletePost={handleDeletePost} onViewProfile={handleViewProfile} />;
             case Page.Profile:
-                return <ProfilePage loggedInUser={user} viewedProfileId={viewedProfileId} onDeletePost={handleDeletePost} onLogout={handleLogout} onViewProfile={handleViewProfile} />;
+                return <ProfilePage 
+                    loggedInUser={user} 
+                    viewedProfileId={viewedProfileId} 
+                    onDeletePost={handleDeletePost} 
+                    onLogout={handleLogout} 
+                    onViewProfile={handleViewProfile} 
+                />;
             case Page.Home:
             default:
                 return <HomePage user={user} navigateTo={navigateTo} openSignupModal={() => setSignupModalOpen(true)} openLoginModal={() => setLoginModalOpen(true)} />;
@@ -438,7 +452,15 @@ const App: React.FC = () => {
 
     return (
         <>
-            <Header user={user} userProfile={userProfile} navigateTo={navigateTo} onLogout={handleLogout} onLogin={() => setLoginModalOpen(true)} onViewProfile={() => handleViewProfile(null)} />
+            <Header 
+                user={user} 
+                userProfile={userProfile} 
+                navigateTo={navigateTo} 
+                onLogout={handleLogout} 
+                onLogin={() => setLoginModalOpen(true)} 
+                onViewProfile={() => handleViewProfile(null)}
+                currentPage={currentPage}
+            />
             <main>{renderPage()}</main>
             { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
             

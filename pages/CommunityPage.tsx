@@ -208,11 +208,11 @@ const CreatePostForm: React.FC<{
                                     <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                         <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
                                         {previews.map((src, index) => (
-                                            <div key={index} className="flex-shrink-0 h-24 w-auto bg-muted rounded-lg overflow-hidden border border-primary">
+                                            <div key={index} className="flex-shrink-0 h-20 w-20 bg-muted rounded-lg overflow-hidden border border-primary">
                                                 <img 
                                                     src={src} 
                                                     alt={`Preview ${index + 1}`} 
-                                                    className="h-full w-full object-contain"
+                                                    className="h-full w-full object-cover"
                                                 />
                                             </div>
                                         ))}
@@ -524,14 +524,14 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                  <div className="grid grid-cols-12 gap-8">
                     <div className="col-span-12 lg:col-span-7">
                         <div>
-                            <div className="px-4 pb-4 sticky top-[68px] bg-secondary/80 backdrop-blur-sm z-10 flex justify-between items-center">
+                            <div className="px-4 pt-4 sm:pt-8 pb-4 flex justify-between items-center">
                                 <h1 className="text-xl font-bold text-primary">Community Feed</h1>
                                 <button className="lg:hidden p-2 -mr-2" onClick={() => setSearchSidebarOpen(true)}>
                                     <svg className="w-6 h-6 text-primary"><use href="#icon-search"></use></svg>
                                 </button>
                             </div>
                             
-                            <div className="sm:space-y-4 mt-4">
+                            <div className="sm:space-y-4">
                                 {error && (
                                     <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg">
                                         <strong>Loading Failed:</strong> {error}

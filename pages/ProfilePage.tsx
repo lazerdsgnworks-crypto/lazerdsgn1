@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile } from '../types';
 import { db } from '../services/firebase';
@@ -59,7 +60,7 @@ const NavLink: React.FC<{
 }> = ({ tab, label, icon, activeTab, setActiveTab }) => (
     <button
         onClick={() => setActiveTab(tab)}
-        className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === tab ? 'bg-muted text-primary' : 'text-secondary hover:bg-muted hover:text-primary'}`}
+        className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === tab ? 'bg-hover text-primary' : 'text-secondary hover:bg-hover hover:text-primary'}`}
     >
         <svg className="w-5 h-5 flex-shrink-0"><use href={`#icon-${icon}`}></use></svg>
         <span>{label}</span>
@@ -83,8 +84,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, viewedProfileId
     
     const [loggedInUserSavedPostIds, setLoggedInUserSavedPostIds] = useState<Set<string>>(new Set());
     const [loggedInUserLikedPostIds, setLoggedInUserLikedPostIds] = useState<Set<string>>(new Set());
-
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
 
     const pageRef = useRef<HTMLDivElement>(null);
@@ -373,8 +373,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, viewedProfileId
     }
     
     const ProfileSidebar = () => (
-        <div className="sticky top-[88px] space-y-4">
-            <nav className="p-2 bg-secondary border border-primary rounded-xl space-y-1">
+        <div className="space-y-4">
+            <nav className="space-y-1">
                 <NavLink tab="all" label="All Posts" icon="file-text" activeTab={activeTab} setActiveTab={setActiveTab} />
                 <NavLink tab="threads" label="Threads" icon="comment" activeTab={activeTab} setActiveTab={setActiveTab} />
                 <NavLink tab="ai" label="AI Responses" icon="gemini-sparkle" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -382,7 +382,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, viewedProfileId
             </nav>
 
             {isOwnProfile && (
-                <button onClick={onLogout} title="Logout" className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 bg-secondary border border-primary text-secondary hover:bg-muted hover:text-primary">
+                <button onClick={onLogout} title="Logout" className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 text-secondary hover:bg-hover hover:text-primary">
                     <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-logout"></use></svg>
                     <span>Logout</span>
                 </button>
@@ -400,41 +400,43 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, viewedProfileId
                 hidden
             />
              {/* Mobile Overlay */}
-            {isSidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/60 z-30 md:hidden" 
-                    onClick={() => setSidebarOpen(false)}
-                    aria-hidden="true"
-                ></div>
-            )}
+            <div 
+                className={`fixed inset-0 bg-black/60 z-30 md:hidden ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                onClick={() => setMobileSidebarOpen(false)}
+                aria-hidden="true"
+            ></div>
 
             {/* Mobile Sidebar */}
-            <aside className={`fixed top-0 left-0 h-full w-72 bg-secondary z-40 transform transition-transform duration-300 ease-in-out md:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                 <div className="p-4 border-b border-primary flex justify-between items-center">
+            <aside className={`fixed top-0 left-0 h-full w-72 bg-muted z-40 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                 <div className="p-4 border-b border-primary flex justify-between items-center h-[69px]">
                     <h2 className="font-bold text-primary">Profile Menu</h2>
-                    <button onClick={() => setSidebarOpen(false)} className="text-2xl text-muted hover:text-primary">&times;</button>
+                    <button onClick={() => setMobileSidebarOpen(false)} className="text-2xl text-muted hover:text-primary">&times;</button>
                 </div>
                 <div className="p-4">
                     <ProfileSidebar />
                 </div>
             </aside>
 
+             <div className="md:hidden p-4 border-b border-primary flex justify-between items-center bg-secondary sticky top-[68px] z-10">
+                <h1 className="font-bold text-lg text-primary">Profile</h1>
+                <button onClick={() => setMobileSidebarOpen(true)} className="p-2 -mr-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
+                </button>
+            </div>
+
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     {/* --- Desktop Sidebar --- */}
                     <aside className="hidden md:block md:col-span-1">
-                        <ProfileSidebar />
+                        <div className="sticky top-[88px]">
+                            <ProfileSidebar />
+                        </div>
                     </aside>
 
                     {/* --- Main Content --- */}
                     <main className="md:col-span-3 space-y-8">
-                        <div className="md:hidden flex justify-between items-center bg-secondary border border-primary p-2 rounded-lg -mt-4">
-                             <h1 className="text-lg font-bold text-primary ml-2">Profile</h1>
-                             <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-full hover:bg-muted" aria-label="Open profile menu">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                             </button>
-                        </div>
-
                         {isLoadingProfile ? (
                             <ProfileHeaderSkeleton />
                         ) : profile ? (

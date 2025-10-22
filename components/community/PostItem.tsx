@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, Comment, Reply, Author, UserProfile } from '../../types';
 import { db } from '../../services/firebase';
@@ -20,6 +21,21 @@ const formatTimeAgoShort = (date: Date): string => {
 
   const days = Math.floor(hours / 24);
   return `${days}d`;
+};
+
+const formatAiReplyText = (text: string): string => {
+    if (!text) return '';
+    let safeText = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    // Replace markdown-style bolding. Order is important.
+    safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
+
+    safeText = safeText.replace(/\n/g, '<br />');
+    return safeText;
 };
 
 interface ProfileNavigable {
@@ -66,6 +82,7 @@ interface CommentItemProps extends ProfileNavigable {
 const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, onDelete, author, onViewProfile }) => {
     const [replies, setReplies] = useState<Reply[]>([]);
     const [showReplyForm, setShowReplyForm] = useState(false);
+    const [showReplies, setShowReplies] = useState(false);
     const timeAgo = comment.createdAt ? formatTimeAgoShort(comment.createdAt.toDate()) : '...';
     const isAiComment = comment.author.id === 'ai-assistant';
 
@@ -110,7 +127,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
             <div className="flex space-x-3">
                 <div className="flex flex-col items-center flex-shrink-0 pt-1">
                     <Avatar email={comment.author.email} photoURL={comment.author.photoURL} size="sm"/>
-                    {replies.length > 0 && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
+                    {showReplies && replies.length > 0 && <div className="w-0.5 grow bg-primary/20 mt-2 rounded"></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                      <header className="flex items-center justify-between">
@@ -121,13 +138,25 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                              <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                         </div>
                         {(user?.uid === comment.author.id || user?.uid === ADMIN_UID) && (
-                            <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
+                            <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                         )}
                     </header>
-                    <p className="text-primary text-sm whitespace-pre-wrap">{comment.text}</p>
+                    {isAiComment ? (
+                        <p
+                            className="text-primary text-sm whitespace-pre-wrap"
+                            dangerouslySetInnerHTML={{ __html: formatAiReplyText(comment.text) }}
+                        />
+                    ) : (
+                        <p className="text-primary text-sm whitespace-pre-wrap">{comment.text}</p>
+                    )}
                     <div className="flex items-center space-x-4 text-muted mt-2">
                         <button className="hover:text-primary transition-colors"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
                         <button onClick={() => setShowReplyForm(!showReplyForm)} className="hover:text-primary transition-colors"><svg className="w-4 h-4"><use href="#icon-comment"></use></svg></button>
+                        {replies.length > 0 && (
+                            <button onClick={() => setShowReplies(!showReplies)} className="text-xs font-semibold text-muted hover:text-primary">
+                                {showReplies ? 'Hide replies' : `View ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -136,7 +165,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                     <CommentForm user={user} userProfile={userProfile} onSubmit={handleAddReply} placeholder="Write a reply..." autoFocus />
                 </div>
             )}
-            {replies.length > 0 && (
+            {showReplies && replies.length > 0 && (
                 <div className="pl-5 mt-1 space-y-1">
                     {replies.map(reply => (
                         <div key={reply.id} className="pt-3">
@@ -150,7 +179,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                                             <p className="text-xs text-muted flex-shrink-0">{reply.createdAt ? formatTimeAgoShort(reply.createdAt.toDate()) : '...'}</p>
                                         </div>
                                         {(user?.uid === reply.author.id || user?.uid === ADMIN_UID) && (
-                                            <button onClick={() => handleDeleteReply(reply.id)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-ellipsis"></use></svg></button>
+                                            <button onClick={() => handleDeleteReply(reply.id)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                                         )}
                                     </header>
                                     <p className="text-sm text-primary whitespace-pre-wrap">{reply.text}</p>
@@ -207,27 +236,21 @@ const CommentSection: React.FC<CommentSectionProps> = ({ post, user, userProfile
     const handleDeleteComment = async (comment: Comment) => {
         if (!user || (user.uid !== comment.author.id && user.uid !== ADMIN_UID)) return;
     
-        const repliesQuery = query(
-            collection(db, 'usercomments'),
-            where('postId', '==', post.id),
-            where('commentId', '==', comment.id)
-        );
-        const repliesSnapshot = await getDocs(repliesQuery);
-        
-        await runTransaction(db, async (transaction) => {
-            const postRef = doc(db, 'community-posts', post.id);
+        try {
+            // Deleting a comment should only delete the comment document itself.
+            // Associated replies will be orphaned but no longer directly accessible through the app's UI.
+            // This is crucial to prevent permission errors where a comment author might
+            // inadvertently try to delete replies written by other users.
             const commentRef = doc(db, 'usercomments', comment.id);
-    
-            const postDoc = await transaction.get(postRef);
-            if (!postDoc.exists()) throw "Parent post does not exist!";
-    
-            // Delete all replies first
-            repliesSnapshot.docs.forEach(replyDoc => transaction.delete(replyDoc.ref));
-            // Delete the main comment
-            transaction.delete(commentRef);
+            await deleteDoc(commentRef);
             
-            // NOTE: The counter update has been removed to prevent permission errors.
-        });
+            // The post's `commentCount` is intentionally not decremented here. 
+            // This operation would require write access to another user's post, which can cause
+            // permission errors. Such counter updates are best handled server-side with Cloud Functions.
+        } catch (err) {
+            console.error("Error deleting comment:", err);
+            // In a real app, you might show a notification to the user.
+        }
     };
     
     const aiAuthor: Author = {
@@ -284,10 +307,9 @@ interface PostItemProps extends ProfileNavigable {
 const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile }) => {
     const [showComments, setShowComments] = useState(false);
     const [isMenuOpen, setMenuOpen] = useState(false);
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
     const menuRef = useRef<HTMLDivElement>(null);
-    
+
     const anyPost = post as any;
     const mediaUrlsToRender = Array.isArray(anyPost.mediaUrls) && anyPost.mediaUrls.length > 0
         ? anyPost.mediaUrls
@@ -296,10 +318,6 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     const hasMedia = mediaUrlsToRender.length > 0;
     const isSaved = savedPostIds.has(post.id);
     const isLiked = likedPostIds.has(post.id);
-
-    useEffect(() => {
-        setCurrentImageIndex(0);
-    }, [post.id]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -312,20 +330,6 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     }, []);
 
     const author = user && userProfile ? { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null } : null;
-
-    const goToPreviousImage = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const isFirst = currentImageIndex === 0;
-        const newIndex = isFirst ? mediaUrlsToRender.length - 1 : currentImageIndex - 1;
-        setCurrentImageIndex(newIndex);
-    };
-
-    const goToNextImage = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const isLast = currentImageIndex === mediaUrlsToRender.length - 1;
-        const newIndex = isLast ? 0 : currentImageIndex + 1;
-        setCurrentImageIndex(newIndex);
-    };
 
     return (
         <div className="bg-secondary border-b sm:border border-primary sm:rounded-xl overflow-hidden">
@@ -357,65 +361,61 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         </header>
                         <p className="text-primary whitespace-pre-wrap mt-1 text-sm sm:text-base">{post.text}</p>
                         {hasMedia && (
-                            <div className="mt-3 relative group/slider">
-                                <div className={`rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center ${post.mediaType === 'video' || mediaUrlsToRender.length > 1 ? 'aspect-video' : 'max-h-[400px]'}`}>
-                                    {post.mediaType === 'video' ? (
+                            <div className="mt-3 relative">
+                                {post.mediaType === 'video' ? (
+                                    <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
                                         <video
                                             src={mediaUrlsToRender[0]}
                                             controls
                                             playsInline
                                             className="w-full h-full bg-black"
                                         />
-                                    ) : (
+                                    </div>
+                                ) : mediaUrlsToRender.length > 1 ? (
+                                    <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                        <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
+                                        {mediaUrlsToRender.map((url: string, index: number) => (
+                                            <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 block">
+                                                <img
+                                                    src={url}
+                                                    alt={`Post content ${index + 1}`}
+                                                    className="max-h-36 w-auto rounded-lg border border-primary"
+                                                />
+                                            </a>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px]">
                                         <img 
-                                            src={mediaUrlsToRender[currentImageIndex]} 
-                                            alt={`Post content ${currentImageIndex + 1}`} 
+                                            src={mediaUrlsToRender[0]} 
+                                            alt={`Post content 1`} 
                                             className="max-w-full max-h-full object-contain"
                                         />
-                                    )}
-                                </div>
-                                {post.mediaType === 'image' && mediaUrlsToRender.length > 1 && (
-                                    <>
-                                        <button onClick={goToPreviousImage} className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover/slider:opacity-100 transition-opacity z-10 hover:bg-black/80">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-                                        </button>
-                                        <button onClick={goToNextImage} className="absolute top-1/2 right-2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover/slider:opacity-100 transition-opacity z-10 hover:bg-black/80">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-                                        </button>
-                                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex space-x-1.5">
-                                            {mediaUrlsToRender.map((_, index) => (
-                                                <div key={index} className={`w-2 h-2 rounded-full transition-colors ${index === currentImageIndex ? 'bg-white' : 'bg-white/50'}`}></div>
-                                            ))}
-                                        </div>
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         )}
-
-                        <footer className="mt-4 flex items-center justify-start space-x-6 text-muted">
-                            <button onClick={() => onToggleLike(post.id)} className={`flex items-center transition-colors group ${isLiked ? 'text-primary' : 'hover:text-primary'}`}>
-                                <svg className="w-5 h-5"><use href={isLiked ? "#icon-heart-filled" : "#icon-heart"}></use></svg>
+                        <div className="flex items-center space-x-6 text-muted mt-3">
+                            <button onClick={() => onToggleLike(post.id)} className={`flex items-center space-x-2 hover:text-red-500 transition-colors group ${isLiked ? 'text-red-500' : ''}`}>
+                                <svg className={`w-5 h-5 transition-transform group-hover:scale-110 ${isLiked ? 'fill-current' : ''}`}><use href={isLiked ? "#icon-heart-filled" : "#icon-heart"}></use></svg>
+                                {(post.likeCount ?? 0) > 0 && <span className="text-sm">{post.likeCount}</span>}
                             </button>
-                            <button onClick={() => setShowComments(!showComments)} className="flex items-center hover:text-primary transition-colors group">
+                            <button onClick={() => setShowComments(!showComments)} className="flex items-center space-x-2 hover:text-primary transition-colors">
                                 <svg className="w-5 h-5"><use href="#icon-comment"></use></svg>
+                                {post.commentCount > 0 && <span className="text-sm">{post.commentCount}</span>}
                             </button>
-                            <button className="flex items-center hover:text-primary transition-colors group">
+                            <button className="flex items-center space-x-2 hover:text-primary transition-colors">
                                 <svg className="w-5 h-5"><use href="#icon-repost"></use></svg>
                             </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onToggleSave(post.id); }} 
-                                className={`flex items-center transition-colors group ${isSaved ? 'text-primary' : 'hover:text-primary'}`}
-                            >
-                                <svg className="w-5 h-5"><use href={isSaved ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>
+                             <button onClick={() => onToggleSave(post.id)} className={`flex items-center space-x-2 hover:text-blue-500 transition-colors group ${isSaved ? 'text-blue-500' : ''}`}>
+                                <svg className={`w-5 h-5 transition-transform group-hover:scale-110 ${isSaved ? 'fill-current' : ''}`}><use href={isSaved ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>
                             </button>
-                        </footer>
+                        </div>
                     </div>
                 </div>
             </div>
             {showComments && (
-                <div className="border-t border-primary">
-                    <CommentSection post={post} user={user} userProfile={userProfile} author={author} onViewProfile={onViewProfile} />
-                </div>
+                <CommentSection post={post} user={user} userProfile={userProfile} author={author} onViewProfile={onViewProfile}/>
             )}
         </div>
     );
