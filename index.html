@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LazerDsgn - Digital Design Studio</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-
     <style>
         :root {
             --font-inter: 'Inter', sans-serif;
@@ -176,7 +176,7 @@
         input:checked + .ai-toggle-slider { background-color: var(--bg-secondary-accent); }
         input:checked + .ai-toggle-slider:before { transform: translateX(16px); }
         .ask-ai-active { border: 2px solid var(--bg-secondary-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg-secondary-accent) 20%, transparent); }
-        .ai-badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; background: linear-gradient(to right, #60a5fa, #3b82f6); color: white; padding: 2px 6px; border-radius: 9999px; line-height: 1; }
+        .ai-badge { display: inline-flex; align-items: center; font-size: 0.7rem; font-weight: 600; background-color: var(--bg-muted); color: var(--text-secondary); border: 1px solid var(--border-primary); padding: 2px 6px; border-radius: 9999px; line-height: 1; }
         .chat-message-container { display: flex; width: 100%; }
         .chat-avatar { width: 32px; height: 32px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-weight: 600; color: white; flex-shrink: 0; }
         .chat-message-bubble { padding: 0.75rem 1rem; border-radius: 1.25rem; font-size: 0.95rem; line-height: 1.5; }
@@ -189,45 +189,11 @@
         .session-item-container.active { background-color: var(--bg-hover); }
         .session-item-container.active .session-text { font-weight: 600; color: var(--text-primary); }
         .shimmer-bg { animation: shimmer 2s infinite linear; background: linear-gradient(to right, #f6f7f8 4%, #edeef1 25%, #f6f7f8 36%); background-size: 1000px 100%; }
-        html.dark .shimmer-bg { background: linear-gradient(to right, #374151 4%, #4b5563 25%, #374151 36%); background-size: 1000px 100%; }
-        @keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
-        .image-reveal { animation: fadeIn 0.5s ease-in-out; }
-
-        html.dark .user-message {
-            background-color: var(--bg-hover);
-            color: var(--text-primary);
-        }
-
-        /* Dark Mode Toggle Styles */
-        .theme-toggle-switch {
-            width: 48px; height: 24px; background-color: var(--bg-muted);
-        }
-        .theme-toggle-circle {
-            width: 16px; height: 16px; background-color: var(--bg-primary-accent);
-        }
-        html.dark .theme-toggle-circle {
-            transform: translateX(24px);
-        }
+        html
+        .theme-toggle-switch { background-color: var(--bg-muted); width: 44px; height: 24px; }
+        .theme-toggle-circle { background-color: white; width: 20px; height: 20px; top: 2px; left: 2px; }
+        html.dark .theme-toggle-circle { transform: translateX(20px); }
     </style>
-    <script>
-      // IIFE to set theme instantly, preventing flash of wrong theme
-      (function() {
-        document.documentElement.classList.add('no-transition');
-        try {
-          const theme = localStorage.getItem('theme');
-          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        } catch (e) {
-          console.error("Could not set initial theme:", e);
-        }
-        setTimeout(() => {
-            document.documentElement.classList.remove('no-transition');
-        }, 100);
-      })();
-    </script>
     <script type="importmap">
     {
       "imports": {
@@ -241,110 +207,71 @@
       }
     }
     </script>
-  <script type="module" crossorigin src="/lazerdsgn1/assets/index-16X752CK.js"></script>
+  <script type="module" crossorigin src="/lazerdsgn1/assets/index-IuX7hQoD.js"></script>
 </head>
-<body class="antialiased">
-    <svg style="display: none;">
-        <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+<body>
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <!-- Feather Icons - MIT License -->
+        <symbol id="icon-eye" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></symbol>
+        <symbol id="icon-eye-off" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></symbol>
+        <symbol id="icon-sun" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></symbol>
+        <symbol id="icon-moon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>
+        <symbol id="icon-download" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></symbol>
+        <symbol id="icon-sidebar-toggle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></symbol>
+        <symbol id="icon-plus-square" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></symbol>
+        <symbol id="icon-rename" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></symbol>
+        <symbol id="icon-trash" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></symbol>
+        <symbol id="icon-copy" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></symbol>
+        <symbol id="icon-heart" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></symbol>
+        <symbol id="icon-heart-filled" fill="currentColor" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></symbol>
+        <symbol id="icon-flag" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></symbol>
+        <symbol id="icon-file-text" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></symbol>
+        <symbol id="icon-comment" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></symbol>
+        <symbol id="icon-logout" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></symbol>
+        <!-- UPDATED: New verified badge icon -->
+        <symbol id="icon-verified" fill="currentColor" viewBox="0 0 24 24"><path d="M23,12l-2.44-2.79l0.34-3.69l-3.61-0.82L15.4,1.86L12,2.81L8.6,1.86L6.71,4.7L3.1,5.52l0.34,3.69L1,12l2.44,2.79 l-0.34,3.69l3.61,0.82L8.6,22.14l3.4-0.95l3.4,0.95l1.89-2.95l3.61-0.82l-0.34-3.69L23,12z M9.38,16.01L7,13.61l1.41-1.42 L9.38,13.19l5.21-5.21l1.41,1.42L9.38,16.01z"></path></symbol>
+        <symbol id="icon-ellipsis" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></symbol>
+        <symbol id="icon-repost" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></symbol>
+        <symbol id="icon-bookmark" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></symbol>
+        <symbol id="icon-bookmark-filled" viewBox="0 0 24 24" fill="currentColor" stroke-width="1.5" stroke="currentColor"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></symbol>
+        <symbol id="icon-search" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></symbol>
+        <symbol id="icon-video" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></symbol>
+        <symbol id="icon-paperclip" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></symbol>
+        <symbol id="icon-paper-plane" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></symbol>
+        <symbol id="icon-microphone" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></symbol>
+        <symbol id="icon-plus" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></symbol>
+        <!-- ADDED: Default user icon -->
+        <symbol id="icon-user-default" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" d="M18.685 19.097A9.723 9.723 0 0021.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 003.065 7.097A9.716 9.716 0 0012 21.75a9.716 9.716 0 006.685-2.653zm-12.54-1.285A7.486 7.486 0 0112 15a7.486 7.486 0 015.855 2.812A8.224 8.224 0 0112 20.25a8.224 8.224 0 01-5.855-2.438zM15.75 9a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" clip-rule="evenodd" />
         </symbol>
-        <symbol id="icon-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        <!-- UPDATED ICONS -->
+        <symbol id="icon-image" viewBox="0 0 24 24" fill="currentColor">
+            <path d="m10.614 17.796l.878-2.01a7.742 7.742 0 0 1 3.94-3.992l2.416-1.072c.768-.341.768-1.458 0-1.8l-2.34-1.038a7.747 7.747 0 0 1-3.997-4.125l-.89-2.142a.946.946 0 0 0-1.758 0l-.889 2.142a7.747 7.747 0 0 1-3.997 4.125l-2.34 1.039c-.768.34-.768 1.458 0 1.799l2.415 1.072a7.742 7.742 0 0 1 3.94 3.991l.878 2.01a.946.946 0 0 0 1.744 0Zm8.787 4.894l.247-.566a4.365 4.365 0 0 1 2.221-2.25l.76-.339a.53.53 0 0 0 0-.963l-.717-.319a4.368 4.368 0 0 1-2.253-2.326l-.254-.611a.507.507 0 0 0-.942 0l-.254.61a4.368 4.368 0 0 1-2.253 2.327l-.718.32a.53.53 0 0 0 0 .962l.76.338a4.365 4.365 0 0 1 2.222 2.251l.247.566c.18.414.754.414.934 0Z"/>
         </symbol>
-        <symbol id="icon-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line>
+        <symbol id="icon-gemini-sparkle" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M14.415 3.308c2.074-.736 4.31-.846 5.717.56c1.406 1.407 1.296 3.643.56 5.717A14.5 14.5 0 0 1 19.552 12c.478.82.862 1.632 1.14 2.415c.736 2.075.846 4.31-.56 5.717c-1.407 1.406-3.643 1.296-5.717.56A14.5 14.5 0 0 1 12 19.552c-.82.478-1.632.862-2.415 1.14c-2.074.736-4.31.846-5.717-.56c-1.406-1.407-1.296-3.642-.56-5.716A14.5 14.5 0 0 1 4.446 12c-.477-.82-.86-1.633-1.138-2.416c-.736-2.074-.846-4.31.56-5.716s3.642-1.296 5.716-.56c.783.278 1.596.661 2.416 1.138a14.5 14.5 0 0 1 2.415-1.138M5.703 13.884q-.304.619-.51 1.201c-.672 1.892-.457 3.087.09 3.633c.545.546 1.74.762 3.632.09q.582-.207 1.2-.512a22.5 22.5 0 0 1-2.358-2.054a22 22 0 0 1-2.054-2.358m12.593 0a22.5 22.5 0 0 1-2.054 2.36a22 22 0 0 1-2.358 2.052q.619.304 1.2.512c1.893.67 3.088.456 3.634-.09s.76-1.741.09-3.633q-.208-.583-.512-1.201M12 6.812a20 20 0 0 0-2.828 2.36A20 20 0 0 0 6.812 12a20 20 0 0 0 2.36 2.828a20 20 0 0 0 2.827 2.36a20 20 0 0 0 2.83-2.36A20 20 0 0 0 17.186 12a20 20 0 0 0-2.359-2.828A20 20 0 0 0 12 6.812M12 10a2 2 0 1 1 0 4a2 2 0 0 1 0-4M8.915 5.192c-1.892-.67-3.087-.456-3.633.09s-.761 1.74-.09 3.633q.207.582.511 1.2a22.5 22.5 0 0 1 2.055-2.357a22.5 22.5 0 0 1 2.357-2.055a11 11 0 0 0-1.2-.51m9.803.09c-.546-.546-1.741-.76-3.633-.09q-.583.207-1.201.511a22 22 0 0 1 2.358 2.054a22.5 22.5 0 0 1 2.054 2.358q.304-.617.512-1.199c.67-1.892.456-3.088-.09-3.634"/>
         </symbol>
-        <symbol id="icon-ellipsis" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="1.5"/><circle cx="6" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/>
+        <!-- FIXED: Replaced corrupted Instagram icon and added other missing icons -->
+        <symbol id="icon-instagram" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.85s-.011 3.584-.069 4.85c-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07s-3.584-.012-4.85-.07c-3.252-.148-4.771-1.691-4.919-4.919-.058-1.265-.069-1.645-.069-4.85s.011-3.584.069-4.85c.149-3.225 1.664-4.771 4.919-4.919 1.266-.057 1.644-.069 4.85-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948s.014 3.667.072 4.947c.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072s3.667-.014 4.947-.072c4.358-.2 6.78-2.618 6.98-6.98.059-1.281.073-1.689.073-4.948s-.014-3.667-.072-4.947c-.2-4.358-2.618-6.78-6.98-6.98-1.281-.059-1.689-.073-4.948-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.162 6.162 6.162 6.162-2.759 6.162-6.162-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4s1.791-4 4-4 4 1.79 4 4-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44 1.441-.645 1.441-1.44c0-.795-.645-1.44-1.441-1.44z"></path>
         </symbol>
-        <symbol id="icon-rename" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-        </symbol>
-        <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        </symbol>
-        <symbol id="icon-sidebar-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-            <path d="m13 16-3-4 3-4"></path>
-        </symbol>
-        <symbol id="icon-plus-square" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line>
-        </symbol>
-        <symbol id="icon-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-            <polyline points="21 15 16 10 5 21"></polyline>
-        </symbol>
-        <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-        </symbol>
-        <symbol id="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-            <line x1="1" y1="1" x2="23" y2="23"></line>
-        </symbol>
-        <symbol id="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-        </symbol>
-        <symbol id="icon-gemini-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3L9.5 8.5L4 11L9.5 13.5L12 19L14.5 13.5L20 11L14.5 8.5L12 3Z" />
-            <path d="M5 3L6 5" />
-            <path d="M18 19L19 21" />
-            <path d="M3 18L5 19" />
-            <path d="M21 5L19 6" />
-        </symbol>
-        <symbol id="icon-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-        </symbol>
-        <symbol id="icon-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="23 7 16 12 23 17 23 7"></polygon>
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-        </symbol>
-        <symbol id="icon-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </symbol>
-        <symbol id="icon-repost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="17 1 21 5 17 9"></polyline>
-            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-            <polyline points="7 23 3 19 7 15"></polyline>
-            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-        </symbol>
-        <symbol id="icon-bookmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-        </symbol>
-        <symbol id="icon-bookmark-filled" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-        </symbol>
-        <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </symbol>
-         <symbol id="icon-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-        </symbol>
-        <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-        </symbol>
-        <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        <symbol id="icon-google" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.19,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.19,22C17.6,22 21.54,18.33 21.54,12.29C21.54,11.69 21.45,11.39 21.35,11.1Z"></path>
         </symbol>
         <symbol id="icon-x" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-        </symbol>
-        <symbol id="icon-instagram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+            <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.61 19.95h2.544L7.439 2.522H4.755L21.291 21.103Z"></path>
         </symbol>
         <symbol id="icon-behance" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7.938 10.5H12.5c0-2.062-.688-3.375-2.188-3.375-1.562 0-2.375 1.312-2.375 3.375zm12.562-1.875c0-3.313-1.625-6.375-5.5-6.375H3.5v17.25h11.25c4.125 0 6.25-2.875 6.25-6.375zm-3.75 0c0 2.125-1 3.5-3 3.5H7.25V13h5.75c1.875 0 2.75-1.312 2.75-3.375s-.875-3.375-2.75-3.375H7.25V4.75h5.5c2.25 0 3.25 1.312 3.25 3.875zM12 16.125H7.25v2.625H12c1.75 0 2.5-1 2.5-2.25s-.75-2.25-2.5-2.25z"/>
+            <path d="M22.2,9.3H14.8v1.8h6.9c-0.5,4-3.2,5.5-6.6,5.5c-4.1,0-7.2-2.9-7.2-7.1c0-4.4,3.2-7.3,7.4-7.3C19.1,2.2,22,4.8,22.2,9.3z M15.2,4.2c-2.5,0-4.3,1.9-4.3,4.9c0,3,1.8,4.8,4.3,4.8c2.4,0,4.1-1.6,4.5-4.5h-4.6V4.2z M8.1,12.2H1.8V2.2h6.3c1.9,0,3.3,1,3.3,2.7c0,1.5-1.1,2.5-2.6,2.7l3,4.6H8.5l-2.6-4.2h-1v4.2H8.1z M5,4.2H4.8v2.2H5c1.1,0,1.7-0.6,1.7-1.2C6.7,4.7,6,4.2,5,4.2z"></path>
+            <rect x="1.8" y="14.4" width="9.6" height="2"/>
+        </symbol>
+        <!-- ADDED: Icons for auth feedback -->
+        <symbol id="icon-check-circle" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clip-rule="evenodd" />
+        </symbol>
+        <symbol id="icon-spinner" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </symbol>
     </svg>
     <div id="root"></div>
