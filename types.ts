@@ -28,6 +28,7 @@ export interface ChatMessage {
   createdAt: Timestamp;
   imageUrls?: string[];
   imageUrl?: string;
+  videoUrl?: string;
   analysisFile?: {
     name: string;
     type: string;
@@ -50,6 +51,15 @@ export interface Author {
   photoURL?: string | null;
 }
 
+export interface RepostedPost {
+  id: string;
+  author: Author;
+  text: string;
+  mediaUrls?: string[];
+  mediaType?: 'image' | 'video';
+  createdAt: Timestamp;
+}
+
 export interface CommunityPost {
   id: string;
   author: Author;
@@ -59,11 +69,13 @@ export interface CommunityPost {
   createdAt: Timestamp;
   commentCount: number;
   likeCount?: number;
+  repostCount?: number;
   aiReply?: {
       text: string;
       createdAt: Timestamp;
   };
   isAiPost?: boolean;
+  repostedPost?: RepostedPost;
 }
 
 export interface Comment {

@@ -217,9 +217,10 @@ const ensureUserProfileExists = async (user: FirebaseUser) => {
             };
             await setDoc(profileDocRef, newProfile);
         } else {
-            // Profile exists, check if photoURL needs to be updated.
             const profileData = docSnap.data() as UserProfile;
-            if (user.photoURL && user.photoURL !== profileData.photoURL) {
+            // Only update the photoURL from the auth provider if our profile doesn't have one set.
+            // This preserves custom profile pictures uploaded by the user.
+            if (user.photoURL && !profileData.photoURL) {
                  await updateDoc(profileDocRef, { photoURL: user.photoURL });
             }
         }
@@ -435,6 +436,7 @@ const App: React.FC = () => {
             case Page.Profile:
                 return <ProfilePage 
                     loggedInUser={user} 
+                    loggedInUserProfile={userProfile}
                     viewedProfileId={viewedProfileId} 
                     onDeletePost={handleDeletePost} 
                     onLogout={handleLogout} 

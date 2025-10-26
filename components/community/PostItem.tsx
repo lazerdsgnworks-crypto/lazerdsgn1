@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CommunityPost, Comment, Reply, Author, UserProfile } from '../../types';
+import { User, CommunityPost, Comment, Reply, Author, UserProfile, RepostedPost } from '../../types';
 import { db } from '../../services/firebase';
 import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp, addDoc, deleteDoc } from 'firebase/firestore';
 import Avatar from '../Avatar';
@@ -302,9 +302,11 @@ interface PostItemProps extends ProfileNavigable {
     onToggleSave: (postId: string) => void;
     likedPostIds: Set<string>;
     onToggleLike: (postId: string) => void;
+    onImageClick: (url: string) => void;
+    onRepost: (post: CommunityPost) => void;
 }
 
-const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile }) => {
+const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost }) => {
     const [showComments, setShowComments] = useState(false);
     const [isMenuOpen, setMenuOpen] = useState(false);
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
@@ -315,7 +317,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
         ? anyPost.mediaUrls
         : (anyPost.mediaUrl ? [anyPost.mediaUrl] : []);
 
-    const hasMedia = mediaUrlsToRender.length > 0;
+    const hasMedia = mediaUrlsToRender.length > 0 && !post.repostedPost;
     const isSaved = savedPostIds.has(post.id);
     const isLiked = likedPostIds.has(post.id);
 
@@ -330,6 +332,37 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     }, []);
 
     const author = user && userProfile ? { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null } : null;
+
+    const EmbeddedPost: React.FC<{ post: RepostedPost; onImageClick: (url: string) => void }> = ({ post: originalPost, onImageClick }) => {
+        const originalTimeAgo = originalPost.createdAt ? formatTimeAgoShort(originalPost.createdAt.toDate()) : '...';
+        const originalMediaUrls = Array.isArray(originalPost.mediaUrls) ? originalPost.mediaUrls : [];
+    
+        return (
+            <div className="mt-3 border border-primary rounded-xl p-3">
+                <div className="flex items-center space-x-2 mb-2">
+                    <Avatar email={originalPost.author.email} photoURL={originalPost.author.photoURL} size="sm" />
+                    <div className="flex-1 min-w-0">
+                         <p onClick={() => onViewProfile(originalPost.author.id)} className="font-bold text-sm truncate hover:underline cursor-pointer text-primary">{originalPost.author.username}</p>
+                    </div>
+                    <p className="text-xs text-muted flex-shrink-0">{originalTimeAgo}</p>
+                </div>
+                {originalPost.text && <p className="text-primary whitespace-pre-wrap text-sm sm:text-base">{originalPost.text}</p>}
+                {originalMediaUrls.length > 0 && (
+                     <div className="mt-3 relative">
+                        {originalPost.mediaType === 'video' ? (
+                            <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
+                                <video src={originalMediaUrls[0]} controls playsInline className="w-full h-full bg-black" />
+                            </div>
+                        ) : (
+                            <button onClick={() => onImageClick(originalMediaUrls[0])} className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[250px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                <img src={originalMediaUrls[0]} alt="Original post media" className="max-w-full max-h-full object-contain" />
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="bg-secondary border-b sm:border border-primary sm:rounded-xl overflow-hidden">
@@ -359,7 +392,10 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                 )}
                             </div>
                         </header>
-                        <p className="text-primary whitespace-pre-wrap mt-1 text-sm sm:text-base">{post.text}</p>
+                        {post.text && <p className="text-primary whitespace-pre-wrap mt-1 text-sm sm:text-base">{post.text}</p>}
+                        
+                        {post.repostedPost && <EmbeddedPost post={post.repostedPost} onImageClick={onImageClick} />}
+
                         {hasMedia && (
                             <div className="mt-3 relative">
                                 {post.mediaType === 'video' ? (
@@ -375,23 +411,23 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                     <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                         <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
                                         {mediaUrlsToRender.map((url: string, index: number) => (
-                                            <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 block">
+                                            <button key={index} onClick={() => onImageClick(url)} className="flex-shrink-0 block focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-lg">
                                                 <img
                                                     src={url}
                                                     alt={`Post content ${index + 1}`}
                                                     className="max-h-36 w-auto rounded-lg border border-primary"
                                                 />
-                                            </a>
+                                            </button>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px]">
+                                    <button onClick={() => onImageClick(mediaUrlsToRender[0])} className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                         <img 
                                             src={mediaUrlsToRender[0]} 
                                             alt={`Post content 1`} 
                                             className="max-w-full max-h-full object-contain"
                                         />
-                                    </div>
+                                    </button>
                                 )}
                             </div>
                         )}
@@ -404,8 +440,9 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                 <svg className="w-5 h-5"><use href="#icon-comment"></use></svg>
                                 {post.commentCount > 0 && <span className="text-sm">{post.commentCount}</span>}
                             </button>
-                            <button className="flex items-center space-x-2 hover:text-primary transition-colors">
+                            <button onClick={() => onRepost(post)} className="flex items-center space-x-2 hover:text-primary transition-colors">
                                 <svg className="w-5 h-5"><use href="#icon-repost"></use></svg>
+                                {(post.repostCount ?? 0) > 0 && <span className="text-sm">{post.repostCount}</span>}
                             </button>
                              <button onClick={() => onToggleSave(post.id)} className={`flex items-center space-x-2 hover:text-blue-500 transition-colors group ${isSaved ? 'text-blue-500' : ''}`}>
                                 <svg className={`w-5 h-5 transition-transform group-hover:scale-110 ${isSaved ? 'fill-current' : ''}`}><use href={isSaved ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>

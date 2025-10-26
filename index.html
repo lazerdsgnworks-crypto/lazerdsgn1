@@ -259,6 +259,20 @@
             background-size: 1200px 100%;
         }
 
+        /* ADDED: Microphone listening animation */
+        @keyframes mic-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .mic-listening {
+            animation: mic-pulse 2s infinite;
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+        .mic-listening svg {
+            color: #ef4444;
+        }
+
         html
         .theme-toggle-switch { background-color: var(--bg-muted); width: 44px; height: 24px; }
         .theme-toggle-circle { background-color: white; width: 20px; height: 20px; top: 2px; left: 2px; }

@@ -1,10 +1,14 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { User, CommunityPost, Author, UserProfile } from '../types';
+import { User, CommunityPost, Author, UserProfile, RepostedPost } from '../types';
 import { db } from '../services/firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, QuerySnapshot, DocumentData, doc, updateDoc, where, getDocs, startAt, endAt, limit, deleteDoc, setDoc } from 'firebase/firestore';
+// FIX: Corrected a type mismatch where `serverTimestamp()` (which returns a `FieldValue`) was assigned to a field expecting a `Timestamp`. By casting `serverTimestamp() as Timestamp`, we satisfy the TypeScript compiler while ensuring Firestore correctly sets the server-side timestamp upon document creation. Added `Timestamp` to the `firebase/firestore` import to make the type available for casting.
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, QuerySnapshot, DocumentData, doc, updateDoc, where, getDocs, startAt, endAt, limit, deleteDoc, setDoc, runTransaction, Timestamp } from 'firebase/firestore';
 import PostItem from '../components/community/PostItem';
 import Avatar from '../components/Avatar';
 import RightSidebar from '../components/community/RightSidebar';
+import ImagePreviewModal from '../components/community/ImagePreviewModal';
+import RepostModal from '../components/community/RepostModal';
 import { compressImage, dataURLtoFile } from '../utils/files';
 
 // --- Cloudinary Configuration ---
@@ -298,12 +302,15 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
     const [error, setError] = useState<string | null>(null);
     const [isCreatePostModalOpen, setCreatePostModalOpen] = useState(false);
+    const [isRepostModalOpen, setRepostModalOpen] = useState(false);
+    const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
     
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
     const [isSearchSidebarOpen, setSearchSidebarOpen] = useState(false);
-
+    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+    
     const uniqueAuthors = useMemo(() => {
         const authors = new Map<string, Author>();
         posts.forEach(post => {
@@ -460,6 +467,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             createdAt: serverTimestamp(),
             commentCount: 0,
             likeCount: 0,
+            repostCount: 0,
         };
         if (mediaUrls && mediaUrls.length > 0 && mediaType) {
             postData.mediaUrls = mediaUrls;
@@ -502,6 +510,64 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         onViewProfile(userId);
         setSearchSidebarOpen(false);
     }
+
+    const handleImageClick = (url: string) => {
+        setPreviewImageUrl(url);
+    };
+
+    const handleOpenRepostModal = (post: CommunityPost) => {
+        setPostToRepost(post);
+        setRepostModalOpen(true);
+    };
+
+    const handleCreateRepost = async (comment: string) => {
+        if (!user || !userProfile || !postToRepost || !comment.trim()) return;
+
+        const originalPostRef = doc(db, 'community-posts', postToRepost.id);
+        const newPostRef = doc(collection(db, 'community-posts'));
+
+        const repostData: RepostedPost = {
+            id: postToRepost.id,
+            author: postToRepost.author,
+            text: postToRepost.text,
+            createdAt: postToRepost.createdAt,
+            ...(postToRepost.mediaUrls ? { mediaUrls: postToRepost.mediaUrls } : {}),
+            ...(postToRepost.mediaType ? { mediaType: postToRepost.mediaType } : {}),
+        };
+
+        const newPost: Omit<CommunityPost, 'id'> = {
+            author: {
+                id: user.uid,
+                email: user.email!,
+                username: userProfile.username,
+                photoURL: userProfile.photoURL || null,
+            },
+            text: comment,
+            createdAt: serverTimestamp() as Timestamp,
+            commentCount: 0,
+            likeCount: 0,
+            repostCount: 0,
+            repostedPost: repostData
+        };
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const originalPostDoc = await transaction.get(originalPostRef);
+                if (!originalPostDoc.exists()) {
+                    throw "Original post does not exist.";
+                }
+
+                const currentRepostCount = originalPostDoc.data().repostCount || 0;
+                transaction.update(originalPostRef, { repostCount: currentRepostCount + 1 });
+                transaction.set(newPostRef, newPost);
+            });
+            setRepostModalOpen(false);
+            setPostToRepost(null);
+        } catch (error) {
+            console.error("Failed to create repost:", error);
+            alert("Could not create repost. Please try again.");
+        }
+    };
 
     return (
         <div ref={pageRef} className="page-transition bg-primary min-h-screen">
@@ -553,6 +619,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                         likedPostIds={likedPostIds}
                                         onToggleLike={handleToggleLike}
                                         onViewProfile={onViewProfile}
+                                        onImageClick={handleImageClick}
+                                        onRepost={handleOpenRepostModal}
                                     />)
                                 )}
                                 {!error && posts.length === 0 && !isLoading && <p className="text-center text-muted py-10">Be the first to post!</p>}
@@ -593,6 +661,17 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                     />
                 </CreatePostModal>
             )}
+            {previewImageUrl && (
+                <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+            )}
+            <RepostModal
+                isOpen={isRepostModalOpen}
+                onClose={() => setRepostModalOpen(false)}
+                onSubmit={handleCreateRepost}
+                post={postToRepost}
+                user={user}
+                userProfile={userProfile}
+            />
         </div>
     );
 };

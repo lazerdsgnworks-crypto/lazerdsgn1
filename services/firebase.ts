@@ -1,6 +1,10 @@
 
+// FIX: Correctly import `initializeApp` as a named export from 'firebase/app' as per Firebase v9+ modular SDK standards. The previous namespace import was causing the "Property 'initializeApp' does not exist" error.
 import { initializeApp } from "firebase/app";
-import { initializeAuth, indexedDBLocalPersistence, browserPopupRedirectResolver } from "firebase/auth";
+// FIX: Use browserLocalPersistence for web clients instead of indexedDBLocalPersistence.
+// `indexedDBLocalPersistence` is intended for service workers and can cause issues in a standard web app context.
+// This may resolve an underlying issue that is causing a misleading build error on this line.
+import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -16,7 +20,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 const auth = initializeAuth(app, {
-  persistence: indexedDBLocalPersistence,
+  persistence: browserLocalPersistence,
   popupRedirectResolver: browserPopupRedirectResolver,
 });
 
