@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { auth, db } from './services/firebase';
 import { Page, User, CommunityPost, UserProfile } from './types';
 import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -18,6 +18,7 @@ import Modal from './components/Modal';
 
 type Theme = 'light' | 'dark';
 type AuthState = 'idle' | 'loading' | 'success';
+type AuthFeedback = { type: 'error' | 'success' | 'idle', message: string };
 
 const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
 
@@ -26,8 +27,9 @@ const LoginForm: React.FC<{
     onGoogleSignIn: () => void;
     error: string;
     onSwitchToSignup: () => void;
+    onSwitchToForgotPassword: () => void;
     authState: AuthState;
-}> = ({ onSubmit, onGoogleSignIn, error, onSwitchToSignup, authState }) => {
+}> = ({ onSubmit, onGoogleSignIn, error, onSwitchToSignup, onSwitchToForgotPassword, authState }) => {
     const [showPassword, setShowPassword] = useState(false);
     const isLoading = authState === 'loading';
     const isSuccess = authState === 'success';
@@ -65,7 +67,10 @@ const LoginForm: React.FC<{
                     <input type="email" name="email" id="email-login" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
                 </div>
                 <div>
-                    <label className="text-sm font-medium text-secondary" htmlFor="password-login">Password</label>
+                    <div className="flex justify-between items-center">
+                        <label className="text-sm font-medium text-secondary" htmlFor="password-login">Password</label>
+                         <button type="button" onClick={onSwitchToForgotPassword} className="text-sm font-semibold text-blue-500 hover:underline">Forgot password?</button>
+                    </div>
                     <div className="relative mt-1">
                         <input 
                             type={showPassword ? 'text' : 'password'} 
@@ -202,6 +207,165 @@ const SignupForm: React.FC<{
     );
 };
 
+const ForgotPasswordForm: React.FC<{
+    onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    feedback: AuthFeedback;
+    onSwitchToLogin: () => void;
+    authState: AuthState;
+}> = ({ onSubmit, feedback, onSwitchToLogin, authState }) => {
+    const isLoading = authState === 'loading';
+    const isSuccess = feedback.type === 'success';
+
+    let buttonContent;
+    if (isLoading) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                Sending...
+            </span>
+        );
+    } else if (isSuccess) {
+        buttonContent = (
+             <span className="flex items-center justify-center">
+                <svg className="h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-check"></use></svg>
+                Email Sent
+            </span>
+        );
+    } else {
+        buttonContent = 'Send Reset Link';
+    }
+
+    return (
+        <div>
+            <h2 className="text-3xl font-bold text-center text-primary mb-2">Reset Password</h2>
+            <p className="text-center text-secondary mb-8">Enter your email to receive a password reset link.</p>
+            {feedback.message && (
+                <p className={`${feedback.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-600'} text-sm rounded-lg p-3 mb-4 text-center`}>
+                    {feedback.message}
+                </p>
+            )}
+            <form onSubmit={onSubmit} className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="email-forgot">Email</label>
+                    <input type="email" name="email" id="email-forgot" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                    {buttonContent}
+                </button>
+            </form>
+            <p className="text-sm text-center text-secondary mt-8">
+                Remembered your password? <button onClick={onSwitchToLogin} className="font-semibold text-blue-500 hover:underline">Back to Login</button>
+            </p>
+        </div>
+    );
+};
+
+const ChangePasswordForm: React.FC<{
+    onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+    feedback: AuthFeedback;
+    authState: AuthState;
+}> = ({ onSubmit, feedback, authState }) => {
+    const [showCurrent, setShowCurrent] = useState(false);
+    const [showNew, setShowNew] = useState(false);
+    const isLoading = authState === 'loading';
+    const isSuccess = feedback.type === 'success';
+
+    let buttonContent;
+    if (isLoading) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-spinner"></use></svg>
+                Updating...
+            </span>
+        );
+    } else if (isSuccess) {
+        buttonContent = (
+            <span className="flex items-center justify-center">
+                <svg className="h-5 w-5 mr-3 text-on-primary-accent"><use href="#icon-check"></use></svg>
+                Password Updated
+            </span>
+        );
+    } else {
+        buttonContent = 'Update Password';
+    }
+
+    return (
+        <div>
+            <h2 className="text-3xl font-bold text-center text-primary mb-2">Change Password</h2>
+            <p className="text-center text-secondary mb-8">Update your password for enhanced security.</p>
+            {feedback.message && (
+                <p className={`${feedback.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-600'} text-sm rounded-lg p-3 mb-4 text-center`}>
+                    {feedback.message}
+                </p>
+            )}
+            <form onSubmit={onSubmit} className="space-y-4">
+                <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="current-password">Current Password</label>
+                    <div className="relative mt-1">
+                        <input type={showCurrent ? 'text' : 'password'} name="currentPassword" id="current-password" required className="w-full px-4 py-2.5 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors pr-10" />
+                        <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted hover:text-primary"><svg className="h-5 w-5"><use href={showCurrent ? "#icon-eye-off" : "#icon-eye"}></use></svg></button>
+                    </div>
+                </div>
+                 <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="new-password">New Password</label>
+                    <div className="relative mt-1">
+                        <input type={showNew ? 'text' : 'password'} name="newPassword" id="new-password" required minLength={6} className="w-full px-4 py-2.5 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors pr-10" />
+                        <button type="button" onClick={() => setShowNew(!showNew)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted hover:text-primary"><svg className="h-5 w-5"><use href={showNew ? "#icon-eye-off" : "#icon-eye"}></use></svg></button>
+                    </div>
+                </div>
+                 <div>
+                    <label className="text-sm font-medium text-secondary" htmlFor="confirm-password">Confirm New Password</label>
+                    <input type="password" name="confirmPassword" id="confirm-password" required minLength={6} className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                    {buttonContent}
+                </button>
+            </form>
+        </div>
+    );
+};
+
+
+const DeleteConfirmationModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title: string;
+}> = ({ isOpen, onClose, onConfirm, title }) => {
+    return (
+        <Modal isOpen={isOpen} onClose={onClose}>
+            <div className="text-center p-4">
+                <svg className="w-16 h-16 mx-auto text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h3 className="text-xl font-bold text-primary mb-2">Delete Session?</h3>
+                <p className="text-sm text-secondary mb-8">
+                    Are you sure you want to delete the chat session: <br />
+                    <strong className="text-primary break-all">"{title}"</strong>? <br />
+                    This action cannot be undone.
+                </p>
+                <div className="flex justify-center space-x-4">
+                    <button
+                        onClick={onClose}
+                        className="px-8 py-2.5 text-sm font-semibold border border-secondary rounded-lg hover:bg-hover transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => {
+                            onConfirm();
+                            onClose();
+                        }}
+                        className="px-8 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary"
+                    >
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 
 const ensureUserProfileExists = async (user: FirebaseUser) => {
     const profileDocRef = doc(db, 'users', user.uid);
@@ -241,11 +405,15 @@ const App: React.FC = () => {
 
     const [isLoginModalOpen, setLoginModalOpen] = useState(false);
     const [isSignupModalOpen, setSignupModalOpen] = useState(false);
+    const [isForgotPasswordModalOpen, setForgotPasswordModalOpen] = useState(false);
+    const [isChangePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
     const [deleteModalProps, setDeleteModalProps] = useState({ title: '', onConfirm: () => {} });
 
     const [loginError, setLoginError] = useState('');
     const [signupError, setSignupError] = useState('');
+    const [forgotPasswordFeedback, setForgotPasswordFeedback] = useState<AuthFeedback>({ type: 'idle', message: '' });
+    const [changePasswordFeedback, setChangePasswordFeedback] = useState<AuthFeedback>({ type: 'idle', message: '' });
     const [authState, setAuthState] = useState<AuthState>('idle');
 
     useEffect(() => {
@@ -418,6 +586,73 @@ const App: React.FC = () => {
         }
     };
 
+    const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setForgotPasswordFeedback({ type: 'idle', message: '' });
+        setAuthState('loading');
+        const { email } = event.currentTarget.elements as any;
+
+        try {
+            await sendPasswordResetEmail(auth, email.value);
+            setForgotPasswordFeedback({ type: 'success', message: 'Password reset email sent. Please check your inbox (and spam folder).' });
+        } catch (error: any) {
+            console.error("Forgot password error:", error);
+             if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
+                setForgotPasswordFeedback({ type: 'error', message: "Could not find an account with that email address." });
+            } else {
+                setForgotPasswordFeedback({ type: 'error', message: 'An unexpected error occurred. Please try again.' });
+            }
+        } finally {
+            setAuthState('idle');
+        }
+    };
+
+    const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setChangePasswordFeedback({ type: 'idle', message: '' });
+        setAuthState('loading');
+
+        const { currentPassword, newPassword, confirmPassword } = event.currentTarget.elements as any;
+
+        if (newPassword.value !== confirmPassword.value) {
+            setChangePasswordFeedback({ type: 'error', message: "New passwords do not match." });
+            setAuthState('idle');
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (!user || !user.email) {
+            setChangePasswordFeedback({ type: 'error', message: "No user is currently signed in." });
+            setAuthState('idle');
+            return;
+        }
+        
+        const credential = EmailAuthProvider.credential(user.email, currentPassword.value);
+
+        try {
+            await reauthenticateWithCredential(user, credential);
+            await updatePassword(user, newPassword.value);
+            setChangePasswordFeedback({ type: 'success', message: 'Password updated successfully!' });
+            setAuthState('success');
+            setTimeout(() => {
+                setChangePasswordModalOpen(false);
+                setChangePasswordFeedback({ type: 'idle', message: '' });
+                 setAuthState('idle');
+            }, 2000);
+        } catch (error: any) {
+            console.error("Change password error:", error);
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                setChangePasswordFeedback({ type: 'error', message: 'Incorrect current password.' });
+            } else if (error.code === 'auth/weak-password') {
+                setChangePasswordFeedback({ type: 'error', message: 'New password is too weak. It must be at least 6 characters.' });
+            } else {
+                setChangePasswordFeedback({ type: 'error', message: 'An error occurred. Please try again.' });
+            }
+             setAuthState('idle');
+        }
+    };
+
+
     const openDeleteModal = (title: string, onConfirm: () => void) => {
         setDeleteModalProps({ title, onConfirm });
         setDeleteModalOpen(true);
@@ -441,6 +676,7 @@ const App: React.FC = () => {
                     onDeletePost={handleDeletePost} 
                     onLogout={handleLogout} 
                     onViewProfile={handleViewProfile} 
+                    onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
                 />;
             case Page.Home:
             default:
@@ -450,6 +686,13 @@ const App: React.FC = () => {
     
     if (loading) {
         return <div className="flex items-center justify-center h-screen bg-primary">Loading...</div>;
+    }
+
+    const resetAuthModals = () => {
+        setLoginError('');
+        setSignupError('');
+        setForgotPasswordFeedback({ type: 'idle', message: '' });
+        setAuthState('idle');
     }
 
     return (
@@ -462,29 +705,55 @@ const App: React.FC = () => {
                 onLogin={() => setLoginModalOpen(true)} 
                 onViewProfile={() => handleViewProfile(null)}
                 currentPage={currentPage}
+                onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
             />
             <main>{renderPage()}</main>
             { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
             
-            <Modal isOpen={isLoginModalOpen} onClose={() => { setLoginModalOpen(false); setLoginError(''); setAuthState('idle'); }}>
+            <Modal isOpen={isLoginModalOpen} onClose={() => { setLoginModalOpen(false); resetAuthModals(); }}>
                  <LoginForm 
                     onSubmit={handleLogin} 
                     onGoogleSignIn={handleGoogleSignIn} 
                     error={loginError} 
-                    onSwitchToSignup={() => { setLoginModalOpen(false); setSignupModalOpen(true); setLoginError(''); setAuthState('idle'); }}
+                    onSwitchToSignup={() => { setLoginModalOpen(false); setSignupModalOpen(true); resetAuthModals(); }}
+                    onSwitchToForgotPassword={() => { setLoginModalOpen(false); setForgotPasswordModalOpen(true); resetAuthModals(); }}
                     authState={authState}
                 />
             </Modal>
             
-             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); setSignupError(''); setAuthState('idle'); }}>
+             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); resetAuthModals(); }}>
                 <SignupForm
                     onSubmit={handleSignup}
                     onGoogleSignIn={handleGoogleSignIn}
                     error={signupError}
-                    onSwitchToLogin={() => { setSignupModalOpen(false); setLoginModalOpen(true); setSignupError(''); setAuthState('idle'); }}
+                    onSwitchToLogin={() => { setSignupModalOpen(false); setLoginModalOpen(true); resetAuthModals(); }}
                     authState={authState}
                 />
             </Modal>
+            
+            <Modal isOpen={isForgotPasswordModalOpen} onClose={() => { setForgotPasswordModalOpen(false); resetAuthModals(); }}>
+                <ForgotPasswordForm
+                    onSubmit={handleForgotPassword}
+                    feedback={forgotPasswordFeedback}
+                    onSwitchToLogin={() => { setForgotPasswordModalOpen(false); setLoginModalOpen(true); resetAuthModals(); }}
+                    authState={authState}
+                />
+            </Modal>
+
+            <Modal isOpen={isChangePasswordModalOpen} onClose={() => { setChangePasswordModalOpen(false); setChangePasswordFeedback({ type: 'idle', message: '' }); setAuthState('idle'); }}>
+                <ChangePasswordForm
+                    onSubmit={handleChangePassword}
+                    feedback={changePasswordFeedback}
+                    authState={authState}
+                />
+            </Modal>
+
+            <DeleteConfirmationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setDeleteModalOpen(false)}
+                onConfirm={deleteModalProps.onConfirm}
+                title={deleteModalProps.title}
+            />
         </>
     );
 };

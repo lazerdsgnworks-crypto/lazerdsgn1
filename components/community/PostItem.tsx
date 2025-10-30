@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, Comment, Reply, Author, UserProfile, RepostedPost } from '../../types';
 import { db } from '../../services/firebase';
-import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import Avatar from '../Avatar';
 
 const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
@@ -107,7 +106,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
     const handleAddReply = async (text: string) => {
         if (!user || !text.trim() || !author) return;
         await addDoc(collection(db, 'usercomments'), {
-            author, text, postId: comment.postId, commentId: comment.id, createdAt: serverTimestamp(),
+            author, text, postId: comment.postId, commentId: comment.id, createdAt: serverTimestamp() as Timestamp,
         });
         // NOTE: We are no longer updating public counters to avoid permission errors.
         setShowReplyForm(false);
@@ -227,7 +226,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ post, user, userProfile
     const handleAddComment = async (text: string) => {
         if (!user || !text.trim() || !author) return;
         await addDoc(collection(db, 'usercomments'), {
-            author, text, postId: post.id, createdAt: serverTimestamp(), replyCount: 0, commentId: null,
+            author, text, postId: post.id, createdAt: serverTimestamp() as Timestamp, replyCount: 0, commentId: null,
         });
         // NOTE: We are no longer updating the public commentCount on the post
         // to avoid permission errors.

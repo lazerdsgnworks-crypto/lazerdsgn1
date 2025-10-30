@@ -1,11 +1,11 @@
-
 // @ts-ignore
 import { PDFDocument } from 'pdf-lib/dist/pdf-lib.esm.js';
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/build/pdf';
 
 // You might need to host this worker file on your own server for production
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js`;
+// FIX: Resolved "Invalid URL" TypeError by providing a full, absolute URL to the PDF.js worker. This ensures the worker can be located correctly from the CDN, bypassing issues with relative path resolution via `import.meta.url`.
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://aistudiocdn.com/pdfjs-dist@^5.4.296/build/pdf.worker.mjs';
 
 export function dataURLtoFile(dataurl: string, filename: string): File {
     const arr = dataurl.split(',');

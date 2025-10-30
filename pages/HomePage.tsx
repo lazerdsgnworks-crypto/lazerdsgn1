@@ -95,10 +95,10 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                         ) : (
                              <>
                                 <button onClick={openLoginModal} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
-                                    Let's Chat
+                                    Enter Studio
                                 </button>
                                 <button onClick={openSignupModal} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
-                                    Start Your Project
+                                    Start Creating
                                 </button>
                             </>
                         )}
@@ -106,25 +106,23 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                 </div>
             </section>
 
-            <section id="projects" className="py-24 md:py-32 bg-primary text-primary">
+            <section id="projects" className="py-24 md:py-32 bg-primary text-primary overflow-hidden">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-8">
                         Curating high-impact visual identities.
                     </h2>
                 </div>
-                <div className="slider-container overflow-hidden relative">
-                    <div className="slider-track">
-                        {[...projectImages, ...projectImages].map((project, index) => (
-                            <div onClick={() => navigateTo(Page.Portfolio)} key={index} className="cursor-pointer slider-item group inline-block relative aspect-[3/4] overflow-hidden rounded-lg shadow-xl transform transition-transform duration-300 hover:scale-[1.02]">
-                                <img src={project.url} alt={project.title} className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-75" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                                <div className="absolute bottom-4 left-4">
-                                    <h3 className="text-2xl font-semibold text-white">{project.title}</h3>
-                                    <p className="text-sm text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">{project.category}</p>
-                                </div>
+                <div className="slider-track">
+                    {[...projectImages, ...projectImages].map((project, index) => (
+                        <div onClick={() => navigateTo(Page.Portfolio)} key={index} className="cursor-pointer slider-item group inline-block relative aspect-[3/4] overflow-hidden rounded-lg shadow-xl transform transition-transform duration-300 hover:scale-[1.02]">
+                            <img src={project.url} alt={project.title} className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-75" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                            <div className="absolute bottom-4 left-4">
+                                <h3 className="text-2xl font-semibold text-white">{project.title}</h3>
+                                <p className="text-sm text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">{project.category}</p>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    ))}
                 </div>
             </section>
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Page, User, UserProfile } from '../types';
 import Avatar from './Avatar';
@@ -11,9 +10,10 @@ interface HeaderProps {
     onLogin: () => void;
     onViewProfile: () => void;
     currentPage: Page;
+    onOpenChangePasswordModal: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout, onLogin, onViewProfile, currentPage }) => {
+const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout, onLogin, onViewProfile, currentPage, onOpenChangePasswordModal }) => {
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -47,20 +47,15 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
     
     const AuthLinks: React.FC<{isMobile: boolean}> = ({ isMobile }) => {
         const baseClassName = isMobile 
-            ? "font-medium text-primary border border-secondary rounded-full px-5 py-2 hover:bg-hover transition" 
+            ? "w-full text-center font-medium text-primary border border-secondary rounded-full px-5 py-2 hover:bg-hover transition" 
             : "font-medium text-primary border border-secondary rounded-full px-4 py-1.5 hover:bg-hover transition";
             
         if (user) {
             if (isMobile) {
                 return (
-                    <div className="flex items-center flex-col space-y-4">
-                        <button onClick={(e) => { e.preventDefault(); onViewProfile(); setMobileMenuOpen(false); }} className="flex items-center space-x-2 group">
-                            <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
-                            <span className="text-sm font-medium text-secondary group-hover:text-primary">
-                                {userProfile?.username ?? 'Profile'}
-                            </span>
-                        </button>
-                    </div>
+                    <button onClick={() => { onLogout(); setMobileMenuOpen(false); }} className={baseClassName}>
+                        Logout
+                    </button>
                 );
             }
 
@@ -80,6 +75,13 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                             >
                                 <svg className="w-4 h-4 text-muted"><use href="#icon-user-default"></use></svg>
                                 <span>My Profile</span>
+                            </button>
+                            <button
+                                onClick={() => { onOpenChangePasswordModal(); setProfileMenuOpen(false); }}
+                                className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover flex items-center space-x-3"
+                            >
+                                <svg className="w-4 h-4 text-muted"><use href="#icon-key"></use></svg>
+                                <span>Change Password</span>
                             </button>
                             <div className="border-t border-primary my-1"></div>
                             <button
@@ -123,8 +125,8 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
             </header>
 
             {/* Mobile Menu */}
-            <div className={`fixed inset-0 bg-secondary z-50 transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="flex justify-between items-center p-4 border-b border-primary">
+            <div className={`fixed inset-0 bg-secondary z-50 flex flex-col transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="flex justify-between items-center p-4 border-b border-primary flex-shrink-0">
                     <div className="text-2xl font-bold tracking-tight">
                         <a href="#" className="text-primary" onClick={(e) => handleNav(Page.Home, e)}>LazerDsgn.</a>
                     </div>
@@ -134,16 +136,24 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                         </svg>
                     </button>
                 </div>
-                <nav className="flex flex-col space-y-6 p-6 text-lg font-medium text-secondary">
+                <nav className="flex-grow flex flex-col space-y-6 p-6 text-lg font-medium text-secondary">
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Home, e)}>Home</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
-                    <div className="pt-4">
-                        <AuthLinks isMobile={true} />
-                    </div>
+                    {user && (
+                        <div className="pt-6 border-t border-primary">
+                            <a href="#" className="flex items-center space-x-3 group" onClick={(e) => handleProfileNav(e)}>
+                                <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="md" />
+                                <span className="font-medium text-secondary group-hover:text-primary">{userProfile?.username ?? 'Profile'}</span>
+                            </a>
+                        </div>
+                    )}
                 </nav>
+                 <div className="p-6 border-t border-primary">
+                    <AuthLinks isMobile={true} />
+                </div>
             </div>
         </>
     );

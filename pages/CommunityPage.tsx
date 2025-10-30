@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost } from '../types';
 import { db } from '../services/firebase';
@@ -14,7 +13,7 @@ import { compressImage, dataURLtoFile } from '../utils/files';
 // --- Cloudinary Configuration ---
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
-const AI_QUERY_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/queries";
+const AI_QUERY_WEBHOOK_URL = "https://umarworks2.app.n8n.cloud/webhook/queries";
 // const USER_SEARCH_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/user-search";
 
 
@@ -141,7 +140,10 @@ const CreatePostForm: React.FC<{
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
                     const response = await fetch(url, { method: 'POST', body: formData });
-                    if (!response.ok) throw new Error('Cloudinary upload failed for an image');
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData?.error?.message || `Cloudinary upload failed with status: ${response.status}`);
+                    }
                     const data = await response.json();
                     return data.secure_url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
                 }));
@@ -154,7 +156,10 @@ const CreatePostForm: React.FC<{
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                 const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
                 const response = await fetch(url, { method: 'POST', body: formData });
-                if (!response.ok) throw new Error('Cloudinary video upload failed');
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData?.error?.message || `Cloudinary video upload failed with status: ${response.status}`);
+                }
                 const data = await response.json();
                 finalMediaUrls = [data.secure_url.replace('/upload/', '/upload/w_600,c_scale,q_auto/')];
             }
@@ -169,7 +174,8 @@ const CreatePostForm: React.FC<{
 
         } catch (error) {
             console.error("Failed to create post:", error);
-            alert("Could not create post. Please try again.");
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            alert(`Could not create post: ${errorMessage}`);
         } finally {
             setStatus('idle');
         }
@@ -464,7 +470,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         const postData: any = {
             author,
             text,
-            createdAt: serverTimestamp(),
+            createdAt: serverTimestamp() as Timestamp,
             commentCount: 0,
             likeCount: 0,
             repostCount: 0,
@@ -489,10 +495,10 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                     const result = await response.json();
                     const aiResponseText = result.output || result.text || result.response || "Sorry, I couldn't get a response from the AI.";
     
-                    postData.aiReply = { text: aiResponseText, createdAt: serverTimestamp() };
+                    postData.aiReply = { text: aiResponseText, createdAt: serverTimestamp() as Timestamp };
                 } catch (error) {
                     console.error("Error fetching AI response:", error);
-                    postData.aiReply = { text: "An error occurred while getting the AI response.", createdAt: serverTimestamp() };
+                    postData.aiReply = { text: "An error occurred while getting the AI response.", createdAt: serverTimestamp() as Timestamp };
                 }
             }
         }

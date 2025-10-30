@@ -33,6 +33,11 @@ export interface ChatMessage {
     name: string;
     type: string;
   };
+  analysisResult?: {
+    url: string;
+    name: string;
+    type: string;
+  };
 }
 
 export interface ChatSession {

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile, RepostedPost } from '../types';
 import { db } from '../services/firebase';
@@ -18,6 +17,7 @@ interface ProfilePageProps {
     onDeletePost: (post: CommunityPost) => void;
     onLogout: () => void;
     onViewProfile: (userId: string) => void;
+    onOpenChangePasswordModal: () => void;
 }
 
 type ProfileTab = 'all' | 'threads' | 'ai' | 'saved' | 'reposts';
@@ -43,15 +43,18 @@ const PostSkeleton: React.FC = () => (
 
 
 const ProfileHeaderSkeleton: React.FC = () => (
-    <div className="bg-secondary border border-primary rounded-xl p-6 animate-pulse">
-        <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left sm:space-x-6">
-            <div className="w-24 h-24 bg-muted rounded-full flex-shrink-0 mb-4 sm:mb-0"></div>
-            <div className="flex-1 space-y-3 w-full">
-                <div className="h-6 bg-muted rounded w-1/2 mx-auto sm:mx-0"></div>
-                <div className="h-4 bg-muted rounded w-3/4 mx-auto sm:mx-0"></div>
-                <div className="h-4 bg-muted rounded w-full mx-auto sm:mx-0"></div>
+    <div className="flex flex-row items-start gap-4 sm:gap-6 p-4 md:p-0 animate-pulse">
+        <div className="flex-1 space-y-4 w-full pt-2">
+            <div className="space-y-2">
+                <div className="h-6 sm:h-7 bg-muted rounded w-1/2"></div>
+                <div className="h-4 bg-muted rounded w-1/3"></div>
+            </div>
+            <div className="space-y-2">
+                <div className="h-4 bg-muted rounded w-full"></div>
+                <div className="h-4 bg-muted rounded w-3/4"></div>
             </div>
         </div>
+        <div className="w-24 h-24 sm:w-32 sm:h-32 bg-muted rounded-full flex-shrink-0"></div>
     </div>
 );
 
@@ -72,7 +75,7 @@ const NavLink: React.FC<{
 );
 
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal }) => {
     const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
     const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -303,16 +306,51 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     
     const handleSaveProfile = async () => {
         if (!loggedInUser || !profile) return;
+        const newUsername = editData.username.trim();
+        if (!newUsername) {
+            alert("Username cannot be empty.");
+            return;
+        }
+
         setIsSaving(true);
         try {
-            const profileRef = doc(db, 'users', loggedInUser.uid);
-            await updateDoc(profileRef, {
-                username: editData.username.trim(),
+            const batch = writeBatch(db);
+            const userId = loggedInUser.uid;
+
+            // 1. Update user's profile document
+            const profileRef = doc(db, 'users', userId);
+            batch.update(profileRef, {
+                username: newUsername,
                 bio: editData.bio.trim()
             });
+
+            // 2. Update all posts authored by the user
+            const postsQuery = query(collection(db, 'community-posts'), where('author.id', '==', userId));
+            const postsSnapshot = await getDocs(postsQuery);
+            postsSnapshot.forEach(postDoc => {
+                batch.update(postDoc.ref, { "author.username": newUsername });
+            });
+            
+            // 3. Update all posts where this user is the author of a reposted post
+            const repostsQuery = query(collection(db, 'community-posts'), where('repostedPost.author.id', '==', userId));
+            const repostsSnapshot = await getDocs(repostsQuery);
+            repostsSnapshot.forEach(postDoc => {
+                batch.update(postDoc.ref, { "repostedPost.author.username": newUsername });
+            });
+
+            // 4. Update all comments/replies by the user
+            const commentsQuery = query(collection(db, 'usercomments'), where('author.id', '==', userId));
+            const commentsSnapshot = await getDocs(commentsQuery);
+            commentsSnapshot.forEach(commentDoc => {
+                batch.update(commentDoc.ref, { "author.username": newUsername });
+            });
+            
+            await batch.commit();
+            
             setIsEditing(false);
         } catch (error) {
             console.error("Error updating profile:", error);
+            alert("There was an error updating your profile. Please try again.");
         } finally {
             setIsSaving(false);
         }
@@ -335,28 +373,32 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             const response = await fetch(url, { method: 'POST', body: formData });
     
             if (!response.ok) {
-                throw new Error('Cloudinary upload failed.');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData?.error?.message || `Cloudinary upload failed with status: ${response.status}`);
             }
     
             const data = await response.json();
             const photoURL = data.secure_url.replace('/upload/', '/upload/w_200,h_200,c_fill,g_auto,q_auto,f_auto/');
             
-            // --- UPDATED: Use a batch write for atomic updates ---
             const batch = writeBatch(db);
+            const userId = loggedInUser.uid;
 
-            // 1. Update user's profile document
-            const profileRef = doc(db, 'users', loggedInUser.uid);
+            const profileRef = doc(db, 'users', userId);
             batch.update(profileRef, { photoURL });
             
-            // 2. Find and update all posts by the user
-            const postsQuery = query(collection(db, 'community-posts'), where('author.id', '==', loggedInUser.uid));
+            const postsQuery = query(collection(db, 'community-posts'), where('author.id', '==', userId));
             const postsSnapshot = await getDocs(postsQuery);
             postsSnapshot.forEach(postDoc => {
                 batch.update(postDoc.ref, { "author.photoURL": photoURL });
             });
 
-            // 3. Find and update all comments by the user
-            const commentsQuery = query(collection(db, 'usercomments'), where('author.id', '==', loggedInUser.uid));
+            const repostsQuery = query(collection(db, 'community-posts'), where('repostedPost.author.id', '==', userId));
+            const repostsSnapshot = await getDocs(repostsQuery);
+            repostsSnapshot.forEach(postDoc => {
+                batch.update(postDoc.ref, { "repostedPost.author.photoURL": photoURL });
+            });
+
+            const commentsQuery = query(collection(db, 'usercomments'), where('author.id', '==', userId));
             const commentsSnapshot = await getDocs(commentsQuery);
             commentsSnapshot.forEach(commentDoc => {
                 batch.update(commentDoc.ref, { "author.photoURL": photoURL });
@@ -366,7 +408,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
 
         } catch (error) {
             console.error("Failed to update profile picture:", error);
-            // In a real app, you would show an error message to the user.
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            alert(`Failed to update profile picture: ${errorMessage}`);
         } finally {
             setIsUploadingPfp(false);
             if (pfpInputRef.current) pfpInputRef.current.value = "";
@@ -443,17 +486,35 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const isLoadingContent = (activeTab === 'saved' && isLoadingSaved) || (activeTab !== 'saved' && isLoadingPosts);
 
     const ProfileSidebar = () => (
-        <div className="space-y-2">
+        <div className="space-y-1">
             <h2 className="text-sm font-semibold text-muted px-3">Feed</h2>
-            <NavLink tab="all" label="All Posts" icon="file-text" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="all" label="All Posts" icon="page" activeTab={activeTab} setActiveTab={setActiveTab} />
             <NavLink tab="threads" label="Threads" icon="comment" activeTab={activeTab} setActiveTab={setActiveTab} />
-            <NavLink tab="ai" label="AI Queries" icon="gemini-sparkle" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="ai" label="AI Queries" icon="sparkle" activeTab={activeTab} setActiveTab={setActiveTab} />
             <NavLink tab="reposts" label="Reposts" icon="repost" activeTab={activeTab} setActiveTab={setActiveTab} />
             
             {isOwnProfile && (
                 <>
-                    <h2 className="text-sm font-semibold text-muted px-3 pt-4">Saved</h2>
-                    <NavLink tab="saved" label="Saved Posts" icon="bookmark" activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <div className="pt-2">
+                         <h2 className="text-sm font-semibold text-muted px-3">Saved</h2>
+                        <NavLink tab="saved" label="Saved Posts" icon="bookmark" activeTab={activeTab} setActiveTab={setActiveTab} />
+                    </div>
+                     <div className="pt-2">
+                        <h2 className="text-sm font-semibold text-muted px-3">Account</h2>
+                         <button
+                            onClick={() => { onOpenChangePasswordModal(); setMobileSidebarOpen(false); }}
+                            className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
+                        >
+                            <span>Change Password</span>
+                        </button>
+                        <button
+                            onClick={() => { onLogout(); setMobileSidebarOpen(false); }}
+                            className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-red-500 hover:bg-red-500/10"
+                        >
+                            <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-logout"></use></svg>
+                            <span>Logout</span>
+                        </button>
+                    </div>
                 </>
             )}
         </div>
@@ -491,50 +552,64 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                         ) : error ? (
                             <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg"><strong>Error:</strong> {error}</div>
                         ) : profile ? (
-                            <div className="bg-secondary border border-primary rounded-xl p-6">
-                                <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left sm:space-x-6">
-                                     <div className="relative group flex-shrink-0">
-                                        <Avatar email={profile.email} photoURL={profile.photoURL} size="lg" />
-                                        {isOwnProfile && (
-                                            <>
-                                                <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" disabled={isUploadingPfp}>
-                                                    {isUploadingPfp 
-                                                        ? <svg className="w-6 h-6 animate-spin"><use href="#icon-spinner"></use></svg> 
-                                                        : <svg className="w-6 h-6"><use href="#icon-image"></use></svg>}
-                                                </button>
-                                                <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
-                                            </>
-                                        )}
-                                    </div>
-                                    <div className="flex-1 mt-4 sm:mt-0">
-                                        {isEditing ? (
-                                            <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl font-bold bg-muted border border-secondary rounded-md px-2 py-1 w-full sm:w-auto" />
-                                        ) : (
-                                            <h1 className="text-2xl font-bold text-primary">{profile.username}</h1>
-                                        )}
-                                        <p className="text-sm text-muted">{profile.email}</p>
-                                        {isEditing ? (
-                                            <textarea value={editData.bio} onChange={e => setEditData({...editData, bio: e.target.value})} className="text-base text-secondary mt-2 w-full bg-muted border border-secondary rounded-md px-2 py-1" rows={3}></textarea>
-                                        ) : (
-                                            <p className="text-base text-secondary mt-2 max-w-prose">{profile.bio}</p>
-                                        )}
-                                    </div>
-                                    {isOwnProfile && (
-                                        <div className="mt-4 sm:mt-0">
+                             <div className="flex flex-row items-start gap-4 sm:gap-6 p-4 md:p-0">
+                                <div className="flex-1 w-full">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start">
+                                        <div className="flex-1 w-full text-left">
                                             {isEditing ? (
-                                                <div className="flex space-x-2">
-                                                    <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Cancel</button>
-                                                    <button onClick={handleSaveProfile} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-primary-accent text-on-primary-accent rounded-md hover:bg-accent-hover disabled:opacity-50">
-                                                        {isSaving ? 'Saving...' : 'Save'}
-                                                    </button>
-                                                </div>
+                                                <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
                                             ) : (
-                                                <div className="flex space-x-2">
-                                                    <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Edit Profile</button>
-                                                    <button onClick={onLogout} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover text-red-500 hover:border-red-500/50">Logout</button>
-                                                </div>
+                                                <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
                                             )}
+                                            <p className="text-sm text-muted">{profile.email}</p>
                                         </div>
+                                         {isOwnProfile && (
+                                            <div className="flex mt-4 sm:mt-0 flex-row space-x-2">
+                                                {isEditing ? (
+                                                    <div className="flex space-x-2">
+                                                        <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Cancel</button>
+                                                        <button onClick={handleSaveProfile} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-primary-accent text-on-primary-accent rounded-md hover:bg-accent-hover disabled:opacity-50">
+                                                            {isSaving ? 'Saving...' : 'Save'}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Edit Profile</button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-4 w-full text-left">
+                                        {isEditing ? (
+                                            <div className="relative">
+                                                <textarea 
+                                                    value={editData.bio} 
+                                                    onChange={e => setEditData({...editData, bio: e.target.value})} 
+                                                    className="text-base text-secondary w-full bg-transparent rounded-md px-2 py-1 pr-16 hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
+                                                    rows={4}
+                                                    maxLength={200}
+                                                ></textarea>
+                                                <span className="absolute bottom-2 right-2 text-xs text-muted">
+                                                    {editData.bio.length} / 200
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div className="max-h-24 overflow-y-auto">
+                                                <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="relative group flex-shrink-0">
+                                    <Avatar email={profile.email} photoURL={profile.photoURL} size="xxl" />
+                                    {isOwnProfile && (
+                                        <>
+                                            <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" disabled={isUploadingPfp}>
+                                                {isUploadingPfp 
+                                                    ? <svg className="w-8 h-8 animate-spin"><use href="#icon-spinner"></use></svg> 
+                                                    : <svg className="w-8 h-8"><use href="#icon-image"></use></svg>}
+                                            </button>
+                                            <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
+                                        </>
                                     )}
                                 </div>
                             </div>
