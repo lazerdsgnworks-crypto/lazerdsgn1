@@ -1,6 +1,7 @@
 {
   "name": "lazerdsgn---ai-digital-studio",
-  "private": true,
+  "homepage": "https://github.com/lazerdsgnworks-crypto/lazerdsgn1",
+  "private": false,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -9,12 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "date-fns": "^4.1.0",
+    "firebase": "^12.5.0",
+    "gh-pages": "^6.3.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.296",
-    "date-fns": "^4.1.0",
-    "firebase": "^12.5.0"
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

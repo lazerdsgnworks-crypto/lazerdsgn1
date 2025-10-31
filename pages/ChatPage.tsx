@@ -1,8 +1,10 @@
+// .
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, ChatSession, ChatMessage, UserProfile } from '../../types';
-import { db } from '../../services/firebase';
+import { User, ChatSession, ChatMessage, UserProfile } from '../types';
+import { db } from '../services/firebase';
+// ...existing code...
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
-import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../../utils/files';
+import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../utils/files';
 import Avatar from '../components/Avatar';
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
