@@ -8,7 +8,7 @@ import Avatar from '../components/Avatar';
 import RightSidebar from '../components/community/RightSidebar';
 import ImagePreviewModal from '../components/community/ImagePreviewModal';
 import RepostModal from '../components/community/RepostModal';
-import { compressImage, dataURLtoFile } from '../../utils/files';
+import { compressImage, dataURLtoFile } from '../utils/files';
 import Modal from '../components/Modal';
 
 
