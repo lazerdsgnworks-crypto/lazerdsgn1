@@ -4,6 +4,7 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/lazerdsgn1/', // 👈 base path for GitHub Pages
   plugins: [react()],
   resolve: {
     alias: {

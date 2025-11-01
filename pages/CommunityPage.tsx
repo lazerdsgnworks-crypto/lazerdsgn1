@@ -80,7 +80,7 @@ const CreatePostForm: React.FC<{
     }
 
     const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
+        const files: File[] = Array.from(e.target.files || []);
         if (!files.length) return;
 
         removeMedia(); 
