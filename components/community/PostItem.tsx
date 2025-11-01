@@ -22,24 +22,134 @@ const formatTimeAgoShort = (date: Date): string => {
   return `${days}d`;
 };
 
-const formatAiReplyText = (text: string): string => {
+const formatText = (text: string): string => {
     if (!text) return '';
+    // 1. Escape HTML to prevent XSS.
     let safeText = text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    // Replace markdown-style bolding. Order is important.
+    // 2. Apply bold formatting for **text** and *text*.
+    // Replace ** 먼저 처리
     safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
 
+    // 3. Handle newlines.
     safeText = safeText.replace(/\n/g, '<br />');
+    
     return safeText;
 };
 
 interface ProfileNavigable {
     onViewProfile: (userId: string) => void;
 }
+
+// --- Poll Component ---
+const PollDisplay: React.FC<{ post: CommunityPost; user: User; }> = ({ post, user }) => {
+    const [votingForOption, setVotingForOption] = useState<number | null>(null);
+    const poll = post.poll!;
+    const userVoteIndex = user ? poll.voters[user.uid] : undefined;
+    const hasVoted = userVoteIndex !== undefined;
+    const totalVotes = poll.options.reduce((sum, option) => sum + option.votes, 0);
+
+    const handleVote = async (optionIndex: number) => {
+        if (!user || votingForOption !== null) return;
+        
+        const currentUserVote = poll.voters[user.uid];
+        if (currentUserVote === optionIndex) return;
+
+        setVotingForOption(optionIndex);
+
+        const postRef = doc(db, 'community-posts', post.id);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const postDoc = await transaction.get(postRef);
+                if (!postDoc.exists()) throw "Post does not exist.";
+                const currentPost = postDoc.data() as CommunityPost;
+                const currentPoll = currentPost.poll;
+                if (!currentPoll) throw "Poll does not exist on this post.";
+
+                const previousVoteIndex = currentPoll.voters[user.uid];
+                
+                if (previousVoteIndex !== undefined) {
+                    if (currentPoll.options[previousVoteIndex].votes > 0) {
+                        currentPoll.options[previousVoteIndex].votes -= 1;
+                    }
+                }
+                
+                currentPoll.options[optionIndex].votes += 1;
+                currentPoll.voters[user.uid] = optionIndex;
+                
+                transaction.update(postRef, { poll: currentPoll });
+            });
+        } catch (e) {
+            console.error("Vote transaction failed: ", e);
+            alert("Your vote could not be counted. Please try again.");
+        } finally {
+            setVotingForOption(null);
+        }
+    };
+
+    return (
+        <div className="mt-3 space-y-2">
+            {poll.options.map((option, index) => {
+                const percentage = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
+                const isUsersChoice = index === userVoteIndex;
+
+                if (hasVoted) {
+                    return (
+                        <button 
+                            key={index} 
+                            onClick={() => handleVote(index)}
+                            className="relative w-full text-sm font-semibold border border-primary rounded-full overflow-hidden p-2.5 text-left disabled:opacity-70 disabled:cursor-not-allowed"
+                            disabled={votingForOption !== null}
+                        >
+                            <div 
+                                className="absolute top-0 left-0 h-full progress-bar-fill"
+                                style={{ width: `${percentage}%`, transition: 'width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                            ></div>
+                            {votingForOption === index && (
+                                <div className="absolute inset-0 bg-secondary/30">
+                                    <div className="w-full h-full bg-gray-200/50 dark:bg-gray-700/50 overflow-hidden">
+                                        <div className="animate-[progress_1.5s_ease-in-out_infinite] bg-blue-500 h-full w-1/3"></div>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="relative flex justify-between">
+                                <span className={`truncate ${isUsersChoice ? 'text-primary font-bold' : 'text-secondary'}`}>
+                                    {option.text}
+                                </span>
+                                <span className="flex-shrink-0 ml-2">{percentage.toFixed(0)}%</span>
+                            </div>
+                        </button>
+                    );
+                } else {
+                    return (
+                        <button 
+                            key={index} 
+                            onClick={() => handleVote(index)}
+                            className="w-full text-sm font-semibold border border-primary rounded-full p-2.5 text-secondary hover:bg-hover hover:border-secondary transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center min-h-[42px] text-left relative overflow-hidden"
+                            disabled={!user || votingForOption !== null}
+                        >
+                           {votingForOption === index ? (
+                                <div className="absolute inset-0 flex items-center justify-center p-2">
+                                    <div className="w-full h-1 bg-gray-200 dark:bg-gray-700 overflow-hidden rounded">
+                                        <div className="animate-[progress_1.5s_ease-in-out_infinite] bg-blue-500 h-full w-1/3"></div>
+                                    </div>
+                                </div>
+                           ) : (
+                                option.text
+                           )}
+                        </button>
+                    );
+                }
+            })}
+            <p className="text-xs text-muted pt-1">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+        </div>
+    );
+};
+
 
 // --- Comment-related Components (scoped to this file) ---
 const CommentForm: React.FC<{ user: User; userProfile: UserProfile | null; onSubmit: (text: string) => void; placeholder: string; autoFocus?: boolean }> = ({ user, userProfile, onSubmit, placeholder, autoFocus }) => {
@@ -140,14 +250,10 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                             <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                         )}
                     </header>
-                    {isAiComment ? (
-                        <p
-                            className="text-primary text-sm whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{ __html: formatAiReplyText(comment.text) }}
-                        />
-                    ) : (
-                        <p className="text-primary text-sm whitespace-pre-wrap">{comment.text}</p>
-                    )}
+                    <p
+                        className="text-primary text-sm"
+                        dangerouslySetInnerHTML={{ __html: formatText(comment.text) }}
+                    />
                     <div className="flex items-center space-x-4 text-muted mt-2">
                         <button className="hover:text-primary transition-colors"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
                         <button onClick={() => setShowReplyForm(!showReplyForm)} className="hover:text-primary transition-colors"><svg className="w-4 h-4"><use href="#icon-comment"></use></svg></button>
@@ -181,7 +287,10 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                                             <button onClick={() => handleDeleteReply(reply.id)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                                         )}
                                     </header>
-                                    <p className="text-sm text-primary whitespace-pre-wrap">{reply.text}</p>
+                                    <p 
+                                        className="text-sm text-primary"
+                                        dangerouslySetInnerHTML={{ __html: formatText(reply.text) }}
+                                    />
                                      <div className="flex items-center space-x-4 text-muted mt-2">
                                         <button className="hover:text-primary transition-colors"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
                                     </div>
@@ -311,12 +420,9 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
     const menuRef = useRef<HTMLDivElement>(null);
 
-    const anyPost = post as any;
-    const mediaUrlsToRender = Array.isArray(anyPost.mediaUrls) && anyPost.mediaUrls.length > 0
-        ? anyPost.mediaUrls
-        : (anyPost.mediaUrl ? [anyPost.mediaUrl] : []);
+    const mediaUrlsToRender = post.mediaUrls || [];
 
-    const hasMedia = mediaUrlsToRender.length > 0 && !post.repostedPost;
+    const hasMedia = mediaUrlsToRender.length > 0 && !post.repostedPost && !post.poll;
     const isSaved = savedPostIds.has(post.id);
     const isLiked = likedPostIds.has(post.id);
 
@@ -345,15 +451,20 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                     </div>
                     <p className="text-xs text-muted flex-shrink-0">{originalTimeAgo}</p>
                 </div>
-                {originalPost.text && <p className="text-primary whitespace-pre-wrap text-sm sm:text-base">{originalPost.text}</p>}
+                {originalPost.text && (
+                    <p
+                        className="text-primary text-sm sm:text-base"
+                        dangerouslySetInnerHTML={{ __html: formatText(originalPost.text) }}
+                    />
+                )}
                 {originalMediaUrls.length > 0 && (
                      <div className="mt-3 relative">
                         {originalPost.mediaType === 'video' ? (
-                            <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
+                            <div className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
                                 <video src={originalMediaUrls[0]} controls playsInline className="w-full h-full bg-black" />
                             </div>
                         ) : (
-                            <button onClick={() => onImageClick(originalMediaUrls[0])} className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[250px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <button onClick={() => onImageClick(originalMediaUrls[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[250px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                 <img src={originalMediaUrls[0]} alt="Original post media" className="max-w-full max-h-full object-contain" />
                             </button>
                         )}
@@ -364,7 +475,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     };
 
     return (
-        <div className="bg-secondary border-b sm:border border-primary sm:rounded-xl overflow-hidden">
+        <div className="bg-secondary sm:border border-primary sm:rounded-2xl">
             <div className="p-4">
                 <div className="flex space-x-4">
                     <div className="flex flex-col items-center flex-shrink-0 pt-1">
@@ -391,14 +502,21 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                 )}
                             </div>
                         </header>
-                        {post.text && <p className="text-primary whitespace-pre-wrap mt-1 text-sm sm:text-base">{post.text}</p>}
+                        {post.text && (
+                            <p
+                                className="text-primary mt-1 text-sm sm:text-base"
+                                dangerouslySetInnerHTML={{ __html: formatText(post.text) }}
+                            />
+                        )}
                         
                         {post.repostedPost && <EmbeddedPost post={post.repostedPost} onImageClick={onImageClick} />}
+
+                        {post.poll && user && <PollDisplay post={post} user={user} />}
 
                         {hasMedia && (
                             <div className="mt-3 relative">
                                 {post.mediaType === 'video' ? (
-                                    <div className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
+                                    <div className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
                                         <video
                                             src={mediaUrlsToRender[0]}
                                             controls
@@ -414,13 +532,13 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                                 <img
                                                     src={url}
                                                     alt={`Post content ${index + 1}`}
-                                                    className="max-h-36 w-auto rounded-lg border border-primary"
+                                                    className="max-h-36 w-auto rounded-lg"
                                                 />
                                             </button>
                                         ))}
                                     </div>
                                 ) : (
-                                    <button onClick={() => onImageClick(mediaUrlsToRender[0])} className="rounded-xl w-full border border-primary shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <button onClick={() => onImageClick(mediaUrlsToRender[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                         <img 
                                             src={mediaUrlsToRender[0]} 
                                             alt={`Post content 1`} 

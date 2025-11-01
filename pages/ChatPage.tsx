@@ -1,8 +1,6 @@
-// .
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types';
 import { db } from '../services/firebase';
-// ...existing code...
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
 import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../utils/files';
 import Avatar from '../components/Avatar';
@@ -150,6 +148,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         }
     }, [user]);
 
+    // Effect to create a new session every time the chat page is opened/mounted.
+    useEffect(() => {
+        createNewSession(true);
+    }, [createNewSession]);
+
     // Effect to listen for session list changes for the sidebar.
      useEffect(() => {
         if (!user) {
@@ -178,20 +181,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
 
         return () => unsubscribe();
     }, [user]);
-
-    // Effect to set the initial active session or create a new one.
-    useEffect(() => {
-        // Wait for sessions to be loaded and ensure we don't already have an active session.
-        if (sessionsLoaded && !currentSessionId && user) {
-            if (sessions.length > 0) {
-                // If sessions exist, set the most recent one as active.
-                setCurrentSessionId(sessions[0].id);
-            } else {
-                // If no sessions exist for the user, create a new one.
-                createNewSession(true);
-            }
-        }
-    }, [sessions, sessionsLoaded, currentSessionId, createNewSession, user]);
 
     useEffect(() => {
         if (!currentSessionId || !user) {
@@ -639,6 +628,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions`, sessionId), { title: newTitle, updatedAt: serverTimestamp() as Timestamp });
     };
 
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+
     return (
         <div className="flex h-screen -mt-[68px] pt-[68px] bg-primary w-full overflow-hidden">
              {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
@@ -655,8 +646,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 error={error}
                 onViewProfile={onViewProfile}
             />
-            <div className="flex-1 flex flex-col overflow-hidden h-full bg-secondary">
-                <header className="p-4 flex items-center justify-between bg-secondary z-10 flex-shrink-0">
+            <div className="flex-1 flex flex-col overflow-hidden h-full bg-primary">
+                <header className="p-4 flex items-center justify-between z-10 flex-shrink-0 relative">
                      <div className="flex items-center">
                         <button onClick={() => {
                             if (window.innerWidth < 768) setSidebarOpen(!isSidebarOpen)
@@ -668,25 +659,28 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                              <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
                         </button>
                     </div>
+
                     <button onClick={() => createNewSession(true)} className="p-2 rounded-full hover:bg-muted md:hidden" aria-label="New Chat">
                          <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
                     </button>
                 </header>
                 <ChatMessages messages={messages} isLoading={isLoading} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>
-                <ChatInput 
-                    onSendMessage={handleSendMessage} 
-                    isAnalysisMode={isAnalysisMode}
-                    onToggleAnalysisMode={handleToggleAnalysisMode}
-                    isImageGenMode={isImageGenMode}
-                    onToggleImageGenMode={handleToggleImageGenMode}
-                    isVideoGenMode={isVideoGenMode}
-                    onToggleVideoGenMode={handleToggleVideoGenMode}
-                    videoAspectRatio={videoAspectRatio}
-                    onVideoAspectRatioChange={setVideoAspectRatio}
-                    onAnalysisFileSelect={setAnalysisFile}
-                    analysisFile={analysisFile}
-                    isLoading={isLoading}
-                />
+                <div className="px-2 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 md:px-6 flex-shrink-0">
+                    <ChatInput 
+                        onSendMessage={handleSendMessage} 
+                        isAnalysisMode={isAnalysisMode}
+                        onToggleAnalysisMode={handleToggleAnalysisMode}
+                        isImageGenMode={isImageGenMode}
+                        onToggleImageGenMode={handleToggleImageGenMode}
+                        isVideoGenMode={isVideoGenMode}
+                        onToggleVideoGenMode={handleToggleVideoGenMode}
+                        videoAspectRatio={videoAspectRatio}
+                        onVideoAspectRatioChange={setVideoAspectRatio}
+                        onAnalysisFileSelect={setAnalysisFile}
+                        analysisFile={analysisFile}
+                        isLoading={isLoading}
+                    />
+                </div>
             </div>
         </div>
     );
@@ -713,9 +707,9 @@ const ChatSidebar: React.FC<{
         .filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return (
-        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-40 md:relative md:h-full transition-all duration-300 ease-in-out bg-muted flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
+        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-40 md:relative md:h-full transition-all duration-300 ease-in-out flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
              <div className="p-4 flex-shrink-0 h-[68px]">
-                    <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-lg font-medium hover:bg-accent-hover transition">
+                    <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-full font-medium hover:bg-accent-hover transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-lg">
                         <svg className="w-5 h-5 mr-2"><use href="#icon-rename"></use></svg>
                         New Chat
                     </button>
@@ -727,7 +721,7 @@ const ChatSidebar: React.FC<{
                         placeholder="Search chats..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-secondary border border-primary rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition text-primary"
+                        className="w-full bg-transparent border border-primary rounded-full py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 focus:bg-secondary transition text-primary"
                     />
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
                         <svg className="w-4 h-4"><use href="#icon-search"></use></svg>
@@ -753,14 +747,6 @@ const ChatSidebar: React.FC<{
                     ))}
                 </div>
             )}
-             <div className="p-2 flex-shrink-0">
-                <button onClick={onViewProfile} className="p-2 w-full flex items-center space-x-3 text-left hover:bg-hover rounded-lg transition-colors">
-                    {userProfile && <Avatar email={userProfile.email} photoURL={userProfile.photoURL} size="sm" />}
-                    <div className="min-w-0">
-                        <p className="font-semibold text-primary text-sm truncate">{userProfile?.username ?? '...'}</p>
-                    </div>
-                </button>
-            </div>
         </div>
     );
 };
@@ -834,7 +820,7 @@ const SidebarItem: React.FC<{
                         onChange={(e) => setEditInputValue(e.target.value)}
                         onBlur={handleRename}
                         onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                        className="session-text text-sm w-full bg-secondary border border-secondary rounded px-1 py-0.5"
+                        className="session-text text-sm w-full bg-transparent border border-primary rounded-full px-2 py-0.5"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
@@ -864,7 +850,7 @@ const ChatMessages: React.FC<{
     }, [messages, isLoading]);
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-4xl mx-auto">
             <div className="flex flex-col space-y-5">
                 {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>)}
                 {isLoading && <ChatMessageItem message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
@@ -994,7 +980,7 @@ const ChatMessageItem: React.FC<{
         if (isGeneratingVideo) {
             return (
                 <div className="flex items-start gap-3 justify-start">
-                    <Avatar email="ai@lazerdsgn.com" size="sm" />
+                    
                     <div className="p-4 bg-muted rounded-2xl">
                         <div className="w-64 h-36 rounded-lg flex flex-col items-center justify-center overflow-hidden">
                             <div className="w-full h-full shimmer-bg flex flex-col items-center justify-center">
@@ -1009,11 +995,11 @@ const ChatMessageItem: React.FC<{
         if (isGeneratingImage) {
             return (
                 <div className="flex items-start gap-3 justify-start">
-                    <Avatar email="ai@lazerdsgn.com" size="sm" />
+                    
                     <div className="p-4 bg-muted rounded-2xl">
                         <div className="w-64 h-64 rounded-lg flex flex-col items-center justify-center overflow-hidden">
                             <div className="w-full h-full shimmer-bg flex flex-col items-center justify-center">
-                                <svg className="w-12 h-12 text-secondary" fill="none" viewBox="0 0 24" stroke="currentColor"><use href="#icon-image"></use></svg>
+                                <svg className="w-12 h-12 text-secondary"><use href="#icon-image-gen"></use></svg>
                                 <p className="mt-2 text-sm text-secondary">Conjuring pixels...</p>
                             </div>
                         </div>
@@ -1023,8 +1009,8 @@ const ChatMessageItem: React.FC<{
         }
         return (
              <div className="flex items-start gap-3 justify-start">
-                <Avatar email="ai@lazerdsgn.com" size="sm" />
-                <div className="chat-message-bubble bg-muted">
+                
+                <div className="chat-message-bubble bg-secondary">
                     <div className="typing-indicator flex items-center space-x-1.5 p-2">
                         <span></span>
                         <span></span>
@@ -1120,7 +1106,6 @@ const ChatMessageItem: React.FC<{
 
     return (
         <div className={`flex items-start gap-3 ${messageAlignmentClass} chat-message-container`}>
-            {!isUser && <Avatar email="ai@lazerdsgn.com" size="sm" />}
             <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
                 {renderFilePreview(message)}
                 
@@ -1139,7 +1124,6 @@ const ChatMessageItem: React.FC<{
                     )}
                 </div>
             </div>
-            {isUser && userProfile && <Avatar email={userProfile.email} photoURL={userProfile.photoURL} size="sm" />}
         </div>
     );
 };
@@ -1281,27 +1265,27 @@ const ChatInput: React.FC<{
     const isAnyModeActive = isImageGenMode || isAnalysisMode || isVideoGenMode;
 
     return (
-         <div className="p-4 md:px-6 bg-secondary flex-shrink-0">
-            <div className="w-full max-w-3xl mx-auto">
+        <div className="w-full max-w-3xl mx-auto">
+            <div className={isAnyModeActive ? 'ask-ai-active rounded-3xl' : ''}>
                 <form 
                     onSubmit={handleSubmit} 
-                    className={`relative bg-muted border border-transparent focus-within:border-secondary transition-all duration-300 shadow-sm rounded-3xl ${isAnyModeActive ? 'mode-active-glow' : ''}`}
+                    className="relative transition-all duration-300 shadow-lg rounded-3xl glass-surface"
                 >
                     {/* NEW: Redesigned Active Mode Indicator */}
                     <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isAnyModeActive ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
                         <div className="px-4 pt-3 pb-1 flex justify-between items-center">
                             <div className="flex items-center space-x-2 text-primary text-sm font-semibold min-w-0">
-                                {isImageGenMode && <><svg className="w-5 h-5 text-purple-500 flex-shrink-0"><use href="#icon-image"></use></svg><span className="truncate">Image Generation</span></>}
+                                {isImageGenMode && <><svg className="w-5 h-5 text-purple-500 flex-shrink-0"><use href="#icon-image-gen"></use></svg><span className="truncate">Image Generation</span></>}
                                 {isVideoGenMode && <><svg className="w-5 h-5 text-blue-500 flex-shrink-0"><use href="#icon-video"></use></svg><span className="truncate">Video Generation</span></>}
-                                {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-sparkle"></use></svg><span className="truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span></>}
+                                {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-enhance"></use></svg><span className="truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span></>}
                             </div>
                             <button type="button" onClick={dismissMode} className="p-1 rounded-full hover:bg-hover flex-shrink-0">
-                                <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
                         {isVideoGenMode && (
                              <div className="px-4 pb-2 flex items-center justify-start">
-                                <div className="flex items-center bg-secondary border border-primary rounded-full p-0.5">
+                                <div className="flex items-center bg-muted border border-primary rounded-full p-0.5">
                                     <button type="button" onClick={() => onVideoAspectRatioChange('16:9')} className={`px-2 py-0.5 text-xs rounded-full transition-colors ${videoAspectRatio === '16:9' ? 'bg-primary-accent text-on-primary-accent' : 'text-secondary hover:bg-hover'}`}>16:9</button>
                                     <button type="button" onClick={() => onVideoAspectRatioChange('9:16')} className={`px-2 py-0.5 text-xs rounded-full transition-colors ${videoAspectRatio === '9:16' ? 'bg-primary-accent text-on-primary-accent' : 'text-secondary hover:bg-hover'}`}>9:16</button>
                                 </div>
@@ -1317,17 +1301,17 @@ const ChatInput: React.FC<{
                                     <svg className="w-5 h-5 text-muted"><use href="#icon-video"></use></svg>
                                 </button>
                                 <button type="button" onClick={handleSelectImageGen} title="Image Gen" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
-                                    <svg className="w-5 h-5 text-muted"><use href="#icon-image"></use></svg>
+                                    <svg className="w-5 h-5 text-muted"><use href="#icon-image-gen"></use></svg>
                                 </button>
                                 <button type="button" onClick={handleSelectAnalysis} title="Analysis" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
-                                     <svg className="w-5 h-5 text-muted"><use href="#icon-sparkle"></use></svg>
+                                     <svg className="w-5 h-5 text-muted"><use href="#icon-enhance"></use></svg>
                                 </button>
                             </div>
                             
                             <button 
                                 type="button" 
                                 onClick={() => setIsMenuOpen(!isMenuOpen)} 
-                                className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-muted rounded-full hover:bg-hover transition-all duration-300 ease-in-out"
+                                className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 transition-all duration-300 ease-in-out"
                             >
                                 <svg className={`w-6 h-6 text-muted transition-transform duration-300 ${isMenuOpen ? 'rotate-45' : 'rotate-0'}`}><use href="#icon-plus"></use></svg>
                             </button>
@@ -1354,7 +1338,7 @@ const ChatInput: React.FC<{
                                 isVideoGenMode ? "Describe a video scene..." :
                                 isImageGenMode ? "Describe an image..." :
                                 isAnalysisMode ? (analysisFile ? "Ask about the file..." : "Add a file and ask a question...") :
-                                "Ask a question..."
+                                "Ask anything..."
                             }
                             className="flex-1 py-2 bg-transparent border-none focus:ring-0 focus:outline-none placeholder-muted text-primary resize-none text-base"
                             rows={1}
@@ -1365,7 +1349,7 @@ const ChatInput: React.FC<{
                         <button
                             type="button"
                             onClick={handleMicClick}
-                            className={`self-end w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'mic-listening' : 'bg-muted hover:bg-hover'}`}
+                            className={`self-end w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'mic-listening' : 'hover:bg-hover'}`}
                             disabled={isLoading}
                             aria-label={isListening ? 'Stop listening' : 'Start voice input'}
                         >
@@ -1374,7 +1358,7 @@ const ChatInput: React.FC<{
 
                         <button
                             type="submit"
-                            className="self-end w-10 h-10 flex items-center justify-center rounded-full bg-primary-accent text-on-primary-accent hover:bg-accent-hover transition disabled:opacity-50"
+                            className="self-end w-10 h-10 flex items-center justify-center rounded-2xl bg-primary-accent text-on-primary-accent hover:bg-accent-hover transition-all duration-300 hover:scale-110 hover:shadow-lg disabled:opacity-50 disabled:scale-100"
                             disabled={isLoading || (!input.trim() && !analysisFile)}
                         >
                             <svg className="h-5 w-5"><use href="#icon-paper-plane"></use></svg>
@@ -1382,7 +1366,7 @@ const ChatInput: React.FC<{
                     </div>
                 </form>
             </div>
-         </div>
+        </div>
     );
 };
 

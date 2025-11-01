@@ -14,7 +14,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
     };
 
     return (
-        <footer id="footer" className="bg-secondary border-t border-primary pt-16 pb-8">
+        <footer id="footer" className="pt-16 pb-8">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-12 pb-16">
                     <div className="col-span-2 md:col-span-1">
@@ -25,7 +25,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
                         <div className="flex items-center border border-secondary rounded-xl overflow-hidden p-1 bg-secondary max-w-xs">
                             <input type="email" placeholder="Enter your email" className="w-full px-3 py-2 text-sm border-none focus:ring-0 focus:outline-none placeholder-muted bg-transparent text-primary" />
                             <button className="bg-primary-accent text-on-primary-accent p-2 rounded-lg hover:bg-accent-hover transition">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                                 </svg>
                             </button>
@@ -72,7 +72,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
                         </div>
                     </div>
                 </div>
-                <div className="border-t border-primary pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-muted">
+                <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-muted">
                     <p>&copy; 2024 LazerDsgn. All rights reserved.</p>
                     <div className="flex space-x-6 mt-4 md:mt-0">
                         <a href="#" className="hover:text-primary transition">Privacy Policy</a>

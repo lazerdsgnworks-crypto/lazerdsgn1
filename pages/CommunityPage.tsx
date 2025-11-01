@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { User, CommunityPost, Author, UserProfile, RepostedPost } from '../types';
+import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types';
 import { db } from '../services/firebase';
 // FIX: Corrected a type mismatch where `serverTimestamp()` (which returns a `FieldValue`) was assigned to a field expecting a `Timestamp`. By casting `serverTimestamp() as Timestamp`, we satisfy the TypeScript compiler while ensuring Firestore correctly sets the server-side timestamp upon document creation. Added `Timestamp` to the `firebase/firestore` import to make the type available for casting.
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, QuerySnapshot, DocumentData, doc, updateDoc, where, getDocs, startAt, endAt, limit, deleteDoc, setDoc, runTransaction, Timestamp } from 'firebase/firestore';
@@ -8,18 +8,21 @@ import Avatar from '../components/Avatar';
 import RightSidebar from '../components/community/RightSidebar';
 import ImagePreviewModal from '../components/community/ImagePreviewModal';
 import RepostModal from '../components/community/RepostModal';
-import { compressImage, dataURLtoFile } from '../utils/files';
+import { compressImage, dataURLtoFile } from '../../utils/files';
+import Modal from '../components/Modal';
+
 
 // --- Cloudinary Configuration ---
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
 const AI_QUERY_WEBHOOK_URL = "https://umarworks2.app.n8n.cloud/webhook/queries";
+const ENHANCE_POST_WEBHOOK_URL = "https://umarworks2.app.n8n.cloud/webhook/enhancepost";
 // const USER_SEARCH_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/user-search";
 
 
 // Reusable & Standalone Components
 const PostSkeleton: React.FC = () => (
-    <div className="bg-secondary border-b sm:border border-primary sm:rounded-xl p-4 animate-pulse">
+    <div className="bg-secondary sm:rounded-xl p-4 animate-pulse">
         <div className="flex space-x-4">
             <div className="w-12 h-12 bg-muted rounded-full flex-shrink-0"></div>
             <div className="flex-1 space-y-3">
@@ -35,7 +38,7 @@ const PostSkeleton: React.FC = () => (
 const CreatePostForm: React.FC<{
     user: User;
     userProfile: UserProfile | null;
-    onCreatePost: (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => void;
+    onCreatePost: (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => void;
     isAiQuery: boolean;
     onAiQueryChange: (isAi: boolean) => void;
 }> = ({ user, userProfile, onCreatePost, isAiQuery, onAiQueryChange }) => {
@@ -45,9 +48,14 @@ const CreatePostForm: React.FC<{
     const [previews, setPreviews] = useState<string[]>([]);
     const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
     const [status, setStatus] = useState<'idle' | 'compressing' | 'uploading' | 'submitting'>('idle');
+    const [isEnhancing, setIsEnhancing] = useState(false);
+    const [enhancedText, setEnhancedText] = useState<string | null>(null);
+
+    // New state for poll creation
+    const [showPollCreator, setShowPollCreator] = useState(false);
+    const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     
-    const imageInputRef = useRef<HTMLInputElement>(null);
-    const videoInputRef = useRef<HTMLInputElement>(null);
+    const mediaInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -63,69 +71,89 @@ const CreatePostForm: React.FC<{
         previews.forEach(p => URL.revokeObjectURL(p));
         setPreviews([]);
         setMediaType(null);
-        if(imageInputRef.current) imageInputRef.current.value = "";
-        if(videoInputRef.current) videoInputRef.current.value = "";
+        if(mediaInputRef.current) mediaInputRef.current.value = "";
     };
 
-    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const removePoll = () => {
+        setShowPollCreator(false);
+        setPollOptions(['', '']);
+    }
+
+    const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         if (!files.length) return;
 
-        removeMedia();
+        removeMedia(); 
+        removePoll();
 
-        if (files.length > 4) {
-            alert("You can upload a maximum of 4 images.");
+        const firstFile = files[0];
+
+        if (firstFile.type.startsWith('video/')) {
+            if (files.length > 1) {
+                alert("You can only upload one video at a time.");
+                if (mediaInputRef.current) mediaInputRef.current.value = "";
+                return;
+            }
+            if (firstFile.size > 50 * 1024 * 1024) { 
+                alert("Video file is too large. Please select a video under 50MB.");
+                if (mediaInputRef.current) mediaInputRef.current.value = "";
+                return;
+            }
+            setVideoFile(firstFile);
+            setPreviews([URL.createObjectURL(firstFile)]);
+            setMediaType('video');
+        } 
+        else if (firstFile.type.startsWith('image/')) {
+            const allImages = files.every(f => f.type.startsWith('image/'));
+            if (!allImages) {
+                alert("You cannot mix images with other file types.");
+                if (mediaInputRef.current) mediaInputRef.current.value = "";
+                return;
+            }
+            if (files.length > 4) {
+                alert("You can upload a maximum of 4 images.");
+                if (mediaInputRef.current) mediaInputRef.current.value = "";
+                return;
+            }
+            const totalSize = files.reduce<number>((acc, file) => acc + file.size, 0);
+            if (totalSize > 20 * 1024 * 1024) {
+                alert("Total image size exceeds 20MB. Please select smaller files.");
+                if (mediaInputRef.current) mediaInputRef.current.value = "";
+                return;
+            }
+            
+            setStatus('compressing');
+            try {
+                const compressedFiles = await Promise.all(files.map((file) => {
+                    if (file.size > 1024 * 1024) { // Compress images over 1MB
+                        return compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name));
+                    }
+                    return Promise.resolve(file);
+                }));
+                setImageFiles(compressedFiles);
+                setPreviews(compressedFiles.map(f => URL.createObjectURL(f)));
+                setMediaType('image');
+            } catch (err) {
+                console.error("Image processing failed", err);
+                alert("An error occurred while processing images. Please try again.");
+                removeMedia();
+            } finally {
+                setStatus('idle');
+            }
+        } 
+        else {
+            alert("Unsupported file type. Please select images or a video.");
+            if (mediaInputRef.current) mediaInputRef.current.value = "";
             return;
         }
-
-        // FIX: Explicitly type the return value of reduce to ensure `totalSize` is a number.
-        const totalSize = files.reduce<number>((acc, file: File) => acc + file.size, 0);
-        if (totalSize > 20 * 1024 * 1024) { // 20MB total limit
-            alert("Total image size exceeds 20MB. Please select smaller files.");
-            return;
-        }
-        
-        setStatus('compressing');
-        try {
-            // FIX: Explicitly type 'file' as File to access its properties and pass it to functions.
-            const compressedFiles = await Promise.all(files.map((file: File) => {
-                 if (file.size > 1024 * 1024) {
-                    return compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name));
-                }
-                return Promise.resolve(file);
-            }));
-
-            setImageFiles(compressedFiles);
-            setPreviews(compressedFiles.map(f => URL.createObjectURL(f)));
-            setMediaType('image');
-        } catch (err) {
-            console.error("Image processing failed", err);
-            alert("An error occurred while processing images. Please try again.");
-            removeMedia();
-        } finally {
-            setStatus('idle');
-        }
-    };
-    
-    const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        removeMedia();
-
-        if (file.size > 50 * 1024 * 1024) { 
-            alert("Video file is too large. Please select a video under 50MB.");
-            return;
-        }
-        setVideoFile(file);
-        setPreviews([URL.createObjectURL(file)]);
-        setMediaType('video');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const mediaFile = videoFile;
-        if (!user || (!text.trim() && !mediaFile && imageFiles.length === 0) || status !== 'idle') return;
+        const validPollOptions = pollOptions.map(o => o.trim()).filter(Boolean);
+        const hasContent = text.trim() || videoFile || imageFiles.length > 0 || (showPollCreator && validPollOptions.length >= 2);
+        
+        if (!user || !hasContent || status !== 'idle') return;
         
         let finalMediaUrls: string[] | null = null;
         let finalMediaType: 'image' | 'video' | null = null;
@@ -165,10 +193,11 @@ const CreatePostForm: React.FC<{
             }
             
             setStatus('submitting');
-            await onCreatePost(text, finalMediaUrls, finalMediaType, isAiQuery);
+            await onCreatePost(text, finalMediaUrls, finalMediaType, isAiQuery, showPollCreator ? validPollOptions : null);
             
             setText('');
             removeMedia();
+            removePoll();
             onAiQueryChange(false);
             if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
@@ -181,6 +210,67 @@ const CreatePostForm: React.FC<{
         }
     };
 
+    const handleEnhance = async () => {
+        if (isEnhancing) return;
+        setIsEnhancing(true);
+        setEnhancedText(null);
+        try {
+            const response = await fetch(ENHANCE_POST_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, userId: user.uid })
+            });
+            if (!response.ok) throw new Error(`AI enhancer failed with status ${response.status}`);
+            const result = await response.json();
+            const aiText = result.output || result.text || result.enhancedText || "Sorry, the AI couldn't enhance this text.";
+            setEnhancedText(aiText);
+        } catch (error) {
+            console.error("Error enhancing post:", error);
+            setEnhancedText("An error occurred while enhancing the text. Please try again.");
+        } finally {
+            setIsEnhancing(false);
+        }
+    };
+
+    const handleReplaceText = () => {
+        if (enhancedText) {
+            setText(enhancedText);
+            // Manually trigger textarea resize after text change
+            setTimeout(() => {
+                if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+                }
+            }, 0);
+        }
+        setEnhancedText(null);
+    };
+
+    const handlePollOptionChange = (index: number, value: string) => {
+        const newOptions = [...pollOptions];
+        newOptions[index] = value;
+        setPollOptions(newOptions);
+    };
+
+    const addPollOption = () => {
+        if (pollOptions.length < 4) {
+            setPollOptions([...pollOptions, '']);
+        }
+    };
+
+    const removePollOption = (index: number) => {
+        if (pollOptions.length > 2) {
+            setPollOptions(pollOptions.filter((_, i) => i !== index));
+        }
+    };
+
+    const togglePollCreator = () => {
+        if (!showPollCreator) {
+            removeMedia();
+        }
+        setShowPollCreator(!showPollCreator);
+    };
+
     if (!user) return null;
     
     const buttonText = {
@@ -189,36 +279,54 @@ const CreatePostForm: React.FC<{
         uploading: 'Uploading...',
         submitting: isAiQuery ? 'Asking...' : 'Posting...',
     };
+    
+    const isPostable = text.trim() || imageFiles.length > 0 || videoFile || (showPollCreator && pollOptions.filter(o => o.trim()).length >= 2);
 
     return (
-        <div className={`transition-all duration-300 rounded-xl ${isAiQuery ? 'ask-ai-active' : ''}`}>
-            <div className="p-4 flex space-x-4">
+        <div className="p-4">
+            <div className="flex space-x-4">
                 <div className="flex-shrink-0">
                     <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="lg" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                     <form onSubmit={handleSubmit} className="w-full h-full">
                         <textarea
                             ref={textareaRef}
                             value={text}
                             onChange={handleTextChange}
                             placeholder={isAiQuery ? "Ask the AI a question..." : "Start a thread..."}
-                            className="w-full bg-transparent text-lg text-primary placeholder-muted focus:ring-0 focus:outline-none resize-none overflow-hidden transition-all duration-200 py-2 px-1"
+                            className="w-full bg-transparent text-lg text-primary placeholder-muted focus:ring-0 focus:outline-none resize-none overflow-y-auto max-h-60"
+                            style={{ wordBreak: 'break-word' }}
                             rows={1}
                         />
+
+                        {enhancedText && (
+                            <div className="mt-3 p-3 border border-primary rounded-xl text-sm transition-all duration-300 ease-in-out max-h-40 overflow-y-auto">
+                                <h4 className="font-semibold text-primary mb-1 flex items-center space-x-1.5">
+                                    <svg className="w-4 h-4 text-secondary-accent"><use href="#icon-sparkle"></use></svg>
+                                    <span>AI Suggestion</span>
+                                </h4>
+                                <p className="text-secondary whitespace-pre-wrap">{enhancedText}</p>
+                                <div className="flex justify-end space-x-2 mt-3">
+                                    <button type="button" onClick={() => setEnhancedText(null)} className="px-3 py-1 text-xs font-semibold border border-secondary rounded-full hover:bg-hover">Dismiss</button>
+                                    <button type="button" onClick={handleReplaceText} className="px-3 py-1 text-xs font-semibold bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover">Accept</button>
+                                </div>
+                            </div>
+                        )}
+
                         {previews.length > 0 && (
-                             <div className="mt-3 relative">
+                            <div className="mt-3 relative w-full">
                                 <button type="button" onClick={removeMedia} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0 leading-none text-xl w-6 h-6 flex items-center justify-center hover:bg-black/80 transition-colors z-20">&times;</button>
                                 
                                 {mediaType === 'video' ? (
-                                    <div className="rounded-xl w-full max-h-72 border border-primary shadow-sm overflow-hidden bg-black flex justify-center items-center">
+                                    <div className="rounded-xl w-full max-h-72 shadow-sm overflow-hidden bg-black flex justify-center items-center">
                                         <video src={previews[0]} controls className="w-full h-full" />
                                     </div>
                                 ) : (
-                                    <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                    <div className="flex w-full space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                         <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
                                         {previews.map((src, index) => (
-                                            <div key={index} className="flex-shrink-0 h-20 w-20 bg-muted rounded-lg overflow-hidden border border-primary">
+                                            <div key={index} className="flex-shrink-0 h-24 w-24 bg-muted rounded-lg overflow-hidden">
                                                 <img 
                                                     src={src} 
                                                     alt={`Preview ${index + 1}`} 
@@ -230,27 +338,65 @@ const CreatePostForm: React.FC<{
                                 )}
                             </div>
                         )}
+
+                        {showPollCreator && (
+                            <div className="mt-3 space-y-2">
+                                {pollOptions.map((option, index) => (
+                                    <div key={index} className="flex items-center space-x-2">
+                                        <input
+                                            type="text"
+                                            value={option}
+                                            onChange={(e) => handlePollOptionChange(index, e.target.value)}
+                                            placeholder={`Option ${index + 1}`}
+                                            maxLength={50}
+                                            className="flex-1 p-2 text-sm bg-muted border border-secondary rounded-lg focus:bg-secondary focus:border-secondary focus:ring-0 transition text-primary"
+                                        />
+                                        {pollOptions.length > 2 && (
+                                            <button type="button" onClick={() => removePollOption(index)} className="p-2 text-muted hover:text-red-500 rounded-full transition-colors">
+                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {pollOptions.length < 4 && (
+                                    <button type="button" onClick={addPollOption} className="text-sm font-semibold text-blue-500 hover:underline">Add option</button>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-center mt-3 pt-2">
-                            <div className="flex items-center space-x-4">
-                                <button type="button" onClick={() => imageInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
-                                    <svg className="w-5 h-5"><use href="#icon-image"></use></svg>
+                            <div className="flex items-center space-x-1">
+                                <button type="button" onClick={() => mediaInputRef.current?.click()} className="p-2.5 text-secondary hover:text-blue-500 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50" disabled={showPollCreator || status !== 'idle'} title="Add media">
+                                    <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
                                 </button>
-                                <button type="button" onClick={() => videoInputRef.current?.click()} className="text-muted hover:text-primary transition-colors disabled:opacity-50" disabled={status !== 'idle'}>
-                                    <svg className="w-5 h-5"><use href="#icon-video"></use></svg>
+                                 <button type="button" onClick={togglePollCreator} className="p-2.5 text-secondary hover:text-green-500 hover:bg-green-500/10 rounded-full transition-colors disabled:opacity-50" disabled={mediaType !== null || status !== 'idle'} title="Create poll">
+                                    <svg className="w-6 h-6"><use href="#icon-poll"></use></svg>
                                 </button>
-                                <label className="flex items-center space-x-2 cursor-pointer group">
+                                <button type="button" onClick={handleEnhance} className="p-2.5 text-secondary hover:text-purple-500 hover:bg-purple-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle' || isEnhancing} title="Enhance with AI">
+                                    {isEnhancing ? (
+                                        <svg className="w-6 h-6 animate-spin"><use href="#icon-spinner"></use></svg>
+                                    ) : (
+                                        <svg className="w-6 h-6"><use href="#icon-enhance"></use></svg>
+                                    )}
+                                </button>
+                                <label className="flex items-center space-x-2 cursor-pointer group ml-2">
                                     <div className="ai-toggle-switch">
                                         <input type="checkbox" checked={isAiQuery} onChange={() => onAiQueryChange(!isAiQuery)} />
-                                        <span className="ai-toggle-slider"></span>
+                                        <span className="ai-toggle-slider">
+                                            <span className="ai-toggle-circle">
+                                                <svg className="w-3 h-3 text-secondary-accent ai-toggle-icon-on"><use href="#icon-sparkle"></use></svg>
+                                            </span>
+                                        </span>
                                     </div>
-                                    <span className={`text-sm font-medium transition-colors duration-300 ${isAiQuery ? 'text-secondary-accent font-bold' : 'text-secondary group-hover:text-primary'}`}>Ask AI</span>
+                                    <span className={`hidden sm:inline text-sm font-medium transition-colors duration-300 ${isAiQuery ? 'text-secondary-accent font-bold' : 'text-secondary group-hover:text-primary'}`}>Ask AI</span>
                                 </label>
                             </div>
-                            <input type="file" ref={imageInputRef} onChange={handleImageChange} accept="image/jpeg,image/png,image/webp" multiple hidden disabled={status !== 'idle'} />
-                            <input type="file" ref={videoInputRef} onChange={handleVideoChange} accept="video/*" hidden disabled={status !== 'idle'} />
-                            <button type="submit" disabled={status !== 'idle' || (!text.trim() && imageFiles.length === 0 && !videoFile)} className="px-6 py-2 bg-primary-accent text-on-primary-accent border-2 border-transparent font-semibold rounded-full hover:bg-accent-hover transition disabled:opacity-30 disabled:cursor-not-allowed text-base">
-                                 {buttonText[status]}
-                            </button>
+                            <div className="flex items-center space-x-4">
+                                <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*,video/*" multiple hidden disabled={status !== 'idle'} />
+                                <button type="submit" disabled={status !== 'idle' || !isPostable} className="btn btn-primary !py-1.5 !px-5 !text-sm">
+                                    {buttonText[status]}
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -259,7 +405,7 @@ const CreatePostForm: React.FC<{
     );
 };
 
-const CreatePostModal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.ReactNode }> = ({ isOpen, onClose, children }) => {
+const CreatePostModal: React.FC<{ isOpen: boolean; onClose: () => void; children: React.ReactNode; isAiQuery: boolean; }> = ({ isOpen, onClose, children, isAiQuery }) => {
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -273,18 +419,27 @@ const CreatePostModal: React.FC<{ isOpen: boolean; onClose: () => void; children
 
     return (
         <div 
-            className={`fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 bg-black/50 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={onClose}
         >
             <div 
-                className={`bg-secondary w-full max-w-2xl rounded-2xl shadow-xl transition-all duration-300 ease-in-out transform ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+                className={`create-post-glass w-full max-w-lg rounded-2xl shadow-xl transition-all duration-300 ease-in-out transform ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'} ${isAiQuery ? 'ask-ai-active' : ''}`}
+                style={{ maxHeight: '85vh' }}
                 onClick={e => e.stopPropagation()}
             >
-                <div className="p-2 border-b border-primary flex justify-center items-center relative">
-                    <h2 className="text-lg font-bold text-primary">Create Post</h2>
-                    <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-2xl text-muted hover:text-primary">&times;</button>
+                <div className="bg-secondary rounded-2xl flex flex-col" style={{ maxHeight: 'inherit' }}>
+                    <div className="p-3 border-b border-primary flex justify-center items-center relative flex-shrink-0">
+                        <h2 className="text-lg font-bold text-primary">Create Post</h2>
+                        <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-muted hover:bg-hover p-1.5 rounded-full transition-colors">
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div className="overflow-y-auto">
+                        {children}
+                    </div>
                 </div>
-                {children}
             </div>
         </div>
     );
@@ -461,12 +616,14 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     }, [uniqueAuthors]);
 
 
-    const handleCreatePost = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => {
-        if (!user || !userProfile || (!text.trim() && !mediaUrls)) return;
+    const handleCreatePost = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => {
+        if (!user || !userProfile) return;
+        const hasContent = text.trim() || mediaUrls || (pollOptions && pollOptions.length > 0);
+        if (!hasContent) return;
     
         const author: Author = { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null };
         
-        // Using `any` to allow adding aiReply dynamically.
+        // Using `any` to allow adding fields dynamically.
         const postData: any = {
             author,
             text,
@@ -475,7 +632,13 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             likeCount: 0,
             repostCount: 0,
         };
-        if (mediaUrls && mediaUrls.length > 0 && mediaType) {
+
+        if (pollOptions && pollOptions.length >= 2) {
+            postData.poll = {
+                options: pollOptions.map(optionText => ({ text: optionText, votes: 0 })),
+                voters: {}
+            };
+        } else if (mediaUrls && mediaUrls.length > 0 && mediaType) {
             postData.mediaUrls = mediaUrls;
             postData.mediaType = mediaType;
         }
@@ -503,12 +666,11 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             }
         }
     
-        // Now, create the document in one go.
         await addDoc(collection(db, 'community-posts'), postData);
     };
     
-    const handleCreatePostAndCloseModal = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean) => {
-        await handleCreatePost(text, mediaUrls, mediaType, isAiQuery);
+    const handleCreatePostAndCloseModal = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => {
+        await handleCreatePost(text, mediaUrls, mediaType, isAiQuery, pollOptions);
         setCreatePostModalOpen(false);
     };
     
@@ -603,7 +765,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                 </button>
                             </div>
                             
-                            <div className="sm:space-y-4">
+                            <div className="divide-y divide-border-primary sm:divide-y-0 sm:space-y-4">
                                 {error && (
                                     <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg">
                                         <strong>Loading Failed:</strong> {error}
@@ -657,7 +819,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             )}
 
             {user && userProfile && (
-                <CreatePostModal isOpen={isCreatePostModalOpen} onClose={() => setCreatePostModalOpen(false)}>
+                <CreatePostModal isOpen={isCreatePostModalOpen} onClose={() => setCreatePostModalOpen(false)} isAiQuery={isCreatingPostAi}>
                     <CreatePostForm
                         user={user}
                         userProfile={userProfile}

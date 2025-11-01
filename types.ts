@@ -1,4 +1,3 @@
-
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Timestamp } from 'firebase/firestore';
 
@@ -65,12 +64,23 @@ export interface RepostedPost {
   createdAt: Timestamp;
 }
 
+export interface PollOption {
+  text: string;
+  votes: number;
+}
+
+export interface Poll {
+  options: PollOption[];
+  voters: { [userId: string]: number }; // Maps user ID to the index of their chosen option
+}
+
 export interface CommunityPost {
   id: string;
   author: Author;
   text: string;
   mediaUrls?: string[];
   mediaType?: 'image' | 'video';
+  poll?: Poll;
   createdAt: Timestamp;
   commentCount: number;
   likeCount?: number;

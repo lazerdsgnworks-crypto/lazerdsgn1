@@ -91,7 +91,7 @@ const LoginForm: React.FC<{
                         </button>
                     </div>
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                <button type="submit" className="w-full btn btn-primary" disabled={isLoading || isSuccess}>
                     {buttonContent}
                 </button>
             </form>
@@ -103,7 +103,7 @@ const LoginForm: React.FC<{
                     <span className="px-3 bg-secondary text-muted">OR</span>
                 </div>
             </div>
-            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-lg hover:bg-hover transition-all duration-300 hover:shadow-md">
+            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-full hover:bg-hover transition-all duration-300 hover:shadow-md">
                 <svg className="w-5 h-5 mr-3"><use href="#icon-google"></use></svg>
                 <span className="text-sm font-medium text-primary">Sign in with Google</span>
             </button>
@@ -184,7 +184,7 @@ const SignupForm: React.FC<{
                         </button>
                     </div>
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                <button type="submit" className="w-full btn btn-primary" disabled={isLoading || isSuccess}>
                     {buttonContent}
                 </button>
             </form>
@@ -196,7 +196,7 @@ const SignupForm: React.FC<{
                     <span className="px-3 bg-secondary text-muted">OR</span>
                 </div>
             </div>
-            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-lg hover:bg-hover transition-all duration-300 hover:shadow-md">
+            <button onClick={onGoogleSignIn} className="w-full flex items-center justify-center py-3 px-4 border border-secondary rounded-full hover:bg-hover transition-all duration-300 hover:shadow-md">
                 <svg className="w-5 h-5 mr-3"><use href="#icon-google"></use></svg>
                 <span className="text-sm font-medium text-primary">Sign up with Google</span>
             </button>
@@ -249,7 +249,7 @@ const ForgotPasswordForm: React.FC<{
                     <label className="text-sm font-medium text-secondary" htmlFor="email-forgot">Email</label>
                     <input type="email" name="email" id="email-forgot" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                <button type="submit" className="w-full btn btn-primary" disabled={isLoading || isSuccess}>
                     {buttonContent}
                 </button>
             </form>
@@ -317,7 +317,7 @@ const ChangePasswordForm: React.FC<{
                     <label className="text-sm font-medium text-secondary" htmlFor="confirm-password">Confirm New Password</label>
                     <input type="password" name="confirmPassword" id="confirm-password" required minLength={6} className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
                 </div>
-                <button type="submit" className="w-full py-3 px-4 bg-primary-accent text-on-primary-accent font-semibold rounded-lg hover:bg-accent-hover transition text-base" disabled={isLoading || isSuccess}>
+                <button type="submit" className="w-full btn btn-primary" disabled={isLoading || isSuccess}>
                     {buttonContent}
                 </button>
             </form>
@@ -347,7 +347,7 @@ const DeleteConfirmationModal: React.FC<{
                 <div className="flex justify-center space-x-4">
                     <button
                         onClick={onClose}
-                        className="px-8 py-2.5 text-sm font-semibold border border-secondary rounded-lg hover:bg-hover transition-colors"
+                        className="px-8 py-2.5 text-sm font-semibold border border-secondary rounded-full hover:bg-hover transition-colors"
                     >
                         Cancel
                     </button>
@@ -356,7 +356,7 @@ const DeleteConfirmationModal: React.FC<{
                             onConfirm();
                             onClose();
                         }}
-                        className="px-8 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary"
+                        className="px-8 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary"
                     >
                         Delete
                     </button>

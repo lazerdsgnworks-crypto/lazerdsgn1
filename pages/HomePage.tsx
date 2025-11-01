@@ -1,6 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { Page, User } from '../types';
 
+// Add TypeScript declaration for the Framer custom element
+declare namespace JSX {
+    interface IntrinsicElements {
+        'framer-vIhm-prod': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+    }
+}
+
 interface HomePageProps {
     user: User;
     navigateTo: (page: Page) => void;
@@ -60,6 +67,18 @@ const testimonials = [
     { name: "Maria Rodriguez", title: "Founder, Small Retail", avatar: null, avatarInitial: "M", text: "The execution of our campaign assets exceeded expectations. Every touchpoint felt integrated and premium, improving overall brand perception." },
 ];
 
+const LiquidBackground = () => {
+    return React.createElement('framer-vIhm-prod', {
+        style: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: -1,
+        }
+    });
+};
 
 const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, openLoginModal }) => {
     const pageRef = useRef<HTMLDivElement>(null);
@@ -74,30 +93,31 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
     
     return (
         <div ref={pageRef} className="page-transition">
-            <section id="hero" className="py-24 md:py-40 text-center">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <h1 className="hero-headline tracking-tighter text-primary mb-6">
-                        Design that makes <br className="hidden sm:block" /> your brand pop.
-                    </h1>
+            <section id="hero" className="relative py-24 md:py-40 text-center overflow-hidden">
+                <LiquidBackground />
+                <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <h2 className="hero-headline tracking-tighter text-primary mb-6">
+                    Unleash Your<br className="hidden sm:block" /> creativity
+                    </h2>
                     <p className="text-lg md:text-xl text-secondary max-w-2xl mx-auto mb-10">
                         We specialize in sharp, modern graphic design and brand strategy. Stop settling for mediocre visuals and let LazerDsgn create an identity that genuinely connects with your audience.
                     </p>
-                    <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                    <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 mx-auto sm:max-w-none">
                         {user ? (
                             <>
-                                <button onClick={() => navigateTo(Page.Chat)} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
+                                <button onClick={() => navigateTo(Page.Chat)} className="btn btn-secondary">
                                     Let's Chat
                                 </button>
-                                <button onClick={() => navigateTo(Page.Community)} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
+                                <button onClick={() => navigateTo(Page.Community)} className="btn btn-primary">
                                     Join Community
                                 </button>
                             </>
                         ) : (
                              <>
-                                <button onClick={openLoginModal} className="inline-flex items-center justify-center px-8 py-3 border border-secondary text-base font-medium rounded-xl text-primary bg-secondary shadow-sm hover:bg-hover transition">
+                                <button onClick={openLoginModal} className="btn btn-secondary">
                                     Enter Studio
                                 </button>
-                                <button onClick={openSignupModal} className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-xl text-on-primary-accent bg-primary-accent shadow-lg hover:bg-accent-hover transition">
+                                <button onClick={openSignupModal} className="btn btn-primary">
                                     Start Creating
                                 </button>
                             </>

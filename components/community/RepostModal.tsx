@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { CommunityPost, User, UserProfile } from '../../types';
 import Avatar from '../Avatar';
@@ -22,7 +21,7 @@ const formatTimeAgoShort = (date: Date): string => {
 interface RepostModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (text: string) => void;
+    onSubmit: (text: string) => Promise<void>; // Make onSubmit async
     post: CommunityPost | null;
     user: User;
     userProfile: UserProfile | null;
@@ -30,6 +29,7 @@ interface RepostModalProps {
 
 const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, post, user, userProfile }) => {
     const [text, setText] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -39,15 +39,26 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
         } else {
             document.body.style.overflow = 'auto';
             setText('');
+            setIsLoading(false); // Reset loading state on close
         }
         return () => { document.body.style.overflow = 'auto'; };
     }, [isOpen]);
 
     if (!isOpen || !post || !user || !userProfile) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit(text);
+        if (isLoading || !text.trim()) return;
+
+        setIsLoading(true);
+        try {
+            await onSubmit(text);
+            // On success, the parent component will close the modal, which will reset state via useEffect
+        } catch (error) {
+            console.error("Repost submission failed in modal", error);
+            // If submission fails, modal stays open, so we must reset loading state
+            setIsLoading(false);
+        }
     };
     
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
@@ -83,7 +94,7 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
                         </div>
                         
                         {/* Embedded Post Preview */}
-                        <div className="ml-16 mt-2 border border-primary rounded-xl p-3">
+                        <div className="ml-16 mt-2 bg-muted rounded-xl p-3">
                             <div className="flex items-center space-x-2 mb-2">
                                 <Avatar email={post.author.email} photoURL={post.author.photoURL} size="sm" />
                                 <p className="font-bold text-sm truncate text-primary">{post.author.username}</p>
@@ -91,15 +102,19 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
                             </div>
                             <p className="text-primary whitespace-pre-wrap text-sm">{post.text}</p>
                             {post.mediaUrls && post.mediaUrls.length > 0 && (
-                                <div className="mt-2 rounded-lg overflow-hidden border border-primary max-h-48 flex items-center justify-center bg-muted">
+                                <div className="mt-2 rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">
                                     <img src={post.mediaUrls[0]} alt="media" className="max-h-full max-w-full object-contain" />
                                 </div>
                             )}
                         </div>
 
                         <div className="flex justify-end mt-4">
-                            <button type="submit" className="px-6 py-2 bg-primary-accent text-on-primary-accent font-semibold rounded-full hover:bg-accent-hover transition disabled:opacity-50" disabled={!text.trim()}>
-                                Repost
+                            <button type="submit" className="px-6 py-2 bg-primary-accent text-on-primary-accent font-semibold rounded-full hover:bg-accent-hover transition disabled:opacity-50 flex items-center justify-center min-w-[100px]" disabled={!text.trim() || isLoading}>
+                                {isLoading ? (
+                                    <svg className="animate-spin h-5 w-5"><use href="#icon-spinner"></use></svg>
+                                ) : (
+                                    'Repost'
+                                )}
                             </button>
                         </div>
                     </form>

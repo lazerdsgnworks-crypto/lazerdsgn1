@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CommunityPost, UserProfile } from '../../types';
 import Avatar from '../Avatar';
@@ -32,14 +31,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ posts, searchQuery, onSearc
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
                     placeholder="Search Community Users" 
-                    className="w-full bg-muted border border-primary rounded-full py-2 pl-10 pr-4 text-sm focus:ring-primary-accent focus:border-primary-accent transition text-primary"
+                    className="w-full bg-muted border-transparent rounded-full py-2 pl-10 pr-4 text-sm focus:ring-primary-accent focus:border-primary-accent transition text-primary"
                 />
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">
                     <svg className="w-5 h-5"><use href="#icon-search"></use></svg>
                 </div>
             </div>
 
-            <div className="bg-secondary border border-primary rounded-2xl p-4">
+            <div className="glass-surface rounded-2xl p-4">
                 {searchQuery ? (
                     <>
                         <h3 className="text-lg font-bold mb-4 text-primary">Search Results</h3>

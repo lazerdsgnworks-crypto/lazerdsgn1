@@ -17,6 +17,27 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement>(null);
+    const [isScrolled, setIsScrolled] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            // Add glass effect after scrolling a bit (e.g., 20px)
+            setIsScrolled(window.scrollY > 20);
+        };
+
+        if (currentPage === Page.Home) {
+            window.addEventListener('scroll', handleScroll, { passive: true });
+            // Initial check in case the page loads already scrolled
+            handleScroll();
+        } else {
+            // Ensure it's false if we navigate away from home
+            setIsScrolled(false);
+        }
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [currentPage]); // Re-run effect if the page changes
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -68,7 +89,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                         </span>
                     </button>
                     {isProfileMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-secondary rounded-xl shadow-lg border border-primary py-1 z-20">
+                        <div className="absolute right-0 mt-2 w-48 bg-secondary rounded-xl shadow-lg py-1 z-20">
                             <button
                                 onClick={() => { onViewProfile(); setProfileMenuOpen(false); }}
                                 className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover flex items-center space-x-3"
@@ -83,7 +104,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                                 <svg className="w-4 h-4 text-muted"><use href="#icon-key"></use></svg>
                                 <span>Change Password</span>
                             </button>
-                            <div className="border-t border-primary my-1"></div>
+                            <div className="my-1"></div>
                             <button
                                 onClick={() => { onLogout(); setProfileMenuOpen(false); }}
                                 className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-hover flex items-center space-x-3"
@@ -101,19 +122,30 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
 
     return (
         <>
-            <header className="sticky top-0 z-20 backdrop-blur-sm border-b bg-secondary/95 border-primary">
+            <header className={`sticky top-0 z-20 ${currentPage !== Page.Home || isScrolled ? 'glass-header' : ''}`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center h-17">
-                    <div className="text-2xl font-bold tracking-tight">
-                        <a href="#" className="text-primary" onClick={(e) => handleNav(Page.Home, e)}>LazerDsgn.</a>
+                    {/* Left: Logo */}
+                    <div className="flex-1 flex justify-start">
+                        <div className="text-2xl font-bold tracking-tight">
+                            <a href="#" className="text-primary" onClick={(e) => handleNav(Page.Home, e)}>LazerDsgn.</a>
+                        </div>
                     </div>
-                    <nav className="hidden md:flex space-x-8 text-sm font-medium text-secondary items-center">
+
+                    {/* Center: Nav Links */}
+                    <nav className="hidden md:flex flex-1 justify-center space-x-8 text-sm font-medium text-secondary items-center">
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Home, e)}>Home</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
                         <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
-                        <AuthLinks isMobile={false} />
                     </nav>
+
+                    {/* Right: AuthLinks */}
+                    <div className="hidden md:flex flex-1 justify-end">
+                        <AuthLinks isMobile={false} />
+                    </div>
+
+                    {/* Mobile Toggle */}
                     <div className="flex items-center md:hidden">
                         <button onClick={handleMobileMenuToggle} className="p-2 rounded-full hover:bg-hover">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24" stroke="currentColor">
@@ -126,7 +158,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
 
             {/* Mobile Menu */}
             <div className={`fixed inset-0 bg-secondary z-50 flex flex-col transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="flex justify-between items-center p-4 border-b border-primary flex-shrink-0">
+                <div className="flex justify-between items-center p-4 flex-shrink-0">
                     <div className="text-2xl font-bold tracking-tight">
                         <a href="#" className="text-primary" onClick={(e) => handleNav(Page.Home, e)}>LazerDsgn.</a>
                     </div>
@@ -143,7 +175,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
                     {user && (
-                        <div className="pt-6 border-t border-primary">
+                        <div className="pt-6">
                             <a href="#" className="flex items-center space-x-3 group" onClick={(e) => handleProfileNav(e)}>
                                 <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="md" />
                                 <span className="font-medium text-secondary group-hover:text-primary">{userProfile?.username ?? 'Profile'}</span>
@@ -151,7 +183,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                         </div>
                     )}
                 </nav>
-                 <div className="p-6 border-t border-primary">
+                 <div className="p-6">
                     <AuthLinks isMobile={true} />
                 </div>
             </div>

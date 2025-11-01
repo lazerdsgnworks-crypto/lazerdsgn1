@@ -58,7 +58,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
             role="dialog"
         >
             <div 
-                className="modal-content bg-secondary p-8 rounded-xl shadow-2xl max-w-md w-full relative"
+                className="modal-content bg-secondary p-8 rounded-2xl shadow-2xl max-w-md w-full relative"
                 onClick={(e) => e.stopPropagation()}
             >
                 <button 

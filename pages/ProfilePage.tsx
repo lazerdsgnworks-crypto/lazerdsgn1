@@ -58,23 +58,6 @@ const ProfileHeaderSkeleton: React.FC = () => (
     </div>
 );
 
-const NavLink: React.FC<{
-    tab: ProfileTab, 
-    label: string, 
-    icon: string, 
-    activeTab: ProfileTab, 
-    setActiveTab: (tab: ProfileTab) => void
-}> = ({ tab, label, icon, activeTab, setActiveTab }) => (
-    <button
-        onClick={() => setActiveTab(tab)}
-        className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === tab ? 'bg-hover text-primary' : 'text-secondary hover:bg-hover hover:text-primary'}`}
-    >
-        <svg className="w-5 h-5 flex-shrink-0"><use href={`#icon-${icon}`}></use></svg>
-        <span>{label}</span>
-    </button>
-);
-
-
 const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal }) => {
     const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
     const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
@@ -101,6 +84,25 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const pfpInputRef = useRef<HTMLInputElement>(null);
     const isOwnProfile = !viewedProfileId || viewedProfileId === loggedInUser?.uid;
     const profileIdToFetch = viewedProfileId || loggedInUser?.uid;
+
+    const NavLink: React.FC<{
+        tab: ProfileTab, 
+        label: string, 
+        icon: string, 
+        activeTab: ProfileTab, 
+        setActiveTab: (tab: ProfileTab) => void
+    }> = ({ tab, label, icon, activeTab, setActiveTab }) => (
+        <button
+            onClick={() => {
+                setActiveTab(tab);
+                setMobileSidebarOpen(false);
+            }}
+            className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === tab ? 'bg-hover text-primary' : 'text-secondary hover:bg-hover hover:text-primary'}`}
+        >
+            <svg className="w-5 h-5 flex-shrink-0"><use href={`#icon-${icon}`}></use></svg>
+            <span>{label}</span>
+        </button>
+    );
 
     useEffect(() => {
         const timer = setTimeout(() => pageRef.current?.classList.add('visible'), 10);
@@ -552,65 +554,67 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                         ) : error ? (
                             <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg"><strong>Error:</strong> {error}</div>
                         ) : profile ? (
-                             <div className="flex flex-row items-start gap-4 sm:gap-6 p-4 md:p-0">
-                                <div className="flex-1 w-full">
-                                    <div className="flex flex-col sm:flex-row justify-between items-start">
-                                        <div className="flex-1 w-full text-left">
-                                            {isEditing ? (
-                                                <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
-                                            ) : (
-                                                <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
-                                            )}
-                                            <p className="text-sm text-muted">{profile.email}</p>
-                                        </div>
-                                         {isOwnProfile && (
-                                            <div className="flex mt-4 sm:mt-0 flex-row space-x-2">
+                            <div className="glass-surface rounded-2xl p-4 md:p-6">
+                                 <div className="flex flex-row items-start gap-4 sm:gap-6">
+                                    <div className="flex-1 w-full">
+                                        <div className="flex flex-col sm:flex-row justify-between items-start">
+                                            <div className="flex-1 w-full text-left">
                                                 {isEditing ? (
-                                                    <div className="flex space-x-2">
-                                                        <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Cancel</button>
-                                                        <button onClick={handleSaveProfile} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-primary-accent text-on-primary-accent rounded-md hover:bg-accent-hover disabled:opacity-50">
-                                                            {isSaving ? 'Saving...' : 'Save'}
-                                                        </button>
-                                                    </div>
+                                                    <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
                                                 ) : (
-                                                    <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Edit Profile</button>
+                                                    <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
                                                 )}
+                                                <p className="text-sm text-muted">{profile.email}</p>
                                             </div>
+                                             {isOwnProfile && (
+                                                <div className="flex mt-4 sm:mt-0 flex-row space-x-2">
+                                                    {isEditing ? (
+                                                        <div className="flex space-x-2">
+                                                            <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Cancel</button>
+                                                            <button onClick={handleSaveProfile} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-primary-accent text-on-primary-accent rounded-md hover:bg-accent-hover disabled:opacity-50">
+                                                                {isSaving ? 'Saving...' : 'Save'}
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Edit Profile</button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 w-full text-left">
+                                            {isEditing ? (
+                                                <div className="relative">
+                                                    <textarea 
+                                                        value={editData.bio} 
+                                                        onChange={e => setEditData({...editData, bio: e.target.value})} 
+                                                        className="text-base text-secondary w-full bg-transparent rounded-md px-2 py-1 pr-16 hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
+                                                        rows={4}
+                                                        maxLength={200}
+                                                    ></textarea>
+                                                    <span className="absolute bottom-2 right-2 text-xs text-muted">
+                                                        {editData.bio.length} / 200
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div className="max-h-24 overflow-y-auto">
+                                                    <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="relative group flex-shrink-0">
+                                        <Avatar email={profile.email} photoURL={profile.photoURL} size="xxl" />
+                                        {isOwnProfile && (
+                                            <>
+                                                <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" disabled={isUploadingPfp}>
+                                                    {isUploadingPfp 
+                                                        ? <svg className="w-8 h-8 animate-spin"><use href="#icon-spinner"></use></svg> 
+                                                        : <svg className="w-8 h-8"><use href="#icon-image"></use></svg>}
+                                                </button>
+                                                <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
+                                            </>
                                         )}
                                     </div>
-                                    <div className="mt-4 w-full text-left">
-                                        {isEditing ? (
-                                            <div className="relative">
-                                                <textarea 
-                                                    value={editData.bio} 
-                                                    onChange={e => setEditData({...editData, bio: e.target.value})} 
-                                                    className="text-base text-secondary w-full bg-transparent rounded-md px-2 py-1 pr-16 hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
-                                                    rows={4}
-                                                    maxLength={200}
-                                                ></textarea>
-                                                <span className="absolute bottom-2 right-2 text-xs text-muted">
-                                                    {editData.bio.length} / 200
-                                                </span>
-                                            </div>
-                                        ) : (
-                                            <div className="max-h-24 overflow-y-auto">
-                                                <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="relative group flex-shrink-0">
-                                    <Avatar email={profile.email} photoURL={profile.photoURL} size="xxl" />
-                                    {isOwnProfile && (
-                                        <>
-                                            <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" disabled={isUploadingPfp}>
-                                                {isUploadingPfp 
-                                                    ? <svg className="w-8 h-8 animate-spin"><use href="#icon-spinner"></use></svg> 
-                                                    : <svg className="w-8 h-8"><use href="#icon-image"></use></svg>}
-                                            </button>
-                                            <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
-                                        </>
-                                    )}
                                 </div>
                             </div>
                         ) : null}
