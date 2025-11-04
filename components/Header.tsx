@@ -82,11 +82,14 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
 
             return (
                 <div className="relative" ref={profileMenuRef}>
-                    <button onClick={() => setProfileMenuOpen(prev => !prev)} className="flex items-center space-x-2 group">
+                    <button onClick={() => setProfileMenuOpen(prev => !prev)} className="flex items-center space-x-2 group p-1.5 -m-1.5 rounded-lg hover:bg-hover transition-colors">
                         <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
-                        <span className="text-sm font-medium text-secondary group-hover:text-primary">
+                        <span className="hidden sm:inline text-sm font-medium text-secondary group-hover:text-primary transition-colors">
                             {userProfile?.username ?? 'Profile'}
                         </span>
+                        <svg className={`w-4 h-4 text-muted transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`}>
+                            <use href="#icon-chevron-down"></use>
+                        </svg>
                     </button>
                     {isProfileMenuOpen && (
                         <div className="absolute right-0 mt-2 w-48 bg-secondary rounded-xl shadow-lg py-1 z-20">

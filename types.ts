@@ -18,6 +18,9 @@ export interface UserProfile {
   bio: string;
   email: string;
   photoURL?: string | null;
+  projectStatus?: 'Pending' | 'In Process' | 'Finalizing' | 'Success';
+  projectStatusUpdatedAt?: Timestamp;
+  gender?: 'male' | 'female' | 'other' | 'not-specified';
 }
 
 export interface ChatMessage {
@@ -61,6 +64,7 @@ export interface RepostedPost {
   text: string;
   mediaUrls?: string[];
   mediaType?: 'image' | 'video';
+  poll?: Poll;
   createdAt: Timestamp;
 }
 

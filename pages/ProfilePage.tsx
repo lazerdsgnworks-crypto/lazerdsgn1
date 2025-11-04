@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile, RepostedPost } from '../types';
 import { db } from '../services/firebase';
-// FIX: Corrected a type mismatch where `serverTimestamp()` (which returns a `FieldValue`) was assigned to a field expecting a `Timestamp`. By casting `serverTimestamp() as Timestamp`, we satisfy the TypeScript compiler while ensuring Firestore correctly sets the server-side timestamp upon document creation. Added `Timestamp` to the `firebase/firestore` import to make the type available for casting.
-import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp, getDoc } from 'firebase/firestore';
 import PostItem from '../components/community/PostItem';
 import Avatar from '../components/Avatar';
 import ImagePreviewModal from '../components/community/ImagePreviewModal';
 import RepostModal from '../components/community/RepostModal';
-import { compressImage, dataURLtoFile } from '../utils/files';
-
+import ProjectStatusModal from '../components/ProjectStatusModal';
+import { compressImage, dataURLtoFile } from '../../utils/files';
+import { ADMIN_UIDS } from '../constants';
 
 interface ProfilePageProps {
     loggedInUser: User;
@@ -25,8 +25,6 @@ type ProfileTab = 'all' | 'threads' | 'ai' | 'saved' | 'reposts';
 // --- Cloudinary Configuration ---
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
-
-const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
 
 const PostSkeleton: React.FC = () => (
     <div className="bg-secondary border border-primary rounded-xl p-4 animate-pulse">
@@ -78,6 +76,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [isRepostModalOpen, setRepostModalOpen] = useState(false);
     const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
+    
+    // Project status modal state
+    const [isProjectStatusModalOpen, setProjectStatusModalOpen] = useState(false);
+    
 
 
     const pageRef = useRef<HTMLDivElement>(null);
@@ -99,7 +101,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             }}
             className={`w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === tab ? 'bg-hover text-primary' : 'text-secondary hover:bg-hover hover:text-primary'}`}
         >
-            <svg className="w-5 h-5 flex-shrink-0"><use href={`#icon-${icon}`}></use></svg>
+            <svg className={`w-5 h-5 flex-shrink-0`}><use href={`#icon-${icon}`}></use></svg>
             <span>{label}</span>
         </button>
     );
@@ -438,9 +440,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             author: postToRepost.author,
             text: postToRepost.text,
             createdAt: postToRepost.createdAt,
-            ...(postToRepost.mediaUrls ? { mediaUrls: postToRepost.mediaUrls } : {}),
-            ...(postToRepost.mediaType ? { mediaType: postToRepost.mediaType } : {}),
+            mediaUrls: postToRepost.mediaUrls,
+            mediaType: postToRepost.mediaType,
         };
+        
+        if (postToRepost.poll) {
+            repostData.poll = postToRepost.poll;
+        }
 
         const newPost: Omit<CommunityPost, 'id'> = {
             author: {
@@ -501,23 +507,40 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                          <h2 className="text-sm font-semibold text-muted px-3">Saved</h2>
                         <NavLink tab="saved" label="Saved Posts" icon="bookmark" activeTab={activeTab} setActiveTab={setActiveTab} />
                     </div>
-                     <div className="pt-2">
-                        <h2 className="text-sm font-semibold text-muted px-3">Account</h2>
-                         <button
-                            onClick={() => { onOpenChangePasswordModal(); setMobileSidebarOpen(false); }}
-                            className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
-                        >
-                            <span>Change Password</span>
-                        </button>
-                        <button
-                            onClick={() => { onLogout(); setMobileSidebarOpen(false); }}
-                            className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-red-500 hover:bg-red-500/10"
-                        >
-                            <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-logout"></use></svg>
-                            <span>Logout</span>
-                        </button>
-                    </div>
                 </>
+            )}
+            
+            {isOwnProfile && profile?.projectStatus && (
+                 <div className="pt-2">
+                    <h2 className="text-sm font-semibold text-muted px-3 mb-2">My Project</h2>
+                    <button 
+                        onClick={() => setProjectStatusModalOpen(true)}
+                        className="w-full flex items-center justify-between text-left space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
+                    >
+                        <span>View Status</span>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                    </button>
+                 </div>
+            )}
+            
+            {isOwnProfile && (
+                <div className="pt-4">
+                    <h2 className="text-sm font-semibold text-muted px-3">Account</h2>
+                        <button
+                        onClick={() => { onOpenChangePasswordModal(); setMobileSidebarOpen(false); }}
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
+                    >
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-key"></use></svg>
+                        <span>Change Password</span>
+                    </button>
+                    <button
+                        onClick={() => { onLogout(); setMobileSidebarOpen(false); }}
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-red-500 hover:bg-red-500/10"
+                    >
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-logout"></use></svg>
+                        <span>Logout</span>
+                    </button>
+                </div>
             )}
         </div>
     );
@@ -554,32 +577,51 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                         ) : error ? (
                             <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg"><strong>Error:</strong> {error}</div>
                         ) : profile ? (
-                            <div className="glass-surface rounded-2xl p-4 md:p-6">
-                                 <div className="flex flex-row items-start gap-4 sm:gap-6">
+                            <div className="glass-surface rounded-2xl p-4 md:p-6 mb-8">
+                                <div className="flex flex-row items-start gap-4 sm:gap-6">
                                     <div className="flex-1 w-full">
                                         <div className="flex flex-col sm:flex-row justify-between items-start">
                                             <div className="flex-1 w-full text-left">
-                                                {isEditing ? (
-                                                    <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
-                                                ) : (
-                                                    <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
-                                                )}
-                                                <p className="text-sm text-muted">{profile.email}</p>
-                                            </div>
-                                             {isOwnProfile && (
-                                                <div className="flex mt-4 sm:mt-0 flex-row space-x-2">
+                                                <div className="flex items-center gap-2">
                                                     {isEditing ? (
-                                                        <div className="flex space-x-2">
-                                                            <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Cancel</button>
-                                                            <button onClick={handleSaveProfile} disabled={isSaving} className="px-4 py-2 text-sm font-semibold bg-primary-accent text-on-primary-accent rounded-md hover:bg-accent-hover disabled:opacity-50">
-                                                                {isSaving ? 'Saving...' : 'Save'}
-                                                            </button>
-                                                        </div>
+                                                        <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 -ml-2 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
                                                     ) : (
-                                                        <button onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm font-semibold border border-secondary rounded-md hover:bg-hover">Edit Profile</button>
+                                                        <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
+                                                    )}
+                                                    {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && !isEditing && (
+                                                        <svg className="w-6 h-6 text-blue-500 flex-shrink-0"><use href="#icon-verified"></use></svg>
+                                                    )}
+                                                     {isOwnProfile && !isEditing && (
+                                                        <button onClick={() => setIsEditing(true)} className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded-full transition-colors flex-shrink-0">
+                                                            <svg className="w-4 h-4"><use href="#icon-rename"></use></svg>
+                                                        </button>
                                                     )}
                                                 </div>
-                                            )}
+                                                <p className="text-sm text-muted">{profile.email}</p>
+                                            </div>
+                                            
+                                            <div className="flex mt-4 sm:mt-0 flex-row space-x-2 flex-shrink-0">
+                                                {loggedInUser && ADMIN_UIDS.includes(loggedInUser.uid) && (
+                                                    <button onClick={() => setProjectStatusModalOpen(true)} className="btn btn-secondary !py-2 !px-4">
+                                                        <svg className="w-4 h-4 mr-2"><use href="#icon-key"></use></svg>
+                                                        Admin
+                                                    </button>
+                                                )}
+                                                {isOwnProfile && (
+                                                    isEditing ? (
+                                                        <>
+                                                            <button onClick={() => setIsEditing(false)} className="btn btn-secondary !py-2 !px-4">Cancel</button>
+                                                            <button onClick={handleSaveProfile} disabled={isSaving} className="btn btn-primary !py-2 !px-4">
+                                                                {isSaving ? 'Saving...' : 'Save'}
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button onClick={() => setIsEditing(true)} className="btn btn-secondary !py-2 !px-4">
+                                                            Edit Profile
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="mt-4 w-full text-left">
                                             {isEditing ? (
@@ -619,7 +661,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                             </div>
                         ) : null}
 
-                        <div className="mt-8 space-y-4">
+                        <div className="space-y-4">
                             {isLoadingContent ? (
                                 <><PostSkeleton /><PostSkeleton /></>
                             ) : (
@@ -663,6 +705,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 post={postToRepost}
                 user={loggedInUser}
                 userProfile={loggedInUserProfile}
+            />
+
+            <ProjectStatusModal
+                isOpen={isProjectStatusModalOpen}
+                onClose={() => setProjectStatusModalOpen(false)}
+                loggedInUser={loggedInUser}
+                initialProfile={profile}
+                initialProfileId={profileIdToFetch}
             />
         </div>
     );

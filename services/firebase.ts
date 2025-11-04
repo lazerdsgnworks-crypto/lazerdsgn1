@@ -1,5 +1,5 @@
 
-import { initializeApp, getApp, getApps } from "firebase/app";
+import * as firebase from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -14,7 +14,8 @@ const firebaseConfig = {
 };
 
 // Use a singleton pattern to initialize Firebase, preventing re-initialization errors.
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// FIX: Changed to a namespace import to resolve module resolution issues for `initializeApp`, `getApp`, and `getApps`.
+const app = firebase.getApps().length > 0 ? firebase.getApp() : firebase.initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
 const db = getFirestore(app);

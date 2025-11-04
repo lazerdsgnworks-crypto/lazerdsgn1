@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { auth, db } from './services/firebase';
@@ -15,12 +16,11 @@ import ProfilePage from './pages/ProfilePage';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Modal from './components/Modal';
+import { ADMIN_UIDS } from './constants';
 
 type Theme = 'light' | 'dark';
 type AuthState = 'idle' | 'loading' | 'success';
 type AuthFeedback = { type: 'error' | 'success' | 'idle', message: string };
-
-const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
 
 const LoginForm: React.FC<{
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -160,6 +160,46 @@ const SignupForm: React.FC<{
                 <div>
                     <label className="text-sm font-medium text-secondary" htmlFor="email-signup">Email</label>
                     <input type="email" name="email" id="email-signup" required className="w-full px-4 py-2.5 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors" />
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-secondary mb-2 block">Gender</label>
+                    <div className="grid grid-cols-3 gap-3">
+                        {/* Male Option */}
+                        <label className="relative">
+                            <input type="radio" name="gender" value="male" className="sr-only peer" required />
+                            <div className="p-3 border border-secondary rounded-lg cursor-pointer flex flex-col items-center justify-center space-y-2 peer-checked:border-blue-500 peer-checked:ring-2 peer-checked:ring-blue-500/50 transition-all duration-200 h-full">
+                                <img src="https://i.ibb.co/KcRd0NJS/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png" alt="Male" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
+                                <span className="text-sm font-medium text-primary">Male</span>
+                            </div>
+                            <div className="absolute top-2 right-2 w-5 h-5 bg-secondary border border-secondary rounded-full flex items-center justify-center opacity-0 peer-checked:opacity-100 transition-opacity">
+                                <svg className="w-3 h-3 text-blue-500"><use href="#icon-check"></use></svg>
+                            </div>
+                        </label>
+                        {/* Female Option */}
+                        <label className="relative">
+                            <input type="radio" name="gender" value="female" className="sr-only peer" required />
+                            <div className="p-3 border border-secondary rounded-lg cursor-pointer flex flex-col items-center justify-center space-y-2 peer-checked:border-blue-500 peer-checked:ring-2 peer-checked:ring-blue-500/50 transition-all duration-200 h-full">
+                                <img src="https://i.ibb.co/Lh5fbFHL/avatar-person-character-fashion-clothes-jacket-sweater-beautiful-long-hairstyle-blue-hair-hoodie-ora.png" alt="Female" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
+                                <span className="text-sm font-medium text-primary">Female</span>
+                            </div>
+                             <div className="absolute top-2 right-2 w-5 h-5 bg-secondary border border-secondary rounded-full flex items-center justify-center opacity-0 peer-checked:opacity-100 transition-opacity">
+                                <svg className="w-3 h-3 text-blue-500"><use href="#icon-check"></use></svg>
+                            </div>
+                        </label>
+                        {/* Other Option */}
+                        <label className="relative">
+                            <input type="radio" name="gender" value="other" className="sr-only peer" required />
+                            <div className="p-3 border border-secondary rounded-lg cursor-pointer flex flex-col items-center justify-center space-y-2 peer-checked:border-blue-500 peer-checked:ring-2 peer-checked:ring-blue-500/50 transition-all duration-200 h-full">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center bg-muted border border-primary">
+                                    <svg className="w-8 h-8 sm:w-10 sm:h-10 text-secondary"><use href="#icon-user-default"></use></svg>
+                                </div>
+                                <span className="text-sm font-medium text-primary">Other</span>
+                            </div>
+                            <div className="absolute top-2 right-2 w-5 h-5 bg-secondary border border-secondary rounded-full flex items-center justify-center opacity-0 peer-checked:opacity-100 transition-opacity">
+                                <svg className="w-3 h-3 text-blue-500"><use href="#icon-check"></use></svg>
+                            </div>
+                        </label>
+                    </div>
                 </div>
                 <div>
                     <label className="text-sm font-medium text-secondary" htmlFor="password-signup">Password</label>
@@ -335,7 +375,7 @@ const DeleteConfirmationModal: React.FC<{
     return (
         <Modal isOpen={isOpen} onClose={onClose}>
             <div className="text-center p-4">
-                <svg className="w-16 h-16 mx-auto text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-16 h-16 mx-auto text-red-500 mb-4" fill="none" viewBox="0 0 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <h3 className="text-xl font-bold text-primary mb-2">Delete Session?</h3>
@@ -378,6 +418,7 @@ const ensureUserProfileExists = async (user: FirebaseUser) => {
                 email: user.email!,
                 bio: 'A passionate designer and creator.',
                 photoURL: user.photoURL || null,
+                gender: 'not-specified',
             };
             await setDoc(profileDocRef, newProfile);
         } else {
@@ -493,7 +534,7 @@ const App: React.FC = () => {
     };
     
     const handleDeletePost = useCallback(async (post: CommunityPost) => {
-        if (!user || (user.uid !== post.author.id && user.uid !== ADMIN_UID)) return;
+        if (!user || (user.uid !== post.author.id && !ADMIN_UIDS.includes(user.uid))) return;
         try {
             // Deleting a post should only delete the post document itself.
             // Associated comments will be orphaned but no longer accessible through the app.
@@ -556,17 +597,26 @@ const App: React.FC = () => {
         event.preventDefault();
         setSignupError('');
         setAuthState('loading');
-        const { name, email, password } = event.currentTarget.elements as any;
+        const { name, email, password, gender } = event.currentTarget.elements as any;
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
             
             const user = userCredential.user;
             const profileDocRef = doc(db, 'users', user.uid);
+
+            let photoURL = null;
+            if (gender.value === 'male') {
+                photoURL = 'https://i.ibb.co/KcRd0NJS/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png';
+            } else if (gender.value === 'female') {
+                photoURL = 'https://i.ibb.co/Lh5fbFHL/avatar-person-character-fashion-clothes-jacket-sweater-beautiful-long-hairstyle-blue-hair-hoodie-ora.png';
+            }
+            
             const newProfile: Omit<UserProfile, 'id'> = {
                 username: name.value || user.email!.split('@')[0],
                 email: user.email!,
                 bio: 'A passionate designer and creator.',
-                photoURL: null,
+                photoURL: photoURL,
+                gender: gender.value || 'not-specified',
             };
             await setDoc(profileDocRef, newProfile);
 
@@ -579,9 +629,13 @@ const App: React.FC = () => {
              console.error("Signup error:", error.code, error.message);
              if (error.code === 'auth/email-already-in-use') {
                 setSignupError("This email address is already in use by another account.");
-             } else {
-                setSignupError(error.message.replace('Firebase:', ''));
-             }
+             } else if (error.code === 'auth/weak-password') {
+                setSignupError("Password is too weak. It must be at least 6 characters.");
+            } else if (error.code === 'auth/invalid-email') {
+                setSignupError("Please enter a valid email address.");
+            } else {
+                setSignupError("An unexpected error occurred. Please try again.");
+            }
              setAuthState('idle');
         }
     };

@@ -1,10 +1,13 @@
+
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CommunityPost, Comment, Reply, Author, UserProfile, RepostedPost } from '../../types';
+import { User, CommunityPost, Comment, Reply, Author, UserProfile, RepostedPost, Poll } from '../../types';
 import { db } from '../../services/firebase';
 import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, getDocs, QuerySnapshot, DocumentData, serverTimestamp, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import Avatar from '../Avatar';
-
-const ADMIN_UID = 'kMJDwlP0IDferEsOluQdqc9tQHI3';
+import { ADMIN_UIDS } from '../../constants';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -44,6 +47,34 @@ const formatText = (text: string): string => {
 interface ProfileNavigable {
     onViewProfile: (userId: string) => void;
 }
+
+const PollResultsDisplay: React.FC<{ poll: Poll }> = ({ poll }) => {
+    const totalVotes = poll.options.reduce((sum, option) => sum + option.votes, 0);
+
+    return (
+        <div className="mt-3 space-y-2">
+            {poll.options.map((option, index) => {
+                const percentage = totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
+                return (
+                    <div
+                        key={index}
+                        className="relative w-full text-sm font-semibold border border-primary rounded-full overflow-hidden p-2.5 text-left"
+                    >
+                        <div
+                            className="absolute top-0 left-0 h-full progress-bar-fill"
+                            style={{ width: `${percentage}%` }}
+                        ></div>
+                        <div className="relative flex justify-between">
+                            <span className="truncate text-secondary">{option.text}</span>
+                            <span className="flex-shrink-0 ml-2 text-secondary">{percentage.toFixed(0)}%</span>
+                        </div>
+                    </div>
+                );
+            })}
+            <p className="text-xs text-muted pt-1">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+        </div>
+    );
+};
 
 // --- Poll Component ---
 const PollDisplay: React.FC<{ post: CommunityPost; user: User; }> = ({ post, user }) => {
@@ -224,7 +255,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
     
     const handleDeleteReply = async (replyId: string) => {
         const replyToDelete = replies.find(r => r.id === replyId);
-        if (!user || !replyToDelete || (user.uid !== replyToDelete.author.id && user.uid !== ADMIN_UID)) return;
+        if (!user || !replyToDelete || (user.uid !== replyToDelete.author.id && !ADMIN_UIDS.includes(user.uid))) return;
         
         const replyRef = doc(db, 'usercomments', replyId);
         await deleteDoc(replyRef);
@@ -242,11 +273,11 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                      <header className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                              <p onClick={() => !isAiComment && onViewProfile(comment.author.id)} className={`font-bold truncate text-sm text-primary ${!isAiComment ? 'hover:underline cursor-pointer' : ''}`}>{comment.author.username}</p>
-                             {comment.author.id === ADMIN_UID && <svg className="w-4 h-4 text-primary inline-block"><use href="#icon-verified"></use></svg>}
+                             {ADMIN_UIDS.includes(comment.author.id) && <svg className="w-4 h-4 text-primary inline-block"><use href="#icon-verified"></use></svg>}
                              {isAiComment && <span className="ai-badge">AI</span>}
                              <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                         </div>
-                        {(user?.uid === comment.author.id || user?.uid === ADMIN_UID) && (
+                        {(user?.uid === comment.author.id || (user && ADMIN_UIDS.includes(user.uid))) && (
                             <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                         )}
                     </header>
@@ -280,10 +311,10 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                                     <header className="flex items-center justify-between">
                                         <div className="flex items-center space-x-2">
                                             <p onClick={() => onViewProfile(reply.author.id)} className="font-bold truncate text-sm text-primary hover:underline cursor-pointer">{reply.author.username}</p>
-                                            {reply.author.id === ADMIN_UID && <svg className="w-4 h-4 ml-1 text-primary inline-block"><use href="#icon-verified"></use></svg>}
+                                            {ADMIN_UIDS.includes(reply.author.id) && <svg className="w-4 h-4 ml-1 text-primary inline-block"><use href="#icon-verified"></use></svg>}
                                             <p className="text-xs text-muted flex-shrink-0">{reply.createdAt ? formatTimeAgoShort(reply.createdAt.toDate()) : '...'}</p>
                                         </div>
-                                        {(user?.uid === reply.author.id || user?.uid === ADMIN_UID) && (
+                                        {(user?.uid === reply.author.id || (user && ADMIN_UIDS.includes(user.uid))) && (
                                             <button onClick={() => handleDeleteReply(reply.id)} className="text-muted hover:text-red-500 p-1 rounded-full"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
                                         )}
                                     </header>
@@ -342,7 +373,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({ post, user, userProfile
     };
 
     const handleDeleteComment = async (comment: Comment) => {
-        if (!user || (user.uid !== comment.author.id && user.uid !== ADMIN_UID)) return;
+        if (!user || (user.uid !== comment.author.id && !ADMIN_UIDS.includes(user.uid))) return;
     
         try {
             // Deleting a comment should only delete the comment document itself.
@@ -422,7 +453,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
 
     const mediaUrlsToRender = post.mediaUrls || [];
 
-    const hasMedia = mediaUrlsToRender.length > 0 && !post.repostedPost && !post.poll;
+    const hasMedia = mediaUrlsToRender.length > 0 && !post.repostedPost;
     const isSaved = savedPostIds.has(post.id);
     const isLiked = likedPostIds.has(post.id);
 
@@ -460,16 +491,17 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                 {originalMediaUrls.length > 0 && (
                      <div className="mt-3 relative">
                         {originalPost.mediaType === 'video' ? (
-                            <div className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
-                                <video src={originalMediaUrls[0]} controls playsInline className="w-full h-full bg-black" />
+                            <div className="rounded-xl w-full shadow-sm overflow-hidden bg-black flex justify-center items-center max-h-[60vh]">
+                                <video src={originalMediaUrls[0]} controls playsInline className="w-auto h-auto max-w-full max-h-[inherit]" />
                             </div>
                         ) : (
-                            <button onClick={() => onImageClick(originalMediaUrls[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[250px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                <img src={originalMediaUrls[0]} alt="Original post media" className="max-w-full max-h-full object-contain" />
+                            <button onClick={() => onImageClick(originalMediaUrls[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[60vh] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                <img src={originalMediaUrls[0]} alt="Original post media" className="max-w-full max-h-[inherit] object-contain" />
                             </button>
                         )}
                     </div>
                 )}
+                {originalPost.poll && <PollResultsDisplay poll={originalPost.poll} />}
             </div>
         );
     };
@@ -486,13 +518,13 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         <header className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
                                 <p onClick={() => onViewProfile(post.author.id)} className="font-bold text-sm sm:text-base truncate hover:underline cursor-pointer text-primary">{post.author.username}</p>
-                                {post.author.id === ADMIN_UID && <svg className="w-4 h-4 ml-1 text-primary inline-block"><use href="#icon-verified"></use></svg>}
+                                {ADMIN_UIDS.includes(post.author.id) && <svg className="w-4 h-4 ml-1 text-primary inline-block"><use href="#icon-verified"></use></svg>}
                                 {post.isAiPost && <span className="ai-badge">Used AI</span>}
                                 <p className="text-xs sm:text-sm text-muted flex-shrink-0">{timeAgo}</p>
                             </div>
                             <div className="relative" ref={menuRef}>
                                 <button onClick={() => setMenuOpen(!isMenuOpen)} className="text-muted hover:text-primary p-1 rounded-full"><svg className="w-5 h-5"><use href="#icon-ellipsis"></use></svg></button>
-                                {isMenuOpen && (user?.uid === post.author.id || user?.uid === ADMIN_UID) && (
+                                {isMenuOpen && (user?.uid === post.author.id || (user && ADMIN_UIDS.includes(user.uid))) && (
                                     <div className="absolute right-0 top-full mt-1 bg-secondary border border-primary rounded-lg shadow-md z-10 w-32">
                                         <button onClick={() => {onDelete(post); setMenuOpen(false);}} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-500/10 flex items-center space-x-2">
                                             <svg className="w-4 h-4"><use href="#icon-trash"></use></svg>
@@ -511,43 +543,48 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         
                         {post.repostedPost && <EmbeddedPost post={post.repostedPost} onImageClick={onImageClick} />}
 
-                        {post.poll && user && <PollDisplay post={post} user={user} />}
-
                         {hasMedia && (
                             <div className="mt-3 relative">
                                 {post.mediaType === 'video' ? (
-                                    <div className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center aspect-video">
+                                    <div className="rounded-xl w-full shadow-sm overflow-hidden bg-black flex justify-center items-center max-h-[80vh]">
                                         <video
                                             src={mediaUrlsToRender[0]}
                                             controls
                                             playsInline
-                                            className="w-full h-full bg-black"
+                                            className="w-auto h-auto max-w-full max-h-[inherit]"
                                         />
                                     </div>
                                 ) : mediaUrlsToRender.length > 1 ? (
-                                    <div className="flex space-x-2 overflow-x-auto pb-2 -mb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                        <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
+                                    <div className="flex overflow-x-auto space-x-1.5 snap-x snap-mandatory scrollbar-hide -ml-4 -mr-4 px-4">
                                         {mediaUrlsToRender.map((url: string, index: number) => (
-                                            <button key={index} onClick={() => onImageClick(url)} className="flex-shrink-0 block focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-lg">
-                                                <img
-                                                    src={url}
-                                                    alt={`Post content ${index + 1}`}
-                                                    className="max-h-36 w-auto rounded-lg"
-                                                />
-                                            </button>
+                                            <div key={url} className="snap-center flex-shrink-0 w-[85%] sm:w-[80%] aspect-video">
+                                                <button 
+                                                    onClick={() => onImageClick(url)} 
+                                                    className="relative w-full h-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-lg overflow-hidden bg-muted"
+                                                >
+                                                    <img
+                                                        src={url}
+                                                        alt={`Post content ${index + 1}`}
+                                                        className="absolute top-0 left-0 w-full h-full object-cover"
+                                                    />
+                                                </button>
+                                            </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <button onClick={() => onImageClick(mediaUrlsToRender[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[400px] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <button onClick={() => onImageClick(mediaUrlsToRender[0])} className="rounded-xl w-full shadow-sm overflow-hidden bg-muted flex justify-center items-center max-h-[80vh] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                         <img 
                                             src={mediaUrlsToRender[0]} 
                                             alt={`Post content 1`} 
-                                            className="max-w-full max-h-full object-contain"
+                                            className="max-w-full max-h-[inherit] object-contain"
                                         />
                                     </button>
                                 )}
                             </div>
                         )}
+                        
+                        {post.poll && user && <PollDisplay post={post} user={user} />}
+
                         <div className="flex items-center space-x-6 text-muted mt-3">
                             <button onClick={() => onToggleLike(post.id)} className={`flex items-center space-x-2 hover:text-red-500 transition-colors group ${isLiked ? 'text-red-500' : ''}`}>
                                 <svg className={`w-5 h-5 transition-transform group-hover:scale-110 ${isLiked ? 'fill-current' : ''}`}><use href={isLiked ? "#icon-heart-filled" : "#icon-heart"}></use></svg>

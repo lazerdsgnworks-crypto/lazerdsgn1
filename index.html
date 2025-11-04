@@ -21,7 +21,7 @@
     "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^3.3.1",
     "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.552.0",
-    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};"
+    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;"
   }
 }
 </script>
@@ -350,12 +350,13 @@
             .modal-content {
                 width: 100%;
                 max-width: 100%;
-                max-height: 75vh;
+                max-height: 85vh; /* Increased space */
+                overflow-y: auto; /* Enable scrolling for long content */
                 border-bottom-left-radius: 0;
                 border-bottom-right-radius: 0;
                 transform: translateY(100%);
                 transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-                padding-top: 2.5rem; /* Space for handle */
+                padding: 2.5rem 1.5rem 1.5rem; /* Adjusted padding for mobile */
                 position: relative; /* For the handle */
             }
             .modal-overlay.open .modal-content {
@@ -421,10 +422,13 @@
         }
 
         .ask-ai-active {
-            padding: 2px;
+            padding: 3px; /* Thicker border */
             position: relative;
-            background: conic-gradient(from var(--angle), #84cc16, #f59e0b, #ec4899, #a855f7, #3b82f6, #60a5fa, #84cc16);
+            /* New gradient inspired by the image */
+            background: conic-gradient(from var(--angle), #ec4899, #a855f7, #3b82f6, #84cc16, #f59e0b, #ec4899);
             animation: ai-border-spin 4s linear infinite;
+             /* Added glow effect that extends below */
+            box-shadow: 0 8px 32px -4px color-mix(in srgb, var(--bg-secondary-accent) 40%, transparent);
         }
         
         .ask-ai-active > * {
@@ -554,6 +558,16 @@
         .code-function { color: var(--code-function); }
         .code-punctuation { color: var(--code-punctuation); }
 
+        /* NEW: Styles for sandboxed HTML rendering */
+        .html-render-box {
+            border: 1px solid var(--border-primary);
+            border-radius: 1rem; /* 16px */
+            overflow: hidden;
+            margin: 0.75rem 0;
+            background-color: var(--bg-secondary);
+            max-width: 1000px;
+        }
+
         /* ADDED: Custom scrollbar styles */
         ::-webkit-scrollbar {
             width: 8px;
@@ -569,6 +583,13 @@
         ::-webkit-scrollbar-thumb:hover {
             background-color: var(--text-muted);
         }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
 
         .progress-bar-fill {
             background-color: color-mix(in srgb, var(--bg-secondary-accent) 25%, transparent);
@@ -578,6 +599,21 @@
           0% { transform: translateX(-100%); }
           50% { transform: translateX(50%); }
           100% { transform: translateX(100%); }
+        }
+        
+        /* ADDED: Animation for project status tracker */
+        @keyframes pulse-strong {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--bg-secondary-accent) 30%, transparent);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 8px color-mix(in srgb, var(--bg-secondary-accent) 0%, transparent);
+            }
+        }
+        .animate-pulse-strong {
+            animation: pulse-strong 2.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
         }
     </style>
 </head>
@@ -625,8 +661,10 @@
         <symbol id="icon-heart-filled" viewBox="0 0 24 24" fill="currentColor" stroke-width="1.5" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></symbol>
         <symbol id="icon-bookmark-filled" viewBox="0 0 24 24" fill="currentColor" stroke-width="1.5" stroke="currentColor"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></symbol>
         <symbol id="icon-poll" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></symbol>
+        <symbol id="icon-chevron-down" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><polyline points="6 9 12 15 18 9"></polyline></symbol>
         
         <!-- NEW ICONS -->
+        <symbol id="icon-arrow-up" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></symbol>
         <symbol id="icon-enhance" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.872 9.687 20 6.56 17.44 4 4 17.44 6.56 20 16.873 9.687Zm0 0-2.56-2.56M6 7v2m0 0v2m0-2H4m2 0h2m7 7v2m0 0v2m0-2h-2m2 0h2M8 4h.01v.01H8V4Zm2 2h.01v.01H10V6Zm2-2h.01v.01H12V4Zm8 8h.01v.01H20V12Zm-2 2h.01v.01H18V14Zm2 2h.01v.01H20V16Z"/>
         </symbol>

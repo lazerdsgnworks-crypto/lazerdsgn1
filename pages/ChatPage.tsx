@@ -1,9 +1,12 @@
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types';
 import { db } from '../services/firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
 import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../utils/files';
 import Avatar from '../components/Avatar';
+import ImagePreviewModal from '../components/community/ImagePreviewModal';
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
 const WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/chatinput';
@@ -57,7 +60,7 @@ function formatAIResponse(text: any): string {
     if (typeof text !== 'string') {
         if (text && typeof text === 'object') {
             try {
-                // Format objects as a JSON code block. This will then be parsed by the logic below.
+                // Format objects as a JSON code block.
                 text = "```json\n" + JSON.stringify(text, null, 2) + "\n```";
             } catch (e) {
                 return '[Invalid AI Response]';
@@ -72,20 +75,14 @@ function formatAIResponse(text: any): string {
     // Split by code blocks, keeping the delimiters.
     const parts = text.split(/(```[a-zA-Z]*\n[\s\S]*?```)/g);
 
-    return parts.map((part, index) => {
-        if (!part) return ''; // Skip empty parts from split
+    return parts.map((part) => {
+        if (!part) return '';
 
-        const match = part.match(/^```([a-zA-Z]*)\n([\s\S]*)```$/);
-        if (match) {
-            const language = match[1];
-            const code = match[2];
-
-            // Escape HTML characters in the code
-            const escapedCode = code
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;");
-            
+        const codeBlockMatch = part.match(/^```([a-zA-Z]*)\n([\s\S]*)```$/);
+        if (codeBlockMatch) {
+            const language = codeBlockMatch[1];
+            const code = codeBlockMatch[2];
+            const escapedCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             const highlightedCode = highlightSyntax(escapedCode);
             
             return `<div class="code-block-wrapper">
@@ -98,11 +95,24 @@ function formatAIResponse(text: any): string {
                         </div>
                         <pre><code class="language-${language}">${highlightedCode}</code></pre>
                     </div>`;
-        } else {
-            let textPart = part;
+        }
+        
+        // This is a non-code block part.
+        // A simple regex to detect the presence of any HTML tag.
+        const hasHtmlTags = /<\/?[a-zA-Z][^>]*>/.test(part);
+
+        if (hasHtmlTags) {
+            // If the original text has HTML, we will render it in a sandboxed container.
+            // We must encode it to safely store it in a data attribute.
+            const encodedHtml = part
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
             
-            // It's regular text, apply formatting
-            let safeText = textPart
+            return `<div class="html-render-box" data-html-content="${encodedHtml}"></div>`;
+        } else {
+            // Otherwise, it's plain text. Sanitize and apply markdown.
+            let safeText = part
               .replace(/&/g, "&amp;")
               .replace(/</g, "&lt;")
               .replace(/>/g, "&gt;");
@@ -114,6 +124,7 @@ function formatAIResponse(text: any): string {
         }
     }).join('');
 }
+
 
 const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal, onViewProfile }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -133,6 +144,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     const animatedMessageIds = useRef(new Set<string>());
     const isInitialMessagesLoad = useRef(true);
     const [sessionsLoaded, setSessionsLoaded] = useState(false);
+    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
 
     const createNewSession = useCallback(async (setActive = true) => {
@@ -233,7 +245,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     }, [isSidebarCollapsed]);
     
     const handleSendMessage = async (message: string, imageFiles: File[]) => {
-        if (!user || !currentSessionId) return;
+        if (!user || !currentSessionId || !userProfile) return;
         if (!message.trim() && imageFiles.length === 0 && !analysisFile) return;
 
         setIsLoading(true);
@@ -247,6 +259,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         const isFirstMessage = currentSession?.title.startsWith(TEMP_TITLE_PREFIX) ?? false;
         
         const userMessage: Omit<ChatMessage, 'id' | 'createdAt'> = { text: message, role: 'user' };
+        
+        const webhookPayload = {
+            sessionId: currentSessionId,
+            userId: user.uid,
+            username: userProfile.username,
+            email: user.email!,
+        };
 
         try {
             if (imageFiles.length > 0) {
@@ -340,10 +359,18 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const genResponse = await fetch('https://umarworks2.app.n8n.cloud/webhook/imagegen', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: message }),
+                    body: JSON.stringify({ ...webhookPayload, prompt: message }),
                 });
                 if (!genResponse.ok) throw new Error('Image generation service failed.');
-                const genResult = await genResponse.json();
+                
+                let genResult;
+                try {
+                    genResult = await genResponse.json();
+                } catch (e) {
+                    console.error("Failed to parse image generation JSON:", e);
+                    throw new Error("Image generation service returned an invalid response.");
+                }
+
                 const tempImageUrl = extractUrlFromResponse(genResult);
                 if (!tempImageUrl) throw new Error('Image generation did not return a URL.');
 
@@ -361,7 +388,14 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     const errorData = await cloudinaryResponse.json().catch(() => ({}));
                     throw new Error(errorData?.error?.message || `Cloudinary upload failed with status: ${cloudinaryResponse.status}`);
                 }
-                const cloudinaryData = await cloudinaryResponse.json();
+                
+                let cloudinaryData;
+                try {
+                    cloudinaryData = await cloudinaryResponse.json();
+                } catch(e) {
+                    console.error("Failed to parse Cloudinary response:", e);
+                    throw new Error("Cloudinary returned an invalid response after upload.");
+                }
                 const permanentImageUrl = cloudinaryData.secure_url;
 
                 await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
@@ -374,7 +408,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const genResponse = await fetch('https://umarworks2.app.n8n.cloud/webhook/videogen', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: message, ratio: videoAspectRatio }),
+                    body: JSON.stringify({ ...webhookPayload, prompt: message, ratio: videoAspectRatio }),
                 });
                 if (!genResponse.ok) throw new Error(`Video generation service failed with status ${genResponse.status}.`);
                 
@@ -403,7 +437,14 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     const errorData = await cloudinaryResponse.json().catch(() => ({}));
                     throw new Error(errorData?.error?.message || `Cloudinary video upload failed with status: ${cloudinaryResponse.status}`);
                 }
-                const cloudinaryData = await cloudinaryResponse.json();
+                
+                let cloudinaryData;
+                 try {
+                    cloudinaryData = await cloudinaryResponse.json();
+                } catch(e) {
+                    console.error("Failed to parse Cloudinary video response:", e);
+                    throw new Error("Cloudinary returned an invalid response after video upload.");
+                }
                 let permanentVideoUrl = cloudinaryData.secure_url;
 
                 // If video is larger than 4MB, apply Cloudinary's on-the-fly compression transformations.
@@ -432,13 +473,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     fetchOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: message, userId: user.uid }),
+                        body: JSON.stringify({ ...webhookPayload, message: message }),
                     };
                 } else if (isAnalysis || imageFiles.length > 0) {
                     // This covers: analysis with file, and normal chat with files
                     const payload = new FormData();
                     payload.append('message', message);
-                    payload.append('userId', user.uid);
+                    Object.entries(webhookPayload).forEach(([key, value]) => {
+                        payload.append(key, value);
+                    });
+
 
                     if (isAnalysis && analysisFile) {
                         payload.append('file', analysisFile, analysisFile.name);
@@ -454,14 +498,20 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     fetchOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: message, userId: user.uid }),
+                        body: JSON.stringify({ ...webhookPayload, message: message }),
                     };
                 }
 
                 const response = await fetch(targetUrl, fetchOptions);
                 if (!response.ok) throw new Error(`Webhook failed with status ${response.status}`);
                 
-                const result = await response.json();
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    console.error("Failed to parse chat/analysis JSON response:", e);
+                    throw new Error("The server returned an invalid response.");
+                }
                 
                 // Robustly check for a Google Drive link in the webhook response.
                 const resultData = Array.isArray(result) ? result[0] : result;
@@ -500,12 +550,19 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         fetch('https://umarworks2.app.n8n.cloud/webhook/titlegen', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ history: chatHistoryForTitleGen })
+                            body: JSON.stringify({ ...webhookPayload, history: chatHistoryForTitleGen })
                         })
-                        .then(res => {
-                            if (res.ok) return res.json();
-                            console.error('Title generation webhook failed.', res.status);
-                            return null;
+                        .then(async res => {
+                            if (!res.ok) {
+                                console.error('Title generation webhook failed.', res.status);
+                                return null;
+                            }
+                            try {
+                                return await res.json();
+                            } catch (e) {
+                                console.error("Failed to parse title generation JSON response:", e);
+                                return null;
+                            }
                         })
                         .then(titleResult => {
                             if (!titleResult) return;
@@ -664,7 +721,15 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                          <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
                     </button>
                 </header>
-                <ChatMessages messages={messages} isLoading={isLoading} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>
+                <ChatMessages 
+                    messages={messages} 
+                    isLoading={isLoading} 
+                    isGeneratingImage={isGeneratingImage} 
+                    isGeneratingVideo={isGeneratingVideo} 
+                    userProfile={userProfile} 
+                    animatedMessageIds={animatedMessageIds}
+                    onImageClick={setPreviewImageUrl}
+                />
                 <div className="px-2 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 md:px-6 flex-shrink-0">
                     <ChatInput 
                         onSendMessage={handleSendMessage} 
@@ -682,6 +747,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     />
                 </div>
             </div>
+            {previewImageUrl && (
+                <ImagePreviewModal 
+                    imageUrl={previewImageUrl} 
+                    onClose={() => setPreviewImageUrl(null)}
+                    fileName={`lazerdsgn-ai-generated-${Date.now()}.png`}
+                />
+            )}
         </div>
     );
 };
@@ -808,10 +880,10 @@ const SidebarItem: React.FC<{
 
     return (
         <div 
-            className={`session-item-container group ${isActive ? 'active' : 'md:hover:bg-hover'}`}
-            onClick={onSelect}
+            className={`session-item-container group flex items-center justify-between gap-2 ${isActive ? 'active' : 'md:hover:bg-hover'}`}
+            onClick={!isEditing ? onSelect : undefined}
         >
-            <div className="flex-grow min-w-0 pr-8">
+            <div className="flex-1 min-w-0">
                 {isEditing ? (
                     <input
                         ref={inputRef}
@@ -827,7 +899,7 @@ const SidebarItem: React.FC<{
                     <span className={`session-text text-sm block truncate ${isActive ? 'text-primary font-semibold' : 'text-secondary md:group-hover:text-primary'}`}>{displayedTitle}</span>
                 )}
             </div>
-             <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
+             <div className={`flex flex-shrink-0 items-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
                 <button title="Rename" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-rename"></use></svg></button>
                 <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
             </div>
@@ -842,7 +914,8 @@ const ChatMessages: React.FC<{
     isGeneratingVideo: boolean, 
     userProfile: UserProfile | null,
     animatedMessageIds: React.MutableRefObject<Set<string>>,
-}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds }) => {
+    onImageClick: (url: string) => void;
+}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds, onImageClick }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -852,7 +925,7 @@ const ChatMessages: React.FC<{
     return (
         <div className="flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-4xl mx-auto">
             <div className="flex flex-col space-y-5">
-                {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>)}
+                {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={onImageClick}/>)}
                 {isLoading && <ChatMessageItem message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
                 {messages.length === 0 && !isLoading && (
                     <div className="text-center text-secondary font-bold text-2xl pt-20">
@@ -872,7 +945,8 @@ const ChatMessageItem: React.FC<{
     isGeneratingVideo?: boolean, 
     userProfile: UserProfile | null,
     animatedMessageIds: React.MutableRefObject<Set<string>>,
-}> = ({ message, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds }) => {
+    onImageClick?: (url: string) => void;
+}> = ({ message, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds, onImageClick }) => {
     const isUser = message.role === 'user';
     const isAi = message.role === 'ai';
     const [displayedText, setDisplayedText] = useState('');
@@ -881,9 +955,10 @@ const ChatMessageItem: React.FC<{
     useEffect(() => {
         if (isAi && message.text && !animatedMessageIds.current.has(message.id)) {
             const hasCodeBlock = /```/.test(message.text);
+            const hasHtmlTags = /<\/?[a-zA-Z][^>]*>/.test(message.text);
 
-            if (hasCodeBlock) {
-                // If code is present, render the whole message at once to avoid formatting issues.
+            if (hasCodeBlock || hasHtmlTags) {
+                // If code or HTML is present, render the whole message at once to avoid formatting issues.
                 setDisplayedText(message.text);
                 animatedMessageIds.current.add(message.id);
             } else {
@@ -942,6 +1017,104 @@ const ChatMessageItem: React.FC<{
             if (bubble) bubble.removeEventListener('click', handleCopyClick);
         };
     }, []); // Runs once when component mounts.
+
+    // Effect for rendering sandboxed HTML
+    useEffect(() => {
+        if (isAi && bubbleRef.current) {
+            const htmlBoxes = bubbleRef.current.querySelectorAll<HTMLDivElement>('.html-render-box');
+            htmlBoxes.forEach(box => {
+                if (box.querySelector('iframe')) return; // Already rendered
+
+                const htmlContent = box.dataset.htmlContent;
+                if (htmlContent) {
+                    const iframe = document.createElement('iframe');
+                    // This sandbox is secure (no scripts) but allows links, forms, etc.
+                    iframe.setAttribute('sandbox', 'allow-forms allow-modals allow-popups allow-presentation allow-same-origin');
+                    iframe.style.width = '100%';
+                    iframe.style.border = 'none';
+                    iframe.style.height = '1px'; // Start with a minimal height to be in the layout flow
+                    iframe.style.display = 'block';
+                    iframe.style.transition = 'height 0.3s ease-in-out'; // Smooth resize
+                    
+                    iframe.onload = () => {
+                        try {
+                            const doc = iframe.contentWindow?.document;
+                            const body = doc?.body;
+                            if (!body) return;
+
+                            const resize = () => {
+                                // Using body.scrollHeight is more reliable with padding.
+                                const contentHeight = body.scrollHeight; 
+                                if (contentHeight > 0) {
+                                    iframe.style.height = `${contentHeight}px`;
+                                }
+                            };
+
+                            resize(); // Initial resize
+                            
+                            // Observe for changes inside the iframe (like images loading, etc.)
+                            const observer = new MutationObserver(resize);
+                            observer.observe(body, {
+                                attributes: true,
+                                childList: true,
+                                subtree: true,
+                                characterData: true,
+                            });
+                            
+                            // Fallback for tricky situations like slow-loading webfonts
+                            setTimeout(resize, 300);
+
+                        } catch (e) {
+                            console.warn("Could not auto-resize sandboxed iframe.", e);
+                        }
+                    };
+
+                    const rootStyle = getComputedStyle(document.documentElement);
+                    const textColor = rootStyle.getPropertyValue('--text-primary').trim();
+                    const fontFamily = rootStyle.getPropertyValue('--font-main').trim();
+                    
+                    const decodedHtml = htmlContent
+                        .replace(/&#39;/g, "'")
+                        .replace(/&quot;/g, '"')
+                        .replace(/&amp;/g, "&");
+                    
+                    iframe.srcdoc = `
+                        <html>
+                            <head>
+                                <style>
+                                    :root { color-scheme: ${document.documentElement.classList.contains('dark') ? 'dark' : 'light'}; }
+                                    body { 
+                                        font-family: ${fontFamily}, sans-serif;
+                                        color: ${textColor}; 
+                                        background-color: transparent;
+                                        margin: 0; /* Use padding for reliable height calculation */
+                                        padding: 1rem;
+                                        font-size: 0.95rem;
+                                        line-height: 1.7;
+                                        overflow: hidden; /* Prevent iframe's own scrollbars */
+                                        word-break: break-word;
+                                    }
+                                    /* Basic responsive and aesthetic styles */
+                                    a { color: #60a5fa; text-decoration: none; }
+                                    a:hover { text-decoration: underline; }
+                                    img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+                                    h1, h2, h3 { margin-top: 1.5em; margin-bottom: 0.5em; letter-spacing: -0.025em; }
+                                    table { width: 100%; border-collapse: collapse; margin: 1em 0; table-layout: fixed; }
+                                    th, td { border: 1px solid ${rootStyle.getPropertyValue('--border-secondary').trim()}; padding: 8px; text-align: left; }
+                                    th { background-color: ${rootStyle.getPropertyValue('--bg-muted').trim()}; }
+                                    blockquote { border-left: 4px solid ${rootStyle.getPropertyValue('--border-primary').trim()}; padding-left: 1em; margin-left: 0; font-style: italic; }
+                                </style>
+                            </head>
+                            <body>${decodedHtml}</body>
+                        </html>
+                    `;
+
+                    box.innerHTML = '';
+                    box.appendChild(iframe);
+                }
+            });
+        }
+    }, [isAi, displayedText]);
 
     const copyToClipboard = (text: string, button: HTMLButtonElement) => {
         navigator.clipboard.writeText(text);
@@ -1081,7 +1254,9 @@ const ChatMessageItem: React.FC<{
             if (msg.role === 'ai') {
                 content = (
                     <div className="relative group max-w-full sm:max-w-md">
-                        <img src={msg.imageUrl} alt="AI generated content" className="rounded-lg w-full h-auto shadow-md" />
+                        <button onClick={() => onImageClick?.(msg.imageUrl!)} className="block w-full h-auto appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg">
+                            <img src={msg.imageUrl} alt="AI generated content" className="rounded-lg w-full h-auto shadow-md" />
+                        </button>
                         <button 
                             onClick={() => handleDownload(msg.imageUrl!, `lazerdsgn-generated-${Date.now()}.png`)} 
                             className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1318,56 +1493,37 @@ const ChatInput: React.FC<{
                         </div>
                         
                         {isAnalysisMode && (
-                            <button
-                                type="button"
-                                onClick={() => analysisInputRef.current?.click()}
-                                className="self-end flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full hover:bg-hover transition-colors"
-                                aria-label="Attach file for analysis"
-                                title="Attach File"
-                            >
-                                <svg className="h-5 w-5 text-muted"><use href="#icon-paperclip"></use></svg>
-                            </button>
+                             <div className="self-end">
+                                <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition">
+                                    <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
+                                </button>
+                                <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden />
+                            </div>
                         )}
-                        <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden accept="image/*,video/*,audio/*,application/pdf" />
-
+                        
                         <textarea
                             ref={textareaRef}
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder={
-                                isVideoGenMode ? "Describe a video scene..." :
-                                isImageGenMode ? "Describe an image..." :
-                                isAnalysisMode ? (analysisFile ? "Ask about the file..." : "Add a file and ask a question...") :
-                                "Ask anything..."
-                            }
-                            className="flex-1 py-2 bg-transparent border-none focus:ring-0 focus:outline-none placeholder-muted text-primary resize-none text-base"
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
+                            placeholder="Ask me anything..."
+                            className="flex-1 bg-transparent text-primary placeholder-muted focus:outline-none focus:ring-0 resize-none self-center py-2 px-3 text-base"
                             rows={1}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e); }}
-                            disabled={isLoading}
+                            style={{ wordBreak: 'break-word' }}
                         />
-                        
-                        <button
-                            type="button"
-                            onClick={handleMicClick}
-                            className={`self-end w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'mic-listening' : 'hover:bg-hover'}`}
-                            disabled={isLoading}
-                            aria-label={isListening ? 'Stop listening' : 'Start voice input'}
-                        >
-                            <svg className="h-5 w-5 text-muted"><use href="#icon-microphone"></use></svg>
-                        </button>
 
-                        <button
-                            type="submit"
-                            className="self-end w-10 h-10 flex items-center justify-center rounded-2xl bg-primary-accent text-on-primary-accent hover:bg-accent-hover transition-all duration-300 hover:scale-110 hover:shadow-lg disabled:opacity-50 disabled:scale-100"
-                            disabled={isLoading || (!input.trim() && !analysisFile)}
-                        >
-                            <svg className="h-5 w-5"><use href="#icon-paper-plane"></use></svg>
-                        </button>
+                        <div className="flex items-center self-end">
+                            <button type="button" onClick={handleMicClick} className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full hover:bg-hover text-muted transition ${isListening ? 'mic-listening' : ''}`}>
+                                <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
+                            </button>
+                            <button type="submit" disabled={isLoading || (!input.trim() && !analysisFile)} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-6 h-6 p-0.5"><use href="#icon-arrow-up"></use></svg>}
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
         </div>
     );
 };
-
 export default ChatPage;
