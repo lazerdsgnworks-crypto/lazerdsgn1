@@ -4,13 +4,16 @@ interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     children: React.ReactNode;
+    size?: 'md' | 'lg';
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' }) => {
     // isRendered controls if the modal is in the DOM
     const [isRendered, setIsRendered] = useState(isOpen);
     // isVisible controls the 'open' class for animations, allowing transitions to work correctly.
     const [isVisible, setIsVisible] = useState(false);
+
+    const sizeClass = size === 'lg' ? 'max-w-lg' : 'max-w-md';
 
     useEffect(() => {
         if (isOpen) {
@@ -58,7 +61,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
             role="dialog"
         >
             <div 
-                className="modal-content bg-secondary p-8 rounded-2xl shadow-2xl max-w-md w-full relative"
+                className={`modal-content bg-secondary p-8 rounded-2xl shadow-2xl w-full relative ${sizeClass}`}
                 onClick={(e) => e.stopPropagation()}
             >
                 <button 

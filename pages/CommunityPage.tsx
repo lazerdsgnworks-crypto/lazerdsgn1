@@ -446,7 +446,6 @@ const CreatePostForm: React.FC<{
                                 </label>
                             </div>
                             <div className="flex items-center space-x-4">
-                                <span className={`text-xs ${text.length > POST_MAX_LENGTH ? 'text-red-500' : 'text-muted'}`}>{text.length} / {POST_MAX_LENGTH}</span>
                                 <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*,video/*" multiple hidden disabled={status !== 'idle'} />
                                 <button type="submit" disabled={status !== 'idle' || !isPostable} className="btn btn-primary !py-1.5 !px-5 !text-sm">
                                     {buttonText[status]}

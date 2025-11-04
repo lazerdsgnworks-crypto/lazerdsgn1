@@ -147,7 +147,7 @@ const SignupForm: React.FC<{
     return (
         <div>
             <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold tracking-tight text-primary"></h1>
+                <h1 className="text-2xl font-bold tracking-tight text-primary">LazerDsgn.</h1>
             </div>
             <h2 className="text-3xl font-bold text-center text-primary mb-2">Create Account</h2>
             <p className="text-center text-secondary mb-8">Join our community of designers.</p>
@@ -168,7 +168,7 @@ const SignupForm: React.FC<{
                         <label className="relative">
                             <input type="radio" name="gender" value="male" className="sr-only peer" required />
                             <div className="p-3 border border-secondary rounded-lg cursor-pointer flex flex-col items-center justify-center space-y-2 peer-checked:border-blue-500 peer-checked:ring-2 peer-checked:ring-blue-500/50 transition-all duration-200 h-full">
-                                <img src="https://i.postimg.cc/cHJc0M60/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png" />
+                                <img src="https://i.postimg.cc/cHJc0M60/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png" alt="Male" className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover" />
                                 <span className="text-sm font-medium text-primary">Male</span>
                             </div>
                             <div className="absolute top-2 right-2 w-5 h-5 bg-secondary border border-secondary rounded-full flex items-center justify-center opacity-0 peer-checked:opacity-100 transition-opacity">
@@ -606,9 +606,9 @@ const App: React.FC = () => {
 
             let photoURL = null;
             if (gender.value === 'male') {
-                photoURL = 'https://i.ibb.co/KcRd0NJS/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png';
+                photoURL = 'https://i.postimg.cc/cHJc0M60/avatar-person-boy-male-people-guy-user-profile-metaverse-metapeople-virtual-brown-curly-hair-young-j.png';
             } else if (gender.value === 'female') {
-                photoURL = 'https://i.ibb.co/Lh5fbFHL/avatar-person-character-fashion-clothes-jacket-sweater-beautiful-long-hairstyle-blue-hair-hoodie-ora.png';
+                photoURL = 'https://i.postimg.cc/wvK0csBq/avatar-person-character-fashion-clothes-jacket-sweater-beautiful-long-hairstyle-blue-hair-hoodie-ora.png';
             }
             
             const newProfile: Omit<UserProfile, 'id'> = {
@@ -775,7 +775,7 @@ const App: React.FC = () => {
                 />
             </Modal>
             
-             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); resetAuthModals(); }}>
+             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); resetAuthModals(); }} size="lg">
                 <SignupForm
                     onSubmit={handleSignup}
                     onGoogleSignIn={handleGoogleSignIn}
