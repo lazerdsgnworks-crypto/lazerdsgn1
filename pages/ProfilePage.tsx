@@ -7,7 +7,7 @@ import Avatar from '../components/Avatar';
 import ImagePreviewModal from '../components/community/ImagePreviewModal';
 import RepostModal from '../components/community/RepostModal';
 import ProjectStatusModal from '../components/ProjectStatusModal';
-import { compressImage, dataURLtoFile } from '../../utils/files';
+import { compressImage, dataURLtoFile } from '../utils/files';
 import { ADMIN_UIDS } from '../constants';
 
 interface ProfilePageProps {
