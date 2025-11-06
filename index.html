@@ -25,16 +25,17 @@
     "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^3.3.1",
     "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.552.0",
-    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;"
+    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
   }
 }
 </script>
     <script type="module" src="https://framer.com/m/AnimatedLiquidBackground-Prod-vIhm.js@ghH1aHLmGZ0iE7qXDFVk"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
-            --font-main: 'Plus Jakarta Sans', sans-serif;
+            --font-main: 'Inter', sans-serif;
             --scroll-speed-h: 40s;
             --scroll-speed-v1: 50s;
             --scroll-speed-v2: 38s;
@@ -46,9 +47,9 @@
             --bg-secondary: #ffffff; /* white */
             --bg-muted: #f3f4f6; /* gray-100 */
             --bg-hover: #e5e7eb; /* gray-200 */
-            --bg-primary-accent: #000000;
-            --bg-secondary-accent: #3b82f6; /* blue-500 */
-            --bg-accent-hover: #1f2937; /* gray-800 */
+            --bg-primary-accent: #0f1419; /* near-black */
+            --bg-secondary-accent: #60a5fa; /* blue-400 */
+            --bg-accent-hover: #333333; /* dark-grey */
             --text-primary: #0f1419;
             --text-secondary: #4b5563; /* gray-600 */
             --text-muted: #6b7280; /* gray-500 */
@@ -108,12 +109,11 @@
         }
 
         /* Glassmorphism Effect Class */
-        html.dark .modal-content,
-        html.dark #chat-sidebar,
-        html.dark .review-column > div, /* Testimonials on Home */
-        html.dark .code-block-wrapper,
-        html.dark #footer,
-        html.dark .glass-surface
+        .modal-content,
+        #chat-sidebar,
+        .review-column > div, /* Testimonials on Home */
+        #footer,
+        .glass-surface
         {
             background-color: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
             backdrop-filter: blur(16px);
@@ -140,17 +140,65 @@
             border: 1px solid transparent;
         }
 
-        /* ADDED: For header glass effect on scroll */
-        .glass-header {
-            background-color: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-bottom: 1px solid var(--border-primary);
-            transition: background-color 0.3s, border-color 0.3s, backdrop-filter 0.3s, color 0.3s;
+        /* NEW: Floating Glassmorphic Navbar (HomePage) */
+        .floating-navbar-container {
+            position: fixed;
+            top: 1rem; /* 16px */
+            left: 1rem; /* 16px */
+            right: 1rem; /* 16px */
+            z-index: 50;
+            display: flex;
+            justify-content: center;
+            pointer-events: none;
         }
 
-        html.dark .glass-header {
-            background-color: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+        .floating-navbar {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            pointer-events: auto;
+            padding: 0.5rem 2rem;
+            border-radius: 9999px;
+            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid color-mix(in srgb, var(--border-primary) 50%, transparent);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease-in-out;
+        }
+
+        html.dark .floating-navbar {
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+            border-color: color-mix(in srgb, var(--border-primary) 70%, transparent);
+        }
+        
+        /* NEW: Static/Sticky Navbar (Other Pages) */
+        .static-navbar-container {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 50;
+            transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+            border-bottom: 1px solid transparent;
+        }
+        .static-navbar-container.scrolled {
+            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom-color: var(--border-primary);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        html.dark .static-navbar-container.scrolled {
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+        }
+        .static-navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
         }
 
         /* ADDED: Glassmorphism for Chat Sidebar */
@@ -167,6 +215,10 @@
         /* --- Global Styles using CSS Variables --- */
         .no-transition * {
             transition: none !important;
+        }
+
+        html, body, #root {
+            height: 100%;
         }
 
         body {
@@ -241,10 +293,6 @@
         /* Component-specific overrides */
         header {
             transition: background-color 0.3s ease-in-out;
-        }
-        /* Make header transparent on light theme homepage */
-        header:not(.glass-header) {
-            background-color: transparent;
         }
         
         .hero-headline {
@@ -447,27 +495,33 @@
         .session-item-container.active .session-text { font-weight: 600; color: var(--text-primary); }
         
         /* UPDATED: Shimmer animation for loading states */
-        @keyframes shimmer {
+        @keyframes shimmer-old {
             0% { background-position: -1000px 0; }
             100% { background-position: 1000px 0; }
         }
         .shimmer-bg {
-            animation: shimmer 2s infinite linear;
+            animation: shimmer-old 2s infinite linear;
             background: linear-gradient(to right, var(--bg-muted) 8%, var(--bg-hover) 18%, var(--bg-muted) 33%);
             background-size: 1200px 100%;
         }
 
-        /* ADDED: Microphone listening animation */
-        @keyframes mic-pulse {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        /* NEW: Shimmering Text Animation */
+        @keyframes shimmer {
+            from { background-position: -250% 0; }
+            to { background-position: 250% 0; }
         }
-        .mic-listening {
-            animation: mic-pulse 2s infinite;
-            background-color: rgba(239, 68, 68, 0.1);
+        .animate-shimmer {
+            animation: shimmer 3s linear infinite;
         }
-        .mic-listening svg {
+
+        /* ADDED: New microphone recording animation */
+        @keyframes mic-pulse-stronger {
+            0% { box-shadow: 0 0 0 0px color-mix(in srgb, #ef4444 70%, transparent); }
+            100% { box-shadow: 0 0 0 12px color-mix(in srgb, #ef4444 0%, transparent); }
+        }
+        .mic-recording {
+            animation: mic-pulse-stronger 1.5s infinite cubic-bezier(0.25, 0, 0.4, 1);
+            background-color: color-mix(in srgb, #ef4444 15%, transparent);
             color: #ef4444;
         }
         
@@ -503,50 +557,54 @@
             border-color: var(--bg-secondary-accent);
             box-shadow: 0 0 0 3px color-mix(in srgb, var(--bg-secondary-accent) 20%, transparent);
         }
-
-        /* UPDATED: Code block and syntax highlighting styles */
-        .code-block-wrapper {
+        
+        /* --- NEW: UNIFIED RESPONSE CONTAINER FOR CODE/TABLES --- */
+        .response-wrapper {
             background-color: transparent;
-            border-radius: 1rem; /* More rounded */
-            margin: 0.75rem 0; /* Add vertical margin for spacing */
+            border: 1px solid var(--border-primary);
+            border-radius: 1rem;
+            margin: 1em 0;
             overflow: hidden;
         }
-        .code-block-header {
+        .response-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background-color: transparent; /* Removed background */
-            padding: 0.5rem 1rem 0.25rem; /* Adjusted padding */
-            border-bottom: none; /* Removed border */
+            padding: 0.5rem 1rem;
         }
-        .code-language {
+        .response-title {
             font-size: 0.875rem;
             color: var(--text-muted);
             font-family: var(--font-main);
             text-transform: capitalize;
         }
-        .copy-code-btn {
+        .response-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .response-actions button {
             padding: 0.25rem;
             border-radius: 0.375rem;
             color: var(--text-muted);
             transition: color 0.2s, background-color 0.2s;
         }
-        .copy-code-btn:hover {
-            background-color: var(--border-primary);
+        .response-actions button:hover {
+            background-color: var(--bg-hover);
             color: var(--text-primary);
         }
-        .code-block-wrapper pre {
+        
+        /* Code Block Content */
+        .response-wrapper pre {
             margin: 0;
             padding: 1rem;
             overflow-x: auto;
-            font-size: 0.875rem; /* 14px */
+            font-size: 0.875rem;
             line-height: 1.5;
-            background-color: var(--bg-secondary); /* Give PRE a background */
         }
-        .code-block-wrapper pre code {
+        .response-wrapper pre code {
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-            white-space: pre-wrap; /* Wrap long lines */
-            word-break: break-all; /* Break long words */
+            white-space: pre;
             color: var(--text-primary);
             background-color: transparent;
             padding: 0;
@@ -557,6 +615,45 @@
         .code-number { color: var(--code-number); }
         .code-function { color: var(--code-function); }
         .code-punctuation { color: var(--code-punctuation); }
+        
+        /* Table Content */
+        .response-wrapper .table-container {
+            overflow-x: auto;
+        }
+        .response-wrapper table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            font-family: var(--font-main);
+        }
+        .response-wrapper th, 
+        .response-wrapper td {
+            border: 1px solid var(--border-primary);
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        .response-wrapper th {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .response-wrapper tbody tr:last-child td {
+            border-bottom: 1px solid var(--border-primary);
+        }
+        .response-wrapper tbody tr:hover { 
+            background-color: transparent; 
+        }
+
+        /* NEW: Markdown Response Styles */
+        .ai-message ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.75em; }
+        .ai-message ul li { margin-bottom: 0.25em; }
+        .ai-message > div > h2, .ai-message > div > h3 { font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; line-height: 1.2; }
+        .ai-message > div > h2 { font-size: 1.25rem; }
+        .ai-message > div > h3 { font-size: 1.1rem; }
+        .ai-message > div > p { margin-bottom: 0.75em; }
+        .ai-message > div > hr { border-color: var(--border-primary); margin: 1.5em 0; }
+        .ai-message > div > blockquote { border-left: 3px solid var(--border-secondary); padding-left: 1em; margin-left: 0; font-style: italic; color: var(--text-secondary); }
+        .ai-message .inline-code { background-color: var(--bg-muted); color: var(--text-primary); padding: 0.2em 0.4em; margin: 0; font-size: 85%; border-radius: 6px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
+        .ai-message .math-display { background-color: var(--bg-muted); padding: 1rem; border-radius: 0.5rem; margin: 1em 0; overflow-x: auto; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
 
         /* NEW: Styles for sandboxed HTML rendering */
         .html-render-box {
@@ -568,27 +665,16 @@
             max-width: 1000px;
         }
 
-        /* ADDED: Custom scrollbar styles */
+        /* UPDATED: Hide scrollbars globally */
         ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            display: none;
         }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background-color: var(--border-secondary);
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background-color: var(--text-muted);
+        body, .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
         }
         .scrollbar-hide::-webkit-scrollbar {
             display: none;
-        }
-        .scrollbar-hide {
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
         }
 
         .progress-bar-fill {
@@ -615,8 +701,43 @@
         .animate-pulse-strong {
             animation: pulse-strong 2.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
         }
+
+        /* ADDED: Voice UI pulse animation */
+        @keyframes voice-pulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--bg-secondary-accent) 70%, transparent);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 40px color-mix(in srgb, var(--bg-secondary-accent) 0%, transparent);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--bg-secondary-accent) 0%, transparent);
+            }
+        }
+        .voice-recording-circle {
+            animation: voice-pulse 2s infinite;
+        }
+
+        /* ADDED: Centered, Glassmorphic FAB */
+        .create-post-fab {
+            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+        }
+        html.dark .create-post-fab {
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+        }
+        .create-post-fab:hover {
+            background-color: var(--bg-hover);
+            border-color: var(--border-secondary);
+        }
     </style>
-  <script type="module" crossorigin src="/lazerdsgn1/assets/index-DTl0zaNd.js"></script>
+  <script type="module" crossorigin src="/lazerdsgn1/assets/index-Bvk6gGr_.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -665,7 +786,27 @@
         <symbol id="icon-chevron-down" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><polyline points="6 9 12 15 18 9"></polyline></symbol>
         
         <!-- NEW ICONS -->
+        <symbol id="icon-x-close" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></symbol>
+        <symbol id="icon-paper-plane-filled" viewBox="0 0 24 24" fill="currentColor"><path d="M2 3l20 9-20 9 4-9-4-9zM4.6 11H12v2H4.6l-1.7 8 16.2-7.2L2.9 4l1.7 7z"/></symbol>
+        <symbol id="icon-record-circle" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"></circle></symbol>
+        <symbol id="icon-stop-square" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1"></rect></symbol>
         <symbol id="icon-arrow-up" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></symbol>
+        <symbol id="icon-arrow-right" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
+        <symbol id="icon-play" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></symbol>
+        <symbol id="icon-pause" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></symbol>
+        <symbol id="icon-waves-sound" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v4"/><path d="M6 7v10"/><path d="M10 4v16"/><path d="M14 7v10"/><path d="M18 10v4"/></symbol>
+        <symbol id="icon-stt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2" /><path stroke-linecap="round" stroke-linejoin="round" d="M17.5 16.5h2"/><path stroke-linecap="round" stroke-linejoin="round" d="M17.5 19.5h2"/></symbol>
+        <symbol id="icon-stt-improved" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2" />
+            <line x1="17" y1="15" x2="21" y2="15"></line>
+            <line x1="17" y1="18" x2="20" y2="18"></line>
+        </symbol>
+        <symbol id="icon-transcribe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"></path>
+            <line x1="8" y1="10" x2="16" y2="10"></line>
+            <line x1="8" y1="14" x2="13" y2="14"></line>
+        </symbol>
         <symbol id="icon-enhance" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.872 9.687 20 6.56 17.44 4 4 17.44 6.56 20 16.873 9.687Zm0 0-2.56-2.56M6 7v2m0 0v2m0-2H4m2 0h2m7 7v2m0 0v2m0-2h-2m2 0h2M8 4h.01v.01H8V4Zm2 2h.01v.01H10V6Zm2-2h.01v.01H12V4Zm8 8h.01v.01H20V12Zm-2 2h.01v.01H18V14Zm2 2h.01v.01H20V16Z"/>
         </symbol>
