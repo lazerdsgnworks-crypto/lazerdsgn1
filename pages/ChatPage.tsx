@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
-// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
 import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile, pcmToWav } from '../utils/files.ts';
 import Avatar from '../components/Avatar.tsx';
@@ -27,7 +26,6 @@ const CHATS_COLLECTION = `artifacts/${APP_ID}/users/`;
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
 
-// Fix for line 86: Cannot find name 'ChatPageProps'
 interface ChatPageProps {
     user: User;
     userProfile: UserProfile | null;
@@ -50,11 +48,23 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     const [error, setError] = useState<string | null>(null);
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
-    const animatedMessageIds = useRef(new Set<string>());
-    const isInitialMessagesLoad = useRef(true);
     const [sessionsLoaded, setSessionsLoaded] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [isVoiceUIVisible, setVoiceUIVisible] = useState(false);
+
+    // FIX: Moved state and ref declarations to the top of the component to fix `used before declaration` errors.
+    const [messageText, setMessageText] = useState('');
+    const [imageFiles, setImageFiles] = useState<File[]>([]);
+    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const [isRecording, setIsRecording] = useState(false);
+
+    const animatedMessageIds = useRef(new Set<string>());
+    const isInitialMessagesLoad = useRef(true);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const createNewSession = useCallback(async (setActive = true) => {
         if (!user) return;
@@ -69,19 +79,17 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         }
     }, [user]);
 
-    // Effect to create a new session every time the chat page is opened/mounted.
     useEffect(() => {
         createNewSession(true);
     }, [createNewSession]);
 
-    // Effect to listen for session list changes for the sidebar.
      useEffect(() => {
         if (!user) {
             setSessions([]);
             setSessionsLoaded(true);
             return;
         }
-        setSessionsLoaded(false); // Reset on user change
+        setSessionsLoaded(false);
         setError(null);
         const sessionsRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions`);
         const q = query(sessionsRef, orderBy('updatedAt', 'desc'));
@@ -109,7 +117,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             return;
         };
         
-        // Reset for the new session
         isInitialMessagesLoad.current = true;
         animatedMessageIds.current.clear();
 
@@ -125,7 +132,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
 
             if (isInitialMessagesLoad.current) {
                 const initialMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
-                // Pre-populate animated IDs to prevent animation on load
                 initialMessages.forEach(msg => {
                     if (msg.role === 'ai') {
                         animatedMessageIds.current.add(msg.id);
@@ -134,7 +140,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 setMessages(initialMessages);
                 isInitialMessagesLoad.current = false;
             } else {
-                // Handle subsequent changes (new messages)
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
                         const newMessage = { id: change.doc.id, ...change.doc.data() } as ChatMessage;
@@ -161,9 +166,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         if (isImageGenMode) setIsGeneratingImage(true);
         if (isVideoGenMode) setIsGeneratingVideo(true);
         
-        const userMessagesInHistory = messages.filter(m => m.role === 'user');
-        const shouldGenerateTitle = userMessagesInHistory.length === 1;
-
         const currentSession = sessions.find(s => s.id === currentSessionId);
         const isFirstMessage = currentSession?.title.startsWith(TEMP_TITLE_PREFIX) ?? false;
         
@@ -215,7 +217,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         userMessage.imageUrl = await createPdfThumbnail(analysisFile);
                     } catch (pdfError) {
                         console.error("Failed to generate PDF thumbnail:", pdfError);
-                        // Don't add imageUrl if thumbnail generation fails, it will fallback to an icon
                     }
                 }
             }
@@ -225,7 +226,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 createdAt: serverTimestamp() as Timestamp,
             });
 
-            // --- UPDATED: Set initial title on first message for ALL chat types. Webhook will override for text chats. ---
             if (isFirstMessage) {
                 let newTitleText: string | null = null;
                  if (isImageGenMode) {
@@ -237,8 +237,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 } else if (audioFile) {
                     newTitleText = "Voice Message";
                 } else {
-                    // This is a regular text chat's first message. Use it for the initial title.
-                    // This title will act as a fallback if the webhook fails later.
                     newTitleText = message;
                 }
 
@@ -246,15 +244,12 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     const newTitle = newTitleText.trim().substring(0, 40) + (newTitleText.length > 40 ? '...' : '');
                     await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { title: newTitle, updatedAt: serverTimestamp() as Timestamp });
                 } else {
-                    // Fallback for empty initial messages, just update timestamp
                     await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { updatedAt: serverTimestamp() as Timestamp });
                 }
             } else {
-                 // For subsequent messages, just update the timestamp to bump it in the session list.
                  await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { updatedAt: serverTimestamp() as Timestamp });
             }
 
-            // A helper function to robustly extract a URL from a webhook response.
             const extractUrlFromResponse = (responseData: any): string | null => {
                 if (!responseData) return null;
                 const dataToInspect = Array.isArray(responseData) && responseData.length > 0 ? responseData[0] : responseData;
@@ -266,7 +261,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                             return dataToInspect[key];
                         }
                     }
-                    // Fallback to check any value in the object
                     for (const value of Object.values(dataToInspect)) {
                         if (typeof value === 'string' && value.startsWith('http')) {
                             return value as string;
@@ -276,8 +270,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 return null;
             };
 
-
-            // Branching logic for AI response type
             if (isImageGenMode) {
                 const genResponse = await fetch('https://umarworks2.app.n8n.cloud/webhook/imagegen', {
                     method: 'POST',
@@ -369,12 +361,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     throw new Error("Cloudinary returned an invalid response after video upload.");
                 }
                 let permanentVideoUrl = cloudinaryData.secure_url;
-
-                // If video is larger than 4MB, apply Cloudinary's on-the-fly compression transformations.
                 const FOUR_MB = 4 * 1024 * 1024;
                 if (videoBlob.size > FOUR_MB) {
-                    // vc_auto: automatically chooses the best video codec.
-                    // q_auto: automatically determines the best quality/compression level.
                     permanentVideoUrl = permanentVideoUrl.replace('/upload/', '/upload/vc_auto,q_auto/');
                 }
 
@@ -385,12 +373,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     createdAt: serverTimestamp() as Timestamp,
                 });
             } else {
-                // Regular Text, Voice, or Analysis AI Response Logic
                 const isAnalysis = isAnalysisMode;
                 let targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : (audioFile ? VOICE_WEBHOOK_URL : WEBHOOK_URL);
                 let fetchOptions: RequestInit;
                  if (isAnalysis && !analysisFile && message.trim()) {
-                    // Text-only analysis request
                     targetUrl = ANALYSIS_TEXT_ONLY_WEBHOOK_URL;
                     fetchOptions = {
                         method: 'POST',
@@ -398,7 +384,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         body: JSON.stringify({ ...webhookPayload, message: message }),
                     };
                 } else if (isAnalysis || imageFiles.length > 0 || audioFile) {
-                    // This covers: analysis with file, voice, and normal chat with files
                     const payload = new FormData();
                     payload.append('message', message);
                     Object.entries(webhookPayload).forEach(([key, value]) => {
@@ -415,7 +400,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     }
                     fetchOptions = { method: 'POST', body: payload };
                 } else {
-                    // This handles normal text-only chat
                     fetchOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -434,31 +418,27 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     throw new Error("The server returned an invalid response.");
                 }
                 
-                // Robustly check for a Google Drive link in the webhook response.
                 const resultData = Array.isArray(result) ? result[0] : result;
                 const driveLink = resultData?.output || resultData?.webViewLink || resultData?.url;
 
                 if (isAnalysis && driveLink && typeof driveLink === 'string' && driveLink.includes('drive.google.com')) {
-                    // Analysis resulted in a Google Drive link. Save it to Firestore.
                     await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
                         text: `The analysis of ${analysisFile?.name || 'your file'} is complete. You can view the generated PDF below.`,
                         role: 'ai',
                         analysisResult: {
-                            url: driveLink, // Store the provided Drive link
+                            url: driveLink,
                             name: analysisFile?.name || `analysis-result-${Date.now()}.pdf`,
                             type: 'application/pdf',
                         },
                         createdAt: serverTimestamp() as Timestamp,
                     });
                 } else {
-                    // Handle standard text response for normal chat or fallback for analysis.
                     const aiResponseText = resultData?.output || resultData?.text || resultData?.response || "Sorry, I couldn't get a response.";
                     
                     let audioUrl: string | undefined = undefined;
-                    // Only generate audio if the user sent audio and there's text to speak.
                     if (userSentAudio && aiResponseText && aiResponseText.trim().length > 0) {
                         try {
-                            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                            const ai = new GoogleGenAI({ apiKey: "AIzaSyC-OAaC8a4Le1CoCtmsNAZrWGYnTa6CDeo" });
                             const ttsResponse = await ai.models.generateContent({
                                 model: "gemini-2.5-flash-preview-tts",
                                 contents: [{ parts: [{ text: aiResponseText }] }],
@@ -485,7 +465,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                                 const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
                                 const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
 
-                                // Upload to Cloudinary
                                 const formData = new FormData();
                                 formData.append('file', audioFile);
                                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
@@ -503,767 +482,238 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                             console.error("TTS generation or upload failed:", ttsError);
                         }
                     }
-
-                    const aiMessagePayload: {
-                        text: string;
-                        role: 'ai';
-                        createdAt: Timestamp;
-                        audioUrl?: string;
-                    } = {
+                    
+                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
                         text: aiResponseText,
                         role: 'ai',
+                        audioUrl: audioUrl,
                         createdAt: serverTimestamp() as Timestamp,
-                    };
-
-                    if (audioUrl) {
-                        aiMessagePayload.audioUrl = audioUrl;
-                    }
-
-                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), aiMessagePayload);
-
-                    // Automatically generate a title after the second user message
-                    if (shouldGenerateTitle && !isAnalysisMode) {
-                        const chatHistoryForTitleGen = messages
-                            .map(m => ({ role: m.role, text: m.text }))
-                            .concat([
-                                { role: 'user', text: message },
-                                { role: 'ai', text: aiResponseText }
-                            ]);
-                        
-                        // Fire-and-forget fetch to generate and update title
-                        fetch('https://umarworks2.app.n8n.cloud/webhook/titlegen', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ...webhookPayload, history: chatHistoryForTitleGen })
-                        })
-                        .then(async res => {
-                            if (!res.ok) {
-                                console.error('Title generation webhook failed.', res.status);
-                                return null;
-                            }
-                            try {
-                                return await res.json();
-                            } catch (e) {
-                                console.error("Failed to parse title generation JSON response:", e);
-                                return null;
-                            }
-                        })
-                        .then(titleResult => {
-                            if (!titleResult) return;
-
-                            // FIX: Robustly extract title from various possible webhook response structures.
-                            let newTitle: string | null = null;
-                            const data = Array.isArray(titleResult) ? titleResult[0] : titleResult;
-
-                            if (typeof data === 'string') {
-                                newTitle = data.trim();
-                            } else if (typeof data === 'object' && data !== null) {
-                                // Check for common keys where a title might be found.
-                                newTitle = data.title || data.output || data.text || data.response || null;
-                            }
-
-                            if (newTitle && typeof newTitle === 'string') {
-                                const cleanedTitle = newTitle.replace(/^"|"$/g, '').substring(0, 50);
-                                return updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { 
-                                    title: cleanedTitle
-                                });
-                            }
-                        })
-                        .catch(e => {
-                            console.error("Failed to generate/update session title:", e);
-                        });
-                    }
+                    });
                 }
             }
-        } catch (error) {
-            console.error("Error during message send:", error);
-            const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
-            await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                text: `Sorry, something went wrong: ${errorMessage}`, role: 'ai', createdAt: serverTimestamp() as Timestamp,
-            });
-        } finally {
-            setIsLoading(false);
+        } catch (err: any) {
+            console.error("Message sending failed:", err);
+            const errorMessage = err.message || "An unexpected error occurred.";
+            setError(`Failed to send message: ${errorMessage}`);
             setIsGeneratingImage(false);
             setIsGeneratingVideo(false);
-            if (isAnalysisMode) setAnalysisFile(null);
-            if (isImageGenMode) setIsImageGenMode(false);
-            if (isVideoGenMode) setIsVideoGenMode(false);
+        } finally {
+            setIsLoading(false);
+            if (!isVideoGenMode) setIsGeneratingVideo(false);
+            if (!isImageGenMode) setIsGeneratingImage(false);
+            setAnalysisFile(null);
         }
     };
+    
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isLoading, isGeneratingImage, isGeneratingVideo]);
 
-    const handleToggleAnalysisMode = () => {
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        handleSendMessage(messageText, imageFiles, null);
+        setMessageText('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        setAnalysisFile(null);
+    };
+
+    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setMessageText(e.target.value);
+        const el = e.target;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
         if (isAnalysisMode) {
-            setAnalysisFile(null);
+            setAnalysisFile(files[0]);
+            setMessageText(files[0].name);
+        } else {
+            const imageFilesToProcess = files.filter(f => f.type.startsWith('image/')).slice(0, 4 - imageFiles.length);
+            const compressedFiles = await Promise.all(imageFilesToProcess.map(file => compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name))));
+            setImageFiles(prev => [...prev, ...compressedFiles]);
+            setImagePreviews(prev => [...prev, ...compressedFiles.map(f => URL.createObjectURL(f))]);
         }
-        setAnalysisMode(prev => !prev);
-        if (!isAnalysisMode) { // if turning on
-            setIsImageGenMode(false);
-            setIsVideoGenMode(false);
-        }
+
+        if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
-    const handleToggleImageGenMode = () => {
-        setIsImageGenMode(prev => !prev);
-        if (!isImageGenMode) { // if turning on
-            setAnalysisMode(false);
-            setAnalysisFile(null);
-            setIsVideoGenMode(false);
+    const handleVoiceSubmit = () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            return;
         }
-    };
 
-    const handleToggleVideoGenMode = () => {
-        setIsVideoGenMode(prev => !prev);
-        if (!isVideoGenMode) { // if turning on
-            setAnalysisMode(false);
-            setAnalysisFile(null);
-            setIsImageGenMode(false);
-        }
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            audioChunksRef.current = [];
+            recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
+            recorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`);
+                handleSendMessage('', [], audioFile);
+                stream.getTracks().forEach(track => track.stop());
+                setIsRecording(false);
+            };
+            recorder.start();
+            setIsRecording(true);
+        }).catch(err => console.error("Mic access error:", err));
     };
-
-    const handleSelectSession = (sessionId: string) => {
-        setCurrentSessionId(sessionId);
-        if (window.innerWidth < 768) {
-            setSidebarOpen(false);
-        }
-    }
     
     const handleDeleteSession = async (sessionId: string) => {
         if (!user) return;
-        
+        const sessionRef = doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${sessionId}`);
+        const messagesRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${sessionId}/messages`);
+
         try {
-            const sessionRef = doc(db, `${CHATS_COLLECTION}${user.uid}/sessions`, sessionId);
-            const messagesRef = collection(sessionRef, 'messages');
-            
-            // Get all messages to delete them in a batch
             const messagesSnapshot = await getDocs(messagesRef);
             const batch = writeBatch(db);
-            messagesSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
-            
-            // Delete the session document itself
-            batch.delete(sessionRef);
-
+            messagesSnapshot.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
+            await deleteDoc(sessionRef);
 
             if (currentSessionId === sessionId) {
-                // After deletion, find the next session to make active.
-                // The `sessions` state array is already sorted by `updatedAt` descending.
-                const remainingSessions = sessions.filter(s => s.id !== sessionId);
-                if (remainingSessions.length > 0) {
-                    // Switch to the most recent remaining session.
-                    setCurrentSessionId(remainingSessions[0].id);
+                if (sessions.length > 1) {
+                    const nextSession = sessions.find(s => s.id !== sessionId) || sessions[0];
+                    setCurrentSessionId(nextSession.id);
                 } else {
-                    // If no sessions are left, create a new one.
-                    createNewSession(true);
+                    await createNewSession(true);
                 }
             }
         } catch (error) {
             console.error("Error deleting session:", error);
-            alert("There was an error deleting the chat session. Please try again.");
+            setError("Failed to delete the session.");
         }
     };
-    
-    const handleRenameSession = async (sessionId: string, newTitle: string) => {
-        if (!user) return;
-        await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions`, sessionId), { title: newTitle, updatedAt: serverTimestamp() as Timestamp });
+
+    const removeImage = (indexToRemove: number) => {
+        URL.revokeObjectURL(imagePreviews[indexToRemove]);
+        setImageFiles(prev => prev.filter((_, i) => i !== indexToRemove));
+        setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
     };
 
-    const currentSession = sessions.find(s => s.id === currentSessionId);
-
+    const isInputEmpty = !messageText.trim() && imageFiles.length === 0 && !analysisFile;
+    
     return (
-        <div className="flex h-[calc(100vh-68px)] bg-primary w-full overflow-hidden">
-             {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
-            <ChatSidebar
-                sessions={sessions}
-                activeSessionId={currentSessionId}
-                onSelectSession={handleSelectSession}
-                onNewChat={() => createNewSession(true)}
-                onDeleteSession={(id, title) => openDeleteModal(title, () => handleDeleteSession(id))}
-                onRenameSession={handleRenameSession}
-                userProfile={userProfile}
-                isOpen={isSidebarOpen}
-                isCollapsed={isSidebarCollapsed}
-                error={error}
-                onViewProfile={onViewProfile}
-            />
-            <div className="flex-1 flex flex-col overflow-hidden h-full bg-primary">
-                <header className="p-4 flex items-center justify-between z-10 flex-shrink-0 relative">
-                     <div className="flex items-center">
-                        <button onClick={() => {
-                            if (window.innerWidth < 768) setSidebarOpen(!isSidebarOpen)
-                            else setSidebarCollapsed(!isSidebarCollapsed)
-                        }} id="sidebar-toggle-btn" className="p-2 rounded-full hover:bg-muted">
-                            <svg className="w-6 h-6 transition-transform text-muted"><use href="#icon-sidebar-toggle"></use></svg>
-                        </button>
-                         <button onClick={() => createNewSession(true)} id="collapsed-new-chat-btn" className={`${isSidebarCollapsed ? 'inline-flex' : 'hidden'} p-2 rounded-full hover:bg-muted ml-2`}>
-                             <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
-                        </button>
-                    </div>
-
-                    <button onClick={() => createNewSession(true)} className="p-2 rounded-full hover:bg-muted md:hidden" aria-label="New Chat">
-                         <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
+        <div className={`flex h-screen w-full bg-primary text-primary transition-all duration-300 ${isSidebarOpen ? 'md:pl-64' : (isSidebarCollapsed ? 'md:pl-16' : 'md:pl-0')}`}>
+            {/* Sidebar */}
+            <aside id="chat-sidebar" className={`fixed top-0 left-0 h-full bg-secondary z-40 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>
+                <div className="p-3 flex items-center justify-between border-b border-primary h-[69px]">
+                    {!isSidebarCollapsed && (
+                        <h2 className="text-lg font-bold">Chat Sessions</h2>
+                    )}
+                    <button onClick={() => setSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:block p-1 rounded-full hover:bg-hover">
+                        <svg className="w-5 h-5 text-muted"><use href="#icon-sidebar-toggle"></use></svg>
                     </button>
-                </header>
-                <ChatMessages 
-                    messages={messages} 
-                    isLoading={isLoading} 
-                    isGeneratingImage={isGeneratingImage} 
-                    isGeneratingVideo={isGeneratingVideo} 
-                    isAnalyzing={isAnalysisMode}
-                    userProfile={userProfile} 
-                    animatedMessageIds={animatedMessageIds}
-                    onImageClick={setPreviewImageUrl}
-                />
-                <div className="px-2 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3 md:px-6 flex-shrink-0">
-                    <ChatInput 
-                        onSendMessage={handleSendMessage} 
-                        isAnalysisMode={isAnalysisMode}
-                        onToggleAnalysisMode={handleToggleAnalysisMode}
-                        isImageGenMode={isImageGenMode}
-                        onToggleImageGenMode={handleToggleImageGenMode}
-                        isVideoGenMode={isVideoGenMode}
-                        onToggleVideoGenMode={handleToggleVideoGenMode}
-                        videoAspectRatio={videoAspectRatio}
-                        onVideoAspectRatioChange={setVideoAspectRatio}
-                        onAnalysisFileSelect={setAnalysisFile}
-                        analysisFile={analysisFile}
-                        isLoading={isLoading}
-                        onActivateVoiceMode={() => setVoiceUIVisible(true)}
-                    />
                 </div>
-            </div>
-            {previewImageUrl && (
-                <ImagePreviewModal 
-                    imageUrl={previewImageUrl} 
-                    onClose={() => setPreviewImageUrl(null)}
-                    fileName={`lazerdsgn-ai-generated-${Date.now()}.png`}
-                />
-            )}
-            <VoiceUIMenu
-                isOpen={isVoiceUIVisible}
-                onClose={() => setVoiceUIVisible(false)}
-                onSendAudio={(audioFile) => {
-                    handleSendMessage('', [], audioFile);
-                    setVoiceUIVisible(false);
-                }}
-            />
-        </div>
-    );
-};
-
-// Sub-components
-const ChatSidebar: React.FC<{
-    sessions: ChatSession[], 
-    activeSessionId: string | null,
-    onSelectSession: (id: string) => void,
-    onNewChat: () => void,
-    onDeleteSession: (id: string, title: string) => void,
-    onRenameSession: (id: string, newTitle: string) => void,
-    userProfile: UserProfile | null,
-    isOpen: boolean,
-    isCollapsed: boolean,
-    error: string | null,
-    onViewProfile: () => void,
-}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed, error, onViewProfile }) => {
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const filteredSessions = sessions
-        .filter(s => !s.title.startsWith(TEMP_TITLE_PREFIX))
-        .filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    return (
-        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-40 md:relative md:h-full transition-all duration-300 ease-in-out flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
-             <div className="p-4 flex-shrink-0 h-[68px]">
-                    <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-full font-medium hover:bg-accent-hover transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-lg">
-                        <svg className="w-5 h-5 mr-2"><use href="#icon-rename"></use></svg>
-                        New Chat
+                <div className="p-3">
+                    <button onClick={() => createNewSession(true)} className={`w-full flex items-center p-2 rounded-lg border-2 border-dashed border-secondary hover:border-primary hover:bg-hover transition-colors ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+                        <svg className="w-5 h-5 text-muted"><use href="#icon-plus-square"></use></svg>
+                        {!isSidebarCollapsed && <span className="ml-2 text-sm font-medium text-secondary">New Chat</span>}
                     </button>
-            </div>
-            <div className="px-4 pb-2 flex-shrink-0">
-                <div className="relative">
-                    <input 
-                        type="text" 
-                        placeholder="Search chats..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-transparent border border-primary rounded-full py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 focus:bg-secondary transition text-primary"
-                    />
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
-                        <svg className="w-4 h-4"><use href="#icon-search"></use></svg>
-                    </div>
                 </div>
-            </div>
-            {error ? (
-                <div className="p-4 m-2 text-sm text-red-700 bg-red-100 rounded-lg">
-                    <strong>Error</strong>
-                    <p>{error}</p>
-                </div>
-            ) : (
-                <div className="flex-1 overflow-y-auto px-2">
-                    {filteredSessions.map(session => (
-                        <SidebarItem 
-                            key={session.id} 
-                            session={session} 
-                            isActive={session.id === activeSessionId}
-                            onSelect={() => onSelectSession(session.id)}
-                            onDelete={() => onDeleteSession(session.id, session.title)}
-                            onRename={onRenameSession}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-const SidebarItem: React.FC<{
-    session: ChatSession,
-    isActive: boolean,
-    onSelect: () => void,
-    onDelete: () => void,
-    onRename: (id: string, newTitle: string) => void
-}> = ({ session, isActive, onSelect, onDelete, onRename }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editInputValue, setEditInputValue] = useState(session.title);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const [displayedTitle, setDisplayedTitle] = useState('');
-    const previousTitleRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        const isInitialLoad = previousTitleRef.current === null;
-        const titleChanged = previousTitleRef.current !== session.title;
-        const isTempTitle = session.title.startsWith(TEMP_TITLE_PREFIX);
-
-        if (isInitialLoad || isTempTitle || isEditing) {
-            setDisplayedTitle(session.title);
-        } else if (titleChanged) {
-            setDisplayedTitle('');
-            let i = 0;
-            const intervalId = setInterval(() => {
-                if (i < session.title.length) {
-                    setDisplayedTitle(prev => prev + session.title.charAt(i));
-                    i++;
-                } else {
-                    clearInterval(intervalId);
-                }
-            }, 20); // Typing speed
-
-            return () => clearInterval(intervalId);
-        }
-        previousTitleRef.current = session.title;
-    }, [session.title, isEditing]);
-
-    useEffect(() => { setEditInputValue(session.title) }, [session.title]);
-
-    useEffect(() => {
-        if (isEditing) {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }
-    }, [isEditing]);
-
-    const handleRename = () => {
-        if (editInputValue.trim() && editInputValue.trim() !== session.title) {
-            onRename(session.id, editInputValue.trim());
-        } else {
-            setEditInputValue(session.title);
-        }
-        setIsEditing(false);
-    };
-
-    return (
-        <div 
-            className={`session-item-container group flex items-center justify-between gap-2 ${isActive ? 'active' : 'md:hover:bg-hover'}`}
-            onClick={!isEditing ? onSelect : undefined}
-        >
-            <div className="flex-1 min-w-0">
-                {isEditing ? (
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={editInputValue}
-                        onChange={(e) => setEditInputValue(e.target.value)}
-                        onBlur={handleRename}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                        className="session-text text-sm w-full bg-transparent border border-primary rounded-full px-2 py-0.5"
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                ) : (
-                    <span className={`session-text text-sm block truncate ${isActive ? 'text-primary font-semibold' : 'text-secondary md:group-hover:text-primary'}`}>{displayedTitle}</span>
-                )}
-            </div>
-             <div className={`flex flex-shrink-0 items-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-                <button title="Rename" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-rename"></use></svg></button>
-                <button title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 text-muted hover:text-primary rounded"><svg className="w-4 h-4"><use href="#icon-trash"></use></svg></button>
-            </div>
-        </div>
-    );
-};
-
-const ChatMessages: React.FC<{ 
-    messages: ChatMessage[], 
-    isLoading: boolean, 
-    isGeneratingImage: boolean, 
-    isGeneratingVideo: boolean, 
-    isAnalyzing?: boolean,
-    userProfile: UserProfile | null,
-    animatedMessageIds: React.MutableRefObject<Set<string>>,
-    onImageClick: (url: string) => void;
-}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isLoading]);
-
-    return (
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-4xl mx-auto">
-            <div className="flex flex-col space-y-5">
-                {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={onImageClick}/>)}
-                {isLoading && <ChatMessageItem key="loading" message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} isAnalyzing={isAnalyzing} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
-                {messages.length === 0 && !isLoading && (
-                    <div className="text-center text-secondary font-bold text-2xl pt-20">
-                        Hey, How can I help you?
-                    </div>
-                )}
-                <div ref={messagesEndRef} />
-            </div>
-        </div>
-    );
-};
-
-const ChatInput: React.FC<{
-    onSendMessage: (message: string, files: File[], audioFile: File | null) => void,
-    isAnalysisMode: boolean,
-    onToggleAnalysisMode: () => void,
-    isImageGenMode: boolean,
-    onToggleImageGenMode: () => void,
-    isVideoGenMode: boolean,
-    onToggleVideoGenMode: () => void,
-    videoAspectRatio: '16:9' | '9:16',
-    onVideoAspectRatioChange: (ratio: '16:9' | '9:16') => void,
-    onAnalysisFileSelect: (file: File | null) => void,
-    analysisFile: File | null,
-    isLoading: boolean,
-    onActivateVoiceMode: () => void;
-}> = ({ onSendMessage, isAnalysisMode, onToggleAnalysisMode, isImageGenMode, onToggleImageGenMode, isVideoGenMode, onToggleVideoGenMode, videoAspectRatio, onVideoAspectRatioChange, onAnalysisFileSelect, analysisFile, isLoading, onActivateVoiceMode }) => {
-    const [input, setInput] = useState('');
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const analysisInputRef = useRef<HTMLInputElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const menuRef = useRef<HTMLDivElement>(null);
-    const [isListening, setIsListening] = useState(false);
-    const recognitionRef = useRef<any>(null);
-
-    // Close menu on click outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsMenuOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    // Set up Speech Recognition
-    useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onresult = (event: any) => {
-                let newTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        newTranscript += event.results[i][0].transcript;
-                    }
-                }
-                setInput(prev => (prev ? prev.trim() + ' ' : '') + newTranscript.trim());
-            };
-
-            recognition.onend = () => {
-                setIsListening(false);
-            };
-
-            recognition.onerror = (event: any) => {
-                console.error('Speech recognition error', event.error);
-                setIsListening(false);
-            };
-
-            recognitionRef.current = recognition;
-        } else {
-            console.warn("Speech recognition not supported in this browser.");
-        }
-
-        return () => {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
-            }
-        };
-    }, []);
-
-    const handleToggleListening = () => {
-        const recognition = recognitionRef.current;
-        if (!recognition) {
-            alert("Speech recognition is not supported by your browser.");
-            return;
-        }
-
-        if (isListening) {
-            recognition.stop();
-        } else {
-            try {
-                recognition.start();
-                setIsListening(true);
-            } catch (e) {
-                console.error("Could not start recognition", e);
-                if (recognitionRef.current.state !== 'listening') {
-                    setIsListening(false);
-                }
-            }
-        }
-    };
-
-
-    // Auto-resize textarea
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            const scrollHeight = textareaRef.current.scrollHeight;
-            // Cap height at a reasonable max, e.g., 200px
-            textareaRef.current.style.height = `${Math.min(scrollHeight, 200)}px`;
-        }
-    }, [input]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isLoading || (!input.trim() && !analysisFile)) return;
-        onSendMessage(input, [], null);
-        setInput('');
-    };
-    
-    const handleAnalysisFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        onAnalysisFileSelect(e.target.files?.[0] || null);
-    };
-
-    const handleSelectImageGen = () => {
-        if (isAnalysisMode) onToggleAnalysisMode();
-        if (isVideoGenMode) onToggleVideoGenMode();
-        if (!isImageGenMode) onToggleImageGenMode();
-        setIsMenuOpen(false);
-    };
-
-    const handleSelectVideoGen = () => {
-        if (isAnalysisMode) onToggleAnalysisMode();
-        if (isImageGenMode) onToggleImageGenMode();
-        if (!isVideoGenMode) onToggleVideoGenMode();
-        setIsMenuOpen(false);
-    };
-
-    const handleSelectAnalysis = () => {
-        if (isImageGenMode) onToggleImageGenMode();
-        if (isVideoGenMode) onToggleVideoGenMode();
-        if (!isAnalysisMode) onToggleAnalysisMode();
-        setIsMenuOpen(false);
-    };
-
-    const dismissMode = () => {
-        if (isImageGenMode) onToggleImageGenMode();
-        if (isVideoGenMode) onToggleVideoGenMode();
-        if (isAnalysisMode) onToggleAnalysisMode();
-        onAnalysisFileSelect(null);
-    };
-    
-    const isAnyModeActive = isImageGenMode || isAnalysisMode || isVideoGenMode;
-    const showSendIcon = input.trim().length > 0 || !!analysisFile;
-
-
-    return (
-        <div className="w-full max-w-3xl mx-auto">
-            <div className={isAnyModeActive ? 'ask-ai-active rounded-3xl' : ''}>
-                <form 
-                    onSubmit={handleSubmit} 
-                    className="relative transition-all duration-300 shadow-lg rounded-3xl glass-surface"
-                >
-                    {/* NEW: Redesigned Active Mode Indicator */}
-                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isAnyModeActive ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
-                        <div className="px-4 pt-3 pb-1 flex justify-between items-center">
-                            <div className="flex items-center space-x-2 text-primary text-sm font-semibold min-w-0">
-                                {isImageGenMode && <><svg className="w-5 h-5 text-purple-500 flex-shrink-0"><use href="#icon-image-gen"></use></svg><span className="truncate">Image Generation</span></>}
-                                {isVideoGenMode && <><svg className="w-5 h-5 text-blue-500 flex-shrink-0"><use href="#icon-video"></use></svg><span className="truncate">Video Generation</span></>}
-                                {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-enhance"></use></svg><span className="truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span></>}
+                <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                     {sessionsLoaded ? sessions.map(session => (
+                        <div key={session.id} className={`session-item-container group ${currentSessionId === session.id ? 'active' : ''}`}>
+                            <div className="flex-1" onClick={() => setCurrentSessionId(session.id)}>
+                                <p className={`text-sm text-secondary truncate session-text ${isSidebarCollapsed ? 'hidden' : ''}`}>{session.title.replace(TEMP_TITLE_PREFIX, '')}</p>
                             </div>
-                            <button type="button" onClick={dismissMode} className="p-1 rounded-full hover:bg-hover flex-shrink-0">
-                                <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                        </div>
-                        {isVideoGenMode && (
-                             <div className="px-4 pb-2 flex items-center justify-start">
-                                <div className="flex items-center bg-muted border border-primary rounded-full p-0.5">
-                                    <button type="button" onClick={() => onVideoAspectRatioChange('16:9')} className={`px-2 py-0.5 text-xs rounded-full transition-colors ${videoAspectRatio === '16:9' ? 'bg-primary-accent text-on-primary-accent' : 'text-secondary hover:bg-hover'}`}>16:9</button>
-                                    <button type="button" onClick={() => onVideoAspectRatioChange('9:16')} className={`px-2 py-0.5 text-xs rounded-full transition-colors ${videoAspectRatio === '9:16' ? 'bg-primary-accent text-on-primary-accent' : 'text-secondary hover:bg-hover'}`}>9:16</button>
-                                </div>
-                             </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-end p-2 space-x-1.5">
-                        <div className="relative self-end" ref={menuRef}>
-                            <div className={`absolute bottom-full mb-3 flex flex-col items-center gap-3 transition-all duration-300 ease-in-out ${isMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                                <button type="button" onClick={handleSelectVideoGen} title="Video Gen" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
-                                    <svg className="w-5 h-5 text-muted"><use href="#icon-video"></use></svg>
-                                </button>
-                                <button type="button" onClick={handleSelectImageGen} title="Image Gen" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
-                                    <svg className="w-5 h-5 text-muted"><use href="#icon-image-gen"></use></svg>
-                                </button>
-                                <button type="button" onClick={handleSelectAnalysis} title="Analysis" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
-                                     <svg className="w-5 h-5 text-muted"><use href="#icon-enhance"></use></svg>
-                                </button>
-                            </div>
-                            
-                            <button 
-                                type="button" 
-                                onClick={() => setIsMenuOpen(!isMenuOpen)} 
-                                className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 transition-all duration-300 ease-in-out"
-                            >
-                                <svg className={`w-6 h-6 text-muted transition-transform duration-300 ${isMenuOpen ? 'rotate-45' : 'rotate-0'}`}><use href="#icon-plus"></use></svg>
-                            </button>
-                        </div>
-                        
-                        {isAnalysisMode ? (
-                             <div className="self-end">
-                                <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition">
-                                    <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
-                                </button>
-                                <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden />
-                            </div>
-                        ) : (
-                             <div className="self-end">
-                                <button type="button" onClick={handleToggleListening} title="Speech-to-Text" className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition ${isListening ? 'mic-recording' : 'bg-hover text-muted hover:bg-primary/20'}`}>
-                                    <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
-                                </button>
-                            </div>
-                        )}
-                        
-                        <textarea
-                            ref={textareaRef}
-                            value={input}
-                            onChange={e => setInput(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
-                            placeholder="Ask me anything..."
-                            className="flex-1 bg-transparent text-primary placeholder-muted focus:outline-none focus:ring-0 resize-none self-center py-2 px-3 text-base"
-                            rows={1}
-                            style={{ wordBreak: 'break-word' }}
-                        />
-
-                        <div className="flex items-center self-end">
-                             {showSendIcon ? (
-                                <button type="submit" disabled={isLoading} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-6 h-6 p-0.5"><use href="#icon-paper-plane-filled"></use></svg>}
-                                </button>
-                            ) : (
-                                <button type="button" onClick={onActivateVoiceMode} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition-colors bg-hover text-muted hover:bg-primary/20">
-                                    <svg className="w-6 h-6"><use href="#icon-waves-sound"></use></svg>
+                            {!isSidebarCollapsed && (
+                                <button onClick={() => openDeleteModal(session.title, () => handleDeleteSession(session.id))} className="text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <svg className="w-4 h-4"><use href="#icon-trash"></use></svg>
                                 </button>
                             )}
                         </div>
+                    )) : Array(5).fill(0).map((_, i) => (
+                        <div key={i} className={`h-10 rounded-lg shimmer-bg ${isSidebarCollapsed ? 'w-10 mx-auto' : ''}`}></div>
+                    ))}
+                </nav>
+            </aside>
+
+            <div className="flex-1 flex flex-col h-full bg-secondary">
+                {/* Chat Header */}
+                <header className="flex items-center justify-between p-4 border-b border-primary bg-secondary flex-shrink-0">
+                    <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 -ml-2 text-muted hover:text-primary">
+                        <svg className="w-6 h-6"><use href="#icon-sidebar-toggle"></use></svg>
+                    </button>
+                    <div className="flex items-center space-x-2">
+                        <span className={`px-3 py-1.5 text-sm font-semibold rounded-full cursor-pointer transition-colors ${!isAnalysisMode && !isImageGenMode && !isVideoGenMode ? 'bg-primary text-on-primary-accent' : 'bg-muted text-secondary hover:bg-hover'}`} onClick={() => { setAnalysisMode(false); setIsImageGenMode(false); setIsVideoGenMode(false); }}>Chat</span>
+                        <span className={`px-3 py-1.5 text-sm font-semibold rounded-full cursor-pointer transition-colors ${isAnalysisMode ? 'bg-primary text-on-primary-accent mode-active-glow' : 'bg-muted text-secondary hover:bg-hover'}`} onClick={() => { setAnalysisMode(true); setIsImageGenMode(false); setIsVideoGenMode(false); }}>Analyze</span>
+                        <span className={`px-3 py-1.5 text-sm font-semibold rounded-full cursor-pointer transition-colors ${isImageGenMode ? 'bg-primary text-on-primary-accent mode-active-glow' : 'bg-muted text-secondary hover:bg-hover'}`} onClick={() => { setAnalysisMode(false); setIsImageGenMode(true); setIsVideoGenMode(false); }}>Image</span>
+                        <span className={`px-3 py-1.5 text-sm font-semibold rounded-full cursor-pointer transition-colors ${isVideoGenMode ? 'bg-primary text-on-primary-accent mode-active-glow' : 'bg-muted text-secondary hover:bg-hover'}`} onClick={() => { setAnalysisMode(false); setIsImageGenMode(false); setIsVideoGenMode(true); }}>Video</span>
                     </div>
-                </form>
+                    {isVideoGenMode && (
+                        <div className="flex items-center space-x-2">
+                            <button onClick={() => setVideoAspectRatio('16:9')} className={`px-2 py-1 text-xs font-mono rounded ${videoAspectRatio === '16:9' ? 'bg-secondary-accent text-white' : 'bg-muted'}`}>16:9</button>
+                            <button onClick={() => setVideoAspectRatio('9:16')} className={`px-2 py-1 text-xs font-mono rounded ${videoAspectRatio === '9:16' ? 'bg-secondary-accent text-white' : 'bg-muted'}`}>9:16</button>
+                        </div>
+                    )}
+                </header>
+                
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                    {error && <div className="p-3 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
+                    {messages.map((msg) => (
+                        <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={setPreviewImageUrl} />
+                    ))}
+                    {(isLoading || isGeneratingImage || isGeneratingVideo) && <ChatMessageItem message={{id:'loading', text:'', role:'ai', createdAt: Timestamp.now()}} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isVideoGenMode} isAnalyzing={isAnalysisMode && isLoading} userProfile={userProfile} animatedMessageIds={animatedMessageIds} />}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Area */}
+                <div className="mt-auto p-4 border-t border-primary bg-secondary">
+                    <form onSubmit={handleFormSubmit} className={`relative ${(isImageGenMode || isVideoGenMode) ? 'ask-ai-active' : ''} rounded-2xl`}>
+                        <div className="bg-secondary rounded-2xl p-2 flex items-end gap-2">
+                            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 text-muted hover:text-primary rounded-full hover:bg-hover transition-colors flex-shrink-0" title="Attach file">
+                                <svg className="w-5 h-5"><use href="#icon-paperclip"></use></svg>
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept={isAnalysisMode ? '*' : 'image/*'} multiple={!isAnalysisMode} hidden />
+                            </button>
+                            <div className="flex-1 flex flex-col">
+                                {(imagePreviews.length > 0 || analysisFile) && (
+                                    <div className="flex items-center gap-2 p-2 bg-muted rounded-t-lg">
+                                        {analysisFile ? (
+                                            <div className="flex items-center gap-2 text-sm text-secondary">
+                                                <svg className="w-4 h-4"><use href="#icon-file-text"></use></svg>
+                                                <span>{analysisFile.name}</span>
+                                                <button onClick={() => setAnalysisFile(null)} className="p-1 hover:bg-hover rounded-full">&times;</button>
+                                            </div>
+                                        ) : imagePreviews.map((src, i) => (
+                                            <div key={i} className="relative">
+                                                <img src={src} className="h-12 w-12 object-cover rounded" />
+                                                <button onClick={() => removeImage(i)} className="absolute -top-1 -right-1 bg-gray-800 text-white rounded-full h-4 w-4 text-xs flex items-center justify-center">&times;</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <textarea
+                                    ref={textareaRef}
+                                    value={messageText}
+                                    onChange={handleTextareaChange}
+                                    placeholder={isAnalysisMode ? "Upload a file and ask a question..." : (isImageGenMode || isVideoGenMode) ? "Describe the media you want to create..." : "Type your message here..."}
+                                    className={`w-full bg-transparent p-2 text-base resize-none focus:outline-none placeholder-muted ${imagePreviews.length > 0 || analysisFile ? 'rounded-b-lg' : 'rounded-lg'}`}
+                                    rows={1}
+                                />
+                            </div>
+
+                            {isInputEmpty ? (
+                                <button type="button" onClick={handleVoiceSubmit} className={`p-3 rounded-full flex-shrink-0 transition-colors ${isRecording ? 'mic-recording' : 'text-muted hover:text-primary hover:bg-hover'}`} title={isRecording ? 'Stop Recording' : 'Use Microphone'}>
+                                    <svg className="w-5 h-5"><use href={isRecording ? "#icon-stop-square" : "#icon-microphone"}></use></svg>
+                                </button>
+                            ) : (
+                                <button type="submit" disabled={isLoading} className="p-3 bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-colors disabled:opacity-50 flex-shrink-0" title="Send Message">
+                                    {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-5 h-5"><use href="#icon-paper-plane"></use></svg>}
+                                </button>
+                            )}
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-    );
-};
-
-
-const VoiceUIMenu: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onSendAudio: (audioFile: File) => void;
-}> = ({ isOpen, onClose, onSendAudio }) => {
-    const [isRecording, setIsRecording] = useState(false);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-
-    useEffect(() => {
-        if (isOpen) {
-            // Start recording automatically when the modal opens
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-                    mediaRecorderRef.current = recorder;
-                    audioChunksRef.current = [];
-                    
-                    recorder.ondataavailable = e => {
-                        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-                    };
-
-                    recorder.onstop = () => {
-                        stream.getTracks().forEach(track => track.stop());
-                        setIsRecording(false);
-                    };
-
-                    recorder.start();
-                    setIsRecording(true);
-                })
-                .catch(err => {
-                    alert("Microphone access denied. Please check browser permissions to use voice chat.");
-                    onClose();
-                });
-        } else {
-            // Cleanup on close
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            }
-        }
-
-        return () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            }
-        };
-    }, [isOpen, onClose]);
-
-    const handleStopAndSend = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                if (audioBlob.size > 0) {
-                    const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`);
-                    onSendAudio(audioFile);
-                }
-                setIsRecording(false);
-            };
-            mediaRecorderRef.current.stop();
-        }
-    };
-    
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-primary/90 backdrop-blur-lg z-50 flex flex-col items-center justify-center p-4">
-             <button onClick={onClose} className="absolute top-6 right-6 text-muted hover:text-primary z-20 p-2 rounded-full hover:bg-hover transition-colors" aria-label="Close">
-                <svg className="w-7 h-7"><use href="#icon-x-close"></use></svg>
-            </button>
-            <div className="flex-1 flex items-center justify-center">
-                 {isRecording && (
-                    <div className="voice-recording-circle w-48 h-48 bg-secondary-accent rounded-full flex items-center justify-center">
-                         <svg className="w-16 h-16 text-white"><use href="#icon-waves-sound"></use></svg>
-                    </div>
-                )}
-            </div>
-            <div className="pb-12">
-                <button 
-                    onClick={handleStopAndSend}
-                    className="w-20 h-20 bg-primary-accent text-on-primary-accent rounded-full flex items-center justify-center shadow-lg transform transition-transform hover:scale-105"
-                >
-                    <svg className="w-8 h-8"><use href="#icon-arrow-up"></use></svg>
-                </button>
-            </div>
+            {previewImageUrl && <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />}
         </div>
     );
 };
