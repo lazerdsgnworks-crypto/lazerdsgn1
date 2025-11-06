@@ -93,7 +93,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
     
     return (
         <div ref={pageRef} className="page-transition">
-            <section id="hero" className="relative py-24 md:py-40 text-center overflow-hidden">
+            <section id="hero" className="relative pt-32 pb-24 md:py-40 text-center overflow-hidden">
                 <LiquidBackground />
                 <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 className="hero-headline tracking-tighter text-primary mb-6">

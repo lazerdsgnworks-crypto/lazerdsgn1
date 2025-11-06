@@ -1,5 +1,7 @@
+
 import type { User as FirebaseUser } from 'firebase/auth';
-import type { Timestamp } from 'firebase/firestore';
+// FIX: Changed import type to regular import to fix module resolution issue for Timestamp.
+import { Timestamp } from 'firebase/firestore';
 
 export enum Page {
   Home = 'home',
@@ -31,6 +33,7 @@ export interface ChatMessage {
   imageUrls?: string[];
   imageUrl?: string;
   videoUrl?: string;
+  audioUrl?: string;
   analysisFile?: {
     name: string;
     type: string;
@@ -63,7 +66,8 @@ export interface RepostedPost {
   author: Author;
   text: string;
   mediaUrls?: string[];
-  mediaType?: 'image' | 'video';
+  mediaType?: 'image' | 'video' | 'audio' | 'mixed';
+  audioUrl?: string;
   poll?: Poll;
   createdAt: Timestamp;
 }
@@ -83,7 +87,8 @@ export interface CommunityPost {
   author: Author;
   text: string;
   mediaUrls?: string[];
-  mediaType?: 'image' | 'video';
+  mediaType?: 'image' | 'video' | 'audio' | 'mixed';
+  audioUrl?: string;
   poll?: Poll;
   createdAt: Timestamp;
   commentCount: number;
@@ -92,6 +97,7 @@ export interface CommunityPost {
   aiReply?: {
       text: string;
       createdAt: Timestamp;
+      audioUrl?: string;
   };
   isAiPost?: boolean;
   repostedPost?: RepostedPost;
@@ -104,6 +110,7 @@ export interface Comment {
     createdAt: Timestamp;
     postId: string;
     replyCount: number;
+    audioUrl?: string;
 }
 
 export interface Reply {
@@ -113,4 +120,5 @@ export interface Reply {
     createdAt: Timestamp;
     postId: string;
     commentId: string;
+    audioUrl?: string;
 }

@@ -1,22 +1,25 @@
 
 
+
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
-import { auth, db } from './services/firebase';
-import { Page, User, CommunityPost, UserProfile } from './types';
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { auth, db } from './services/firebase.ts';
+import { Page, User, CommunityPost, UserProfile } from './types.ts';
+// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 
-import HomePage from './pages/HomePage';
-import PortfolioPage from './pages/PortfolioPage';
-import AboutPage from './pages/AboutPage';
-import ChatPage from './pages/ChatPage';
-import CommunityPage from './pages/CommunityPage';
-import ProfilePage from './pages/ProfilePage';
-import Header from './components/Header';
-import Footer from './components/Footer';
-import Modal from './components/Modal';
-import { ADMIN_UIDS } from './constants';
+import HomePage from './pages/HomePage.tsx';
+import PortfolioPage from './pages/PortfolioPage.tsx';
+import AboutPage from './pages/AboutPage.tsx';
+import ChatPage from './pages/ChatPage.tsx';
+import CommunityPage from './pages/CommunityPage.tsx';
+import ProfilePage from './pages/ProfilePage.tsx';
+import Header from './components/Header.tsx';
+import Footer from './components/Footer.tsx';
+import Modal from './components/Modal.tsx';
+import { ADMIN_UIDS } from './constants.ts';
 
 type Theme = 'light' | 'dark';
 type AuthState = 'idle' | 'loading' | 'success';
@@ -584,8 +587,25 @@ const App: React.FC = () => {
             }, 1500);
         } catch (error: any) {
             console.error("Login error:", error.code, error.message);
-            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                 setLoginError("Invalid email or password. Please try again.");
+            // Firebase consolidates many auth errors into 'auth/invalid-credential'
+            // to prevent account enumeration. We can provide better UX by checking
+            // the sign-in methods for the email if login fails.
+            if (error.code === 'auth/invalid-credential') {
+                try {
+                    const signInMethods = await fetchSignInMethodsForEmail(auth, email.value);
+                    if (signInMethods.includes('google.com')) {
+                        setLoginError("This email is linked to a Google account. Please use the 'Sign in with Google' button below.");
+                    } else if (signInMethods.length === 0) {
+                        setLoginError("No account found with this email. Have you signed up yet?");
+                    } else {
+                        // This case means the user exists with an email/password but the password was wrong.
+                        setLoginError("Incorrect password. Please try again or use the 'Forgot password?' link.");
+                    }
+                } catch (fetchError: any) {
+                    // If fetching methods fails (e.g., network error), fall back to a generic message.
+                    console.error("Error fetching sign in methods:", fetchError);
+                    setLoginError("Invalid email or password. Please try again.");
+                }
             } else {
                 setLoginError("An unexpected error occurred during login.");
             }
@@ -761,7 +781,7 @@ const App: React.FC = () => {
                 currentPage={currentPage}
                 onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
             />
-            <main>{renderPage()}</main>
+            <main className={currentPage === Page.Home ? '' : 'pt-[68px]'}>{renderPage()}</main>
             { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
             
             <Modal isOpen={isLoginModalOpen} onClose={() => { setLoginModalOpen(false); resetAuthModals(); }}>
@@ -775,7 +795,7 @@ const App: React.FC = () => {
                 />
             </Modal>
             
-             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); resetAuthModals(); }} size="lg">
+             <Modal isOpen={isSignupModalOpen} onClose={() => { setSignupModalOpen(false); resetAuthModals(); }} size="md">
                 <SignupForm
                     onSubmit={handleSignup}
                     onGoogleSignIn={handleGoogleSignIn}

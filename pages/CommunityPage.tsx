@@ -1,18 +1,18 @@
 
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types';
-import { db } from '../services/firebase';
-// FIX: Corrected a type mismatch where `serverTimestamp()` (which returns a `FieldValue`) was assigned to a field expecting a `Timestamp`. By casting `serverTimestamp() as Timestamp`, we satisfy the TypeScript compiler while ensuring Firestore correctly sets the server-side timestamp upon document creation. Added `Timestamp` to the `firebase/firestore` import to make the type available for casting.
+import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
+import { db } from '../services/firebase.ts';
+// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, QuerySnapshot, DocumentData, doc, updateDoc, where, getDocs, startAt, endAt, limit, deleteDoc, setDoc, runTransaction, Timestamp } from 'firebase/firestore';
-import PostItem from '../components/community/PostItem';
-import Avatar from '../components/Avatar';
-import RightSidebar from '../components/community/RightSidebar';
-import ImagePreviewModal from '../components/community/ImagePreviewModal';
-import RepostModal from '../components/community/RepostModal';
-import { compressImage, dataURLtoFile } from '../utils/files';
-import Modal from '../components/Modal';
+import PostItem from '../components/community/PostItem.tsx';
+import Avatar from '../components/Avatar.tsx';
+import RightSidebar from '../components/community/RightSidebar.tsx';
+import ImagePreviewModal from '../components/community/ImagePreviewModal.tsx';
+import RepostModal from '../components/community/RepostModal.tsx';
+import { compressImage, dataURLtoFile } from '../utils/files.ts';
+import Modal from '../components/Modal.tsx';
+import AudioPlayer from '../components/AudioPlayer.tsx';
 
 
 // --- Cloudinary Configuration ---
@@ -42,25 +42,38 @@ const PostSkeleton: React.FC = () => (
 const CreatePostForm: React.FC<{
     user: User;
     userProfile: UserProfile | null;
-    onCreatePost: (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => void;
+    onCreatePost: (text: string, imageUrls: string[] | null, audioUrl: string | null, isAiQuery: boolean, pollOptions: string[] | null) => void;
     isAiQuery: boolean;
     onAiQueryChange: (isAi: boolean) => void;
 }> = ({ user, userProfile, onCreatePost, isAiQuery, onAiQueryChange }) => {
     const [text, setText] = useState('');
     const [imageFiles, setImageFiles] = useState<File[]>([]);
-    const [videoFile, setVideoFile] = useState<File | null>(null);
-    const [previews, setPreviews] = useState<string[]>([]);
-    const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
+    const [audioFile, setAudioFile] = useState<File | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [status, setStatus] = useState<'idle' | 'compressing' | 'uploading' | 'submitting'>('idle');
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [enhancedText, setEnhancedText] = useState<string | null>(null);
-
+    
     // New state for poll creation
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+    const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
     
     const mediaInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+
+    useEffect(() => {
+        if (audioFile) {
+            const url = URL.createObjectURL(audioFile);
+            setAudioPreviewUrl(url);
+            return () => URL.revokeObjectURL(url);
+        } else {
+            setAudioPreviewUrl(null);
+        }
+    }, [audioFile]);
 
     const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setText(e.target.value);
@@ -69,30 +82,20 @@ const CreatePostForm: React.FC<{
         el.style.height = `${el.scrollHeight}px`;
     };
     
-    const removeMedia = (indexToRemove?: number) => {
-        if (typeof indexToRemove === 'number' && mediaType === 'image') {
-            // Revoke the specific URL before filtering the state
-            URL.revokeObjectURL(previews[indexToRemove]);
-    
-            const newImageFiles = imageFiles.filter((_, i) => i !== indexToRemove);
-            const newPreviews = previews.filter((_, i) => i !== indexToRemove);
-    
-            setImageFiles(newImageFiles);
-            setPreviews(newPreviews);
-            
-            if (newImageFiles.length === 0) {
-                 setMediaType(null);
-            }
-        } else {
-            // Remove all media (for video or clearing all)
-            setImageFiles([]);
-            setVideoFile(null);
-            previews.forEach(p => URL.revokeObjectURL(p));
-            setPreviews([]);
-            setMediaType(null);
-            if(mediaInputRef.current) mediaInputRef.current.value = "";
-        }
+    const removeImage = (indexToRemove: number) => {
+        URL.revokeObjectURL(imagePreviews[indexToRemove]);
+        setImageFiles(prev => prev.filter((_, i) => i !== indexToRemove));
+        setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
     };
+
+    const removeAudio = () => {
+        if (isRecording && mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+        setIsRecording(false);
+        setAudioFile(null);
+    };
+
 
     const removePoll = () => {
         setShowPollCreator(false);
@@ -102,137 +105,132 @@ const CreatePostForm: React.FC<{
     const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFiles: File[] = Array.from(e.target.files || []);
         if (!newFiles.length) return;
-    
-        // Reset the file input so the user can select the same file again if they remove it and change their mind
         if (mediaInputRef.current) mediaInputRef.current.value = "";
     
         const firstFile = newFiles[0];
     
-        // Video handling (replaces everything)
         if (firstFile.type.startsWith('video/')) {
-            if (newFiles.length > 1) {
-                alert("You can only upload one video at a time.");
-                return;
-            }
-            if (firstFile.size > 50 * 1024 * 1024) { 
-                alert("Video file is too large. Please select a video under 50MB.");
-                return;
-            }
-            // If switching media types, clear the old state first
-            removeMedia(); 
-            setVideoFile(firstFile);
-            setPreviews([URL.createObjectURL(firstFile)]);
-            setMediaType('video');
+            alert("Video cannot be combined with other media. Please create a separate post for videos.");
             return;
         } 
         
-        // Image handling (appends to existing)
         if (firstFile.type.startsWith('image/')) {
-            if (mediaType === 'video') {
-                alert("You cannot add images to a video post. Please remove the video first.");
-                return;
-            }
-    
-            const allNewFilesAreImages = newFiles.every(f => f.type.startsWith('image/'));
-            if (!allNewFilesAreImages) {
-                alert("You cannot mix images with other file types.");
-                return;
-            }
+            if (!newFiles.every(f => f.type.startsWith('image/'))) { alert("You can only select images with this button."); return; }
             
             const filesToAdd = newFiles.slice(0, 4 - imageFiles.length);
-            if (filesToAdd.length < newFiles.length) {
-                 alert(`You can only upload a maximum of 4 images. ${filesToAdd.length > 0 ? `${filesToAdd.length} more images have been added.` : 'No more images can be added.'}`);
-            }
+            if (filesToAdd.length < newFiles.length) { alert(`You can only upload a maximum of 4 images. The first ${filesToAdd.length} have been added.`); }
             
-            if (filesToAdd.length === 0 && imageFiles.length < 4) {
-                 alert(`You can only upload a maximum of 4 images. No more images can be added.`);
-                 return;
-            }
-            if (filesToAdd.length === 0) return;
-    
-            // Check size *after* knowing which files we're actually adding
-            const totalSize = imageFiles.reduce((acc, file) => acc + file.size, 0) + filesToAdd.reduce((acc, file) => acc + file.size, 0);
-            if (totalSize > 20 * 1024 * 1024) {
-                alert("Total image size exceeds 20MB. Please select smaller files.");
-                return;
-            }
+            const totalSize = filesToAdd.reduce((acc, file) => acc + file.size, 0);
+            if (totalSize > 20 * 1024 * 1024) { alert("Total image size exceeds 20MB. Please select smaller files."); return; }
             
             setStatus('compressing');
             try {
-                const compressedNewFiles = await Promise.all(filesToAdd.map((file) => {
-                    if (file.size > 1024 * 1024) { // Compress images over 1MB
-                        return compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name));
-                    }
-                    return Promise.resolve(file);
-                }));
-    
-                // Append new files and previews
+                const compressedNewFiles = await Promise.all(filesToAdd.map(file => 
+                    file.size > 1024 * 1024 ? compressImage(file, 1024 * 1024).then(dataUrl => dataURLtoFile(dataUrl, file.name)) : Promise.resolve(file)
+                ));
                 setImageFiles(prev => [...prev, ...compressedNewFiles]);
-                setPreviews(prev => [...prev, ...compressedNewFiles.map(f => URL.createObjectURL(f))]);
-                setMediaType('image');
-                if (videoFile) setVideoFile(null); // Should not happen with current logic, but safe to have
+                setImagePreviews(prev => [...prev, ...compressedNewFiles.map(f => URL.createObjectURL(f))]);
             } catch (err) {
                 console.error("Image processing failed", err);
                 alert("An error occurred while processing images. Please try again.");
             } finally {
                 setStatus('idle');
             }
-        } 
-        else {
-            alert("Unsupported file type. Please select images or a video.");
+        } else {
+            alert("Unsupported file type. Please select images.");
             return;
         }
     };
 
+    const handleMicClick = () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            return;
+        }
+        
+        removeAudio();
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                const recorder = new MediaRecorder(stream);
+                mediaRecorderRef.current = recorder;
+                audioChunksRef.current = [];
+
+                recorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunksRef.current.push(event.data);
+                };
+
+                recorder.onstop = () => {
+                    if (audioChunksRef.current.length > 0) {
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                        const newAudioFile = new File([audioBlob], `recording-${Date.now()}.webm`, { type: 'audio/webm' });
+                        setAudioFile(newAudioFile);
+                    }
+                    stream.getTracks().forEach(track => track.stop());
+                    setIsRecording(false);
+                };
+
+                recorder.start();
+                setIsRecording(true);
+            })
+            .catch(err => {
+                console.error("Microphone access error:", err);
+                alert("Could not access microphone. Please check your browser permissions.");
+            });
+    };
+     
+    useEffect(() => {
+        return () => {
+            if (mediaRecorderRef.current?.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            }
+        };
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const validPollOptions = pollOptions.map(o => o.trim()).filter(Boolean);
-        const hasContent = text.trim() || videoFile || imageFiles.length > 0 || (showPollCreator && validPollOptions.length >= 2);
+        const hasContent = text.trim() || imageFiles.length > 0 || audioFile || (showPollCreator && validPollOptions.length >= 2);
         
         if (!user || !hasContent || status !== 'idle') return;
         
-        let finalMediaUrls: string[] | null = null;
-        let finalMediaType: 'image' | 'video' | null = null;
+        let finalImageUrls: string[] | null = null;
+        let finalAudioUrl: string | null = null;
 
         try {
              if (imageFiles.length > 0) {
                 setStatus('uploading');
-                finalMediaType = 'image';
                 const uploadedUrls = await Promise.all(imageFiles.map(async file => {
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
                     const response = await fetch(url, { method: 'POST', body: formData });
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData?.error?.message || `Cloudinary upload failed with status: ${response.status}`);
-                    }
+                    if (!response.ok) throw new Error((await response.json()).error.message);
                     const data = await response.json();
                     return data.secure_url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
                 }));
-                finalMediaUrls = uploadedUrls;
-            } else if (videoFile) {
+                finalImageUrls = uploadedUrls;
+            }
+            if (audioFile) {
                 setStatus('uploading');
-                finalMediaType = 'video';
                 const formData = new FormData();
-                formData.append('file', videoFile);
+                formData.append('file', audioFile);
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`; // Audio uses video endpoint
                 const response = await fetch(url, { method: 'POST', body: formData });
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData?.error?.message || `Cloudinary video upload failed with status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error((await response.json()).error.message);
                 const data = await response.json();
-                finalMediaUrls = [data.secure_url.replace('/upload/', '/upload/w_600,c_scale,q_auto/')];
+                finalAudioUrl = data.secure_url;
             }
             
             setStatus('submitting');
-            await onCreatePost(text, finalMediaUrls, finalMediaType, isAiQuery, showPollCreator ? validPollOptions : null);
+            await onCreatePost(text, finalImageUrls, finalAudioUrl, isAiQuery, showPollCreator ? validPollOptions : null);
             
             setText('');
-            removeMedia();
+            removeImage(0); // This will clear all images
+            setImageFiles([]);
+            setImagePreviews([]);
+            removeAudio();
             removePoll();
             onAiQueryChange(false);
             if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -247,24 +245,20 @@ const CreatePostForm: React.FC<{
     };
 
     const handleEnhance = async () => {
-        const hasContentToEnhance = text.trim() || imageFiles.length > 0 || videoFile;
+        const hasContentToEnhance = text.trim() || imageFiles.length > 0;
         if (isEnhancing || !hasContentToEnhance) return;
 
         setIsEnhancing(true);
         setEnhancedText(null);
         try {
             let response;
-            const hasMedia = imageFiles.length > 0 || videoFile;
+            const hasMedia = imageFiles.length > 0;
 
             if (hasMedia) {
                 const formData = new FormData();
                 formData.append('text', text);
                 formData.append('userId', user.uid);
-                if (videoFile) {
-                    formData.append('file', videoFile);
-                } else {
-                    imageFiles.forEach(file => formData.append('files', file));
-                }
+                imageFiles.forEach(file => formData.append('files', file));
                 response = await fetch(ENHANCE_POST_WEBHOOK_URL, {
                     method: 'POST',
                     body: formData
@@ -292,7 +286,6 @@ const CreatePostForm: React.FC<{
     const handleReplaceText = () => {
         if (enhancedText) {
             setText(enhancedText);
-            // Manually trigger textarea resize after text change
             setTimeout(() => {
                 if (textareaRef.current) {
                     textareaRef.current.style.height = 'auto';
@@ -330,8 +323,8 @@ const CreatePostForm: React.FC<{
         submitting: isAiQuery ? 'Asking...' : 'Posting...',
     };
     
-    const isPostable = text.trim() || imageFiles.length > 0 || videoFile || (showPollCreator && pollOptions.filter(o => o.trim()).length >= 2);
-    const hasContentToEnhance = text.trim() || imageFiles.length > 0 || videoFile;
+    const isPostable = text.trim() || imageFiles.length > 0 || audioFile || (showPollCreator && pollOptions.filter(o => o.trim()).length >= 2);
+    const hasContentToEnhance = text.trim() || imageFiles.length > 0;
 
     return (
         <div className="p-4">
@@ -352,6 +345,17 @@ const CreatePostForm: React.FC<{
                             maxLength={POST_MAX_LENGTH}
                         />
 
+                        {audioPreviewUrl && (
+                            <div className="mt-2 flex items-center gap-2">
+                                <div className="flex-1">
+                                    <AudioPlayer src={audioPreviewUrl} variant="community" />
+                                </div>
+                                <button type="button" onClick={removeAudio} className="p-1 text-muted hover:text-primary rounded-full flex-shrink-0">
+                                    <svg className="h-5 w-5"><use href="#icon-x-close"></use></svg>
+                                </button>
+                            </div>
+                        )}
+                        
                         {enhancedText && (
                             <div className="mt-3 p-3 border border-primary rounded-xl text-sm transition-all duration-300 ease-in-out max-h-40 overflow-y-auto">
                                 <h4 className="font-semibold text-primary mb-1 flex items-center space-x-1.5">
@@ -366,32 +370,24 @@ const CreatePostForm: React.FC<{
                             </div>
                         )}
 
-                        {previews.length > 0 && (
+                        {imagePreviews.length > 0 && (
                             <div className="mt-4 -mx-4">
                                 <div className="flex overflow-x-auto space-x-3 pb-2 scrollbar-hide px-4">
-                                    {mediaType === 'video' ? (
-                                        <div className="relative flex-shrink-0 w-full sm:w-4/5">
-                                            <div className="rounded-xl w-full shadow-sm overflow-hidden bg-black flex justify-center items-center aspect-video">
-                                                <video src={previews[0]} controls className="w-full h-full" />
-                                            </div>
-                                            <button type="button" onClick={() => removeMedia()} className="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-0 leading-none text-xl w-6 h-6 flex items-center justify-center hover:bg-black/80 transition-colors z-10">&times;</button>
+                                    {imagePreviews.map((src, index) => (
+                                        <div key={src} className="relative flex-shrink-0 w-32 h-32 sm:w-36 sm:h-36">
+                                            <img 
+                                                src={src} 
+                                                alt={`Preview ${index + 1}`} 
+                                                className="h-full w-full object-cover rounded-xl"
+                                            />
+                                            <button type="button" onClick={() => removeImage(index)} className="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-1 hover:bg-black/80 transition-colors z-10">
+                                                <svg className="w-4 h-4"><use href="#icon-x-close"></use></svg>
+                                            </button>
                                         </div>
-                                    ) : (
-                                        previews.map((src, index) => (
-                                            <div key={src} className="relative flex-shrink-0 w-32 h-32 sm:w-36 sm:h-36">
-                                                <img 
-                                                    src={src} 
-                                                    alt={`Preview ${index + 1}`} 
-                                                    className="h-full w-full object-cover rounded-xl"
-                                                />
-                                                <button type="button" onClick={() => removeMedia(index)} className="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-0 leading-none text-xl w-6 h-6 flex items-center justify-center hover:bg-black/80 transition-colors z-10">&times;</button>
-                                            </div>
-                                        ))
-                                    )}
+                                    ))}
                                 </div>
                             </div>
                         )}
-
 
                         {showPollCreator && (
                             <div className="mt-3 space-y-2">
@@ -407,7 +403,7 @@ const CreatePostForm: React.FC<{
                                         />
                                         {pollOptions.length > 2 && (
                                             <button type="button" onClick={() => removePollOption(index)} className="p-2 text-muted hover:text-red-500 rounded-full transition-colors">
-                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                 <svg className="h-5 w-5"><use href="#icon-x-close"></use></svg>
                                             </button>
                                         )}
                                     </div>
@@ -420,8 +416,11 @@ const CreatePostForm: React.FC<{
 
                         <div className="flex justify-between items-center mt-3 pt-3 border-t border-primary">
                             <div className="flex items-center space-x-0">
-                                <button type="button" onClick={() => mediaInputRef.current?.click()} className="p-2 text-secondary hover:text-blue-500 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle' || (mediaType === 'image' && imageFiles.length >= 4)} title="Add media">
+                                <button type="button" onClick={() => mediaInputRef.current?.click()} className="p-2 text-secondary hover:text-blue-500 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle' || imageFiles.length >= 4} title="Add media">
                                     <svg className="w-5 h-5"><use href="#icon-paperclip"></use></svg>
+                                </button>
+                                <button type="button" onClick={handleMicClick} className={`p-2 rounded-full transition-colors disabled:opacity-50 ${isRecording ? 'mic-recording' : 'text-secondary hover:text-red-500 hover:bg-red-500/10'}`} disabled={status !== 'idle'} title={isRecording ? 'Stop recording' : 'Record audio'}>
+                                    <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
                                 </button>
                                  <button type="button" onClick={() => setShowPollCreator(!showPollCreator)} className="p-2 text-secondary hover:text-green-500 hover:bg-green-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle'} title="Create poll">
                                     <svg className="w-5 h-5"><use href="#icon-poll"></use></svg>
@@ -446,7 +445,7 @@ const CreatePostForm: React.FC<{
                                 </label>
                             </div>
                             <div className="flex items-center space-x-4">
-                                <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*,video/*" multiple hidden disabled={status !== 'idle'} />
+                                <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*" multiple hidden disabled={status !== 'idle'} />
                                 <button type="submit" disabled={status !== 'idle' || !isPostable} className="btn btn-primary !py-1.5 !px-5 !text-sm">
                                     {buttonText[status]}
                                 </button>
@@ -485,9 +484,7 @@ const CreatePostModal: React.FC<{ isOpen: boolean; onClose: () => void; children
                     <div className="p-3 border-b border-primary flex justify-center items-center relative flex-shrink-0">
                         <h2 className="text-lg font-bold text-primary">Create Post</h2>
                         <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-muted hover:bg-hover p-1.5 rounded-full transition-colors">
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                             <svg className="h-6 w-6"><use href="#icon-x-close"></use></svg>
                         </button>
                     </div>
                     <div className="overflow-y-auto">
@@ -554,55 +551,93 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommunityPost)));
             setIsLoading(false);
         }, (err) => {
-            console.error("Error fetching community posts:", err);
-            if (err.code === 'permission-denied') {
-                setError("Could not load community posts due to a permission error. Please ensure Firestore security rules allow reads on the 'community-posts' collection.");
-            } else {
-                setError("An error occurred while loading posts.");
-            }
+            console.error("Error fetching posts:", err);
+            setError("Failed to load community feed. Please try again later.");
             setIsLoading(false);
         });
         return () => unsubscribe();
     }, [user]);
 
-    // Fetch user's saved posts to determine icon state
     useEffect(() => {
         if (!user) {
             setSavedPostIds(new Set());
             setLikedPostIds(new Set());
             return;
         }
-
-        const savedPostsRef = collection(db, 'users', user.uid, 'savedPosts');
-        const unsubscribeSaved = onSnapshot(savedPostsRef, (snapshot: QuerySnapshot<DocumentData>) => {
-            const ids = snapshot.docs.map(doc => doc.id);
-            setSavedPostIds(new Set(ids));
+        const savedSub = onSnapshot(collection(db, 'users', user.uid, 'savedPosts'), snapshot => {
+            setSavedPostIds(new Set(snapshot.docs.map(doc => doc.id)));
         });
-
-        const likedPostsRef = collection(db, 'users', user.uid, 'likedPosts');
-        const unsubscribeLiked = onSnapshot(likedPostsRef, (snapshot: QuerySnapshot<DocumentData>) => {
-            const ids = snapshot.docs.map(doc => doc.id);
-            setLikedPostIds(new Set(ids));
+        const likedSub = onSnapshot(collection(db, 'users', user.uid, 'likedPosts'), snapshot => {
+            setLikedPostIds(new Set(snapshot.docs.map(doc => doc.id)));
         });
-
         return () => {
-            unsubscribeSaved();
-            unsubscribeLiked();
+            savedSub();
+            likedSub();
         };
     }, [user]);
 
-    const handleToggleSave = async (postId: string) => {
+    const handleCreatePost = useCallback(async (text: string, imageUrls: string[] | null, audioUrl: string | null, isAiQuery: boolean, pollOptions: string[] | null) => {
+        if (!user || !userProfile) return;
+
+        const postData: Omit<CommunityPost, 'id'> = {
+            author: {
+                id: user.uid,
+                email: user.email!,
+                username: userProfile.username,
+                photoURL: userProfile.photoURL || null,
+            },
+            text,
+            createdAt: serverTimestamp() as Timestamp,
+            commentCount: 0,
+            likeCount: 0,
+            repostCount: 0,
+            isAiPost: isAiQuery,
+        };
+
+        if (imageUrls && imageUrls.length > 0) {
+            postData.mediaUrls = imageUrls;
+            postData.mediaType = 'image';
+        }
+        if (audioUrl) {
+            postData.audioUrl = audioUrl;
+            postData.mediaType = postData.mediaType === 'image' ? 'mixed' : 'audio';
+        }
+
+
+        if (pollOptions && pollOptions.length >= 2) {
+            postData.poll = {
+                options: pollOptions.map(opt => ({ text: opt, votes: 0 })),
+                voters: {}
+            };
+        }
+
+        try {
+            const postRef = await addDoc(collection(db, 'community-posts'), postData);
+
+            if (isAiQuery) {
+                // fire and forget webhook
+                fetch(AI_QUERY_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        postId: postRef.id,
+                        userId: user.uid,
+                        query: text,
+                    })
+                }).catch(e => console.error("AI query webhook failed:", e));
+            }
+
+            setCreatePostModalOpen(false);
+        } catch (error) {
+            console.error("Error creating post:", error);
+            alert("There was an error creating your post. Please try again.");
+        }
+    }, [user, userProfile]);
+
+    const handleToggleSave = useCallback(async (postId: string) => {
         if (!user) return;
         const savedPostRef = doc(db, 'users', user.uid, 'savedPosts', postId);
         const isSaved = savedPostIds.has(postId);
-
-        const newSavedIds = new Set(savedPostIds);
-        if (isSaved) {
-            newSavedIds.delete(postId);
-        } else {
-            newSavedIds.add(postId);
-        }
-        setSavedPostIds(newSavedIds);
 
         try {
             if (isSaved) {
@@ -612,149 +647,57 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             }
         } catch (error) {
             console.error("Error toggling save status:", error);
-            setSavedPostIds(savedPostIds);
         }
-    };
+    }, [user, savedPostIds]);
 
-    const handleToggleLike = async (postId: string) => {
+    const handleToggleLike = useCallback(async (postId: string) => {
         if (!user) return;
+    
+        const postRef = doc(db, 'community-posts', postId);
         const likedPostRef = doc(db, 'users', user.uid, 'likedPosts', postId);
         const isLiked = likedPostIds.has(postId);
     
-        // Optimistically update UI
-        const newLikedIds = new Set(likedPostIds);
+        // Optimistic UI update
+        const originalLikedPostIds = likedPostIds;
+        const newLikedPostIds = new Set(originalLikedPostIds);
         if (isLiked) {
-            newLikedIds.delete(postId);
+            newLikedPostIds.delete(postId);
         } else {
-            newLikedIds.add(postId);
+            newLikedPostIds.add(postId);
         }
-        setLikedPostIds(newLikedIds);
+        setLikedPostIds(newLikedPostIds);
     
         try {
-            if (isLiked) {
-                await deleteDoc(likedPostRef);
-            } else {
-                await setDoc(likedPostRef, { likedAt: serverTimestamp() });
-            }
-            // NOTE: We are no longer updating the public likeCount on the post
-            // to avoid permission errors if security rules are restrictive.
-        } catch (error) {
-            console.error("Error toggling like:", error);
-            // Revert UI on error
-            setLikedPostIds(likedPostIds);
-        }
-    };
-
-
-    const handleSearch = useCallback((queryText: string) => {
-        setSearchQuery(queryText);
-        if (!queryText.trim()) {
-            setSearchResults([]);
-            return;
-        }
-
-        const lowerCaseQuery = queryText.toLowerCase();
-        const results = uniqueAuthors.filter(author =>
-            author.username.toLowerCase().includes(lowerCaseQuery)
-        );
-
-        const profileResults: UserProfile[] = results.map(author => ({
-            id: author.id,
-            username: author.username,
-            email: author.email,
-            photoURL: author.photoURL,
-            bio: '', // Bio is not available in the Author type
-        }));
-
-        setSearchResults(profileResults.slice(0, 10)); // Limit results
-    }, [uniqueAuthors]);
-
-
-    const handleCreatePost = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => {
-        if (!user || !userProfile) return;
-        const hasContent = text.trim() || mediaUrls || (pollOptions && pollOptions.length > 0);
-        if (!hasContent) return;
+            await runTransaction(db, async (transaction) => {
+                const postDoc = await transaction.get(postRef);
+                if (!postDoc.exists()) throw "Post does not exist!";
+                
+                const currentLikeCount = postDoc.data().likeCount || 0;
+                const newLikeCount = isLiked ? currentLikeCount - 1 : currentLikeCount + 1;
     
-        const author: Author = { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null };
-        
-        // Using `any` to allow adding fields dynamically.
-        const postData: any = {
-            author,
-            text,
-            createdAt: serverTimestamp() as Timestamp,
-            commentCount: 0,
-            likeCount: 0,
-            repostCount: 0,
-        };
-
-        if (pollOptions && pollOptions.length >= 2) {
-            postData.poll = {
-                options: pollOptions.map(optionText => ({ text: optionText, votes: 0 })),
-                voters: {}
-            };
-        }
-        
-        if (mediaUrls && mediaUrls.length > 0 && mediaType) {
-            postData.mediaUrls = mediaUrls;
-            postData.mediaType = mediaType;
-        }
-        
-        if (isAiQuery) {
-            postData.isAiPost = true;
-            
-            // AI query can be just text, just media, or both.
-            if (text.trim() || mediaUrls) {
-                try {
-                    const payload = {
-                        query: text,
-                        userId: user.uid,
-                        mediaUrls: mediaUrls || [],
-                        mediaType: mediaType || null,
-                    };
-
-                    const response = await fetch(AI_QUERY_WEBHOOK_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) throw new Error(`AI webhook failed with status ${response.status}`);
-                    
-                    const result = await response.json();
-                    const aiResponseText = result.output || result.text || result.response || "Sorry, I couldn't get a response from the AI.";
+                transaction.update(postRef, { likeCount: Math.max(0, newLikeCount) });
     
-                    postData.aiReply = { text: aiResponseText, createdAt: serverTimestamp() as Timestamp };
-                } catch (error) {
-                    console.error("Error fetching AI response:", error);
-                    postData.aiReply = { text: "An error occurred while getting the AI response.", createdAt: serverTimestamp() as Timestamp };
+                if (isLiked) {
+                    transaction.delete(likedPostRef);
+                } else {
+                    transaction.set(likedPostRef, { likedAt: serverTimestamp() });
                 }
-            }
+            });
+        } catch (error) {
+            console.error("Like transaction failed: ", error);
+            // Revert optimistic update on failure
+            setLikedPostIds(originalLikedPostIds);
+            alert("Could not update like status. Please try again.");
         }
-    
-        await addDoc(collection(db, 'community-posts'), postData);
-    };
-    
-    const handleCreatePostAndCloseModal = async (text: string, mediaUrls: string[] | null, mediaType: 'image' | 'video' | null, isAiQuery: boolean, pollOptions: string[] | null) => {
-        await handleCreatePost(text, mediaUrls, mediaType, isAiQuery, pollOptions);
-        setCreatePostModalOpen(false);
-    };
-    
-    const handleViewProfileAndCloseSidebar = (userId: string) => {
-        onViewProfile(userId);
-        setSearchSidebarOpen(false);
-    }
-
-    const handleImageClick = (url: string) => {
-        setPreviewImageUrl(url);
-    };
+    }, [user, likedPostIds]);
 
     const handleOpenRepostModal = (post: CommunityPost) => {
         setPostToRepost(post);
         setRepostModalOpen(true);
     };
-
+    
     const handleCreateRepost = async (comment: string) => {
-        if (!user || !userProfile || !postToRepost || !comment.trim()) return;
+        if (!user || !userProfile || !postToRepost) return;
 
         const originalPostRef = doc(db, 'community-posts', postToRepost.id);
         const newPostRef = doc(collection(db, 'community-posts'));
@@ -764,13 +707,12 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             author: postToRepost.author,
             text: postToRepost.text,
             createdAt: postToRepost.createdAt,
-            mediaUrls: postToRepost.mediaUrls,
-            mediaType: postToRepost.mediaType,
         };
         
-        if (postToRepost.poll) {
-            repostData.poll = postToRepost.poll;
-        }
+        if (postToRepost.mediaUrls) repostData.mediaUrls = postToRepost.mediaUrls;
+        if (postToRepost.mediaType) repostData.mediaType = postToRepost.mediaType;
+        if (postToRepost.audioUrl) repostData.audioUrl = postToRepost.audioUrl;
+        if (postToRepost.poll) repostData.poll = postToRepost.poll;
 
         const newPost: Omit<CommunityPost, 'id'> = {
             author: {
@@ -790,66 +732,77 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         try {
             await runTransaction(db, async (transaction) => {
                 const originalPostDoc = await transaction.get(originalPostRef);
-                if (!originalPostDoc.exists()) {
-                    throw "Original post does not exist.";
-                }
-
+                if (!originalPostDoc.exists()) throw "Original post does not exist.";
                 const currentRepostCount = originalPostDoc.data().repostCount || 0;
                 transaction.update(originalPostRef, { repostCount: currentRepostCount + 1 });
                 transaction.set(newPostRef, newPost);
             });
-            setRepostModalOpen(false);
-            setPostToRepost(null);
         } catch (error) {
             console.error("Failed to create repost:", error);
-            alert("Could not create repost. Please try again.");
+            alert("Could not create the repost. Please try again.");
+        } finally {
+            setRepostModalOpen(false);
+            setPostToRepost(null);
         }
+    };
+    
+    // FIX: Renamed the `query` parameter to `searchQueryString` to avoid a name collision
+    // with the imported `query` function from `firebase/firestore`.
+    const handleSearch = useCallback(async (searchQueryString: string) => {
+        setSearchQuery(searchQueryString);
+        if (searchQueryString.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, 
+            orderBy('username'), 
+            startAt(searchQueryString.toLowerCase()), 
+            endAt(searchQueryString.toLowerCase() + '\uf8ff'),
+            limit(10)
+        );
+
+        try {
+            const querySnapshot = await getDocs(q);
+            const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+            setSearchResults(results);
+        } catch (error) {
+            console.error("Error searching users:", error);
+            setSearchResults([]);
+        }
+    }, []);
+
+    const handleImageClick = (url: string) => {
+        setPreviewImageUrl(url);
     };
 
     return (
-        <div ref={pageRef} className="page-transition bg-primary min-h-screen">
-            <div className={`fixed inset-0 bg-black/60 z-50 transition-opacity duration-300 lg:hidden ${isSearchSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setSearchSidebarOpen(false)}>
-                <div className={`absolute top-0 right-0 h-full w-full max-w-xs bg-secondary shadow-xl transition-transform duration-300 ease-in-out transform ${isSearchSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
-                    <div className="p-4 h-full overflow-y-auto">
-                         <button onClick={() => setSearchSidebarOpen(false)} className="absolute top-4 right-4 text-muted hover:text-primary text-2xl">&times;</button>
-                        <RightSidebar 
-                            posts={posts}
-                            searchQuery={searchQuery}
-                            onSearchChange={handleSearch}
-                            searchResults={searchResults}
-                            onViewProfile={handleViewProfileAndCloseSidebar}
-                        />
-                    </div>
-                </div>
-            </div>
-
+        <div ref={pageRef} className="page-transition bg-primary">
             <div className="max-w-7xl mx-auto px-0 sm:px-6 lg:px-8">
-                 <div className="grid grid-cols-12 gap-8">
-                    <div className="col-span-12 lg:col-span-7">
-                        <div>
-                            <div className="px-4 pt-4 sm:pt-8 pb-4 flex justify-between items-center">
-                                <h1 className="text-xl font-bold text-primary">Community Feed</h1>
-                                <button className="lg:hidden p-2 -mr-2" onClick={() => setSearchSidebarOpen(true)}>
-                                    <svg className="w-6 h-6 text-primary"><use href="#icon-search"></use></svg>
-                                </button>
-                            </div>
-                            
-                            <div className="divide-y divide-border-primary sm:divide-y-0 sm:space-y-4">
-                                {error && (
-                                    <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg">
-                                        <strong>Loading Failed:</strong> {error}
-                                    </div>
-                                )}
-                                {isLoading ? (
-                                    <div className="space-y-4 p-4 sm:p-0">
-                                        <PostSkeleton /><PostSkeleton /><PostSkeleton />
-                                    </div>
-                                ) : !error && (
-                                    posts.map(post => <PostItem 
-                                        key={post.id} 
-                                        post={post} 
-                                        user={user} 
-                                        userProfile={userProfile} 
+                <div className="grid grid-cols-12 gap-8">
+                    <main className="col-span-12 lg:col-span-8 xl:col-span-7 border-r border-primary">
+                        <div className="sticky top-[68px] z-20 bg-primary/80 backdrop-blur-md -mx-4 sm:mx-0 px-4 sm:px-0 py-3 border-b border-primary">
+                            <h1 className="text-xl font-bold text-primary px-4">Community Feed</h1>
+                        </div>
+                        
+                        <div className="space-y-4 p-0 sm:p-4">
+                            {isLoading ? (
+                                Array.from({ length: 5 }).map((_, i) => <PostSkeleton key={i} />)
+                            ) : error ? (
+                                 <div className="text-center py-10 text-red-500">{error}</div>
+                            ) : posts.length === 0 ? (
+                                <div className="text-center py-20 text-muted">
+                                    <h3 className="text-lg font-semibold">It's quiet in here...</h3>
+                                    <p>Be the first to start a conversation!</p>
+                                </div>
+                            ) : (
+                                posts.map(post => (
+                                    <PostItem
+                                        key={post.id}
+                                        post={post}
+                                        user={user}
+                                        userProfile={userProfile}
                                         onDelete={onDeletePost}
                                         savedPostIds={savedPostIds}
                                         onToggleSave={handleToggleSave}
@@ -858,49 +811,35 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                         onViewProfile={onViewProfile}
                                         onImageClick={handleImageClick}
                                         onRepost={handleOpenRepostModal}
-                                    />)
-                                )}
-                                {!error && posts.length === 0 && !isLoading && <p className="text-center text-muted py-10">Be the first to post!</p>}
-                            </div>
+                                    />
+                                ))
+                            )}
                         </div>
-                    </div>
+                    </main>
 
-                    <div className="hidden lg:block lg:col-span-5 mt-8">
-                        <RightSidebar 
+                    <aside className="hidden lg:block col-span-4 xl:col-span-5">
+                        <RightSidebar
                             posts={posts}
                             searchQuery={searchQuery}
                             onSearchChange={handleSearch}
                             searchResults={searchResults}
                             onViewProfile={onViewProfile}
                         />
-                    </div>
+                    </aside>
                 </div>
             </div>
-            
-            {user && (
-                 <button
-                    onClick={() => setCreatePostModalOpen(true)}
-                    className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-secondary/50 backdrop-blur-lg border border-primary text-primary p-4 rounded-full shadow-lg hover:scale-105 transition-transform z-40"
-                    aria-label="Create new post"
-                >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                </button>
-            )}
 
-            {user && userProfile && (
-                <CreatePostModal isOpen={isCreatePostModalOpen} onClose={() => setCreatePostModalOpen(false)} isAiQuery={isCreatingPostAi}>
-                    <CreatePostForm
-                        user={user}
-                        userProfile={userProfile}
-                        onCreatePost={handleCreatePostAndCloseModal}
-                        isAiQuery={isCreatingPostAi}
-                        onAiQueryChange={setIsCreatingPostAi}
-                    />
-                </CreatePostModal>
-            )}
-            {previewImageUrl && (
-                <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
-            )}
+            <button
+                onClick={() => setCreatePostModalOpen(true)}
+                className="fixed bottom-6 left-1/2 -translate-x-1/2 btn create-post-fab !rounded-full !p-4 shadow-lg z-30 transform transition-transform hover:scale-110"
+            >
+                <svg className="w-6 h-6"><use href="#icon-plus"></use></svg>
+            </button>
+
+            <CreatePostModal isOpen={isCreatePostModalOpen} onClose={() => setCreatePostModalOpen(false)} isAiQuery={isCreatingPostAi}>
+                <CreatePostForm user={user} userProfile={userProfile} onCreatePost={handleCreatePost} isAiQuery={isCreatingPostAi} onAiQueryChange={setIsCreatingPostAi} />
+            </CreatePostModal>
+
             <RepostModal
                 isOpen={isRepostModalOpen}
                 onClose={() => setRepostModalOpen(false)}
@@ -909,6 +848,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                 user={user}
                 userProfile={userProfile}
             />
+            
+            {previewImageUrl && <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} fileName={`lazerdsgn-community-${Date.now()}.png`} />}
         </div>
     );
 };

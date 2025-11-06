@@ -75,10 +75,10 @@ const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ imageUrl, onClose
                 <img src={imageUrl} alt="Post preview" className="block object-contain max-w-full max-h-[90vh] rounded-lg shadow-2xl" />
                 <button
                     onClick={onClose}
-                    className="absolute -top-3 -right-3 bg-white text-black rounded-full w-8 h-8 flex items-center justify-center text-2xl font-bold hover:bg-gray-200 transition-colors z-10"
+                    className="absolute -top-3 -right-3 bg-white text-black rounded-full w-8 h-8 flex items-center justify-center font-bold hover:bg-gray-200 transition-colors z-10"
                     aria-label="Close image preview"
                 >
-                    &times;
+                    <svg className="w-5 h-5"><use href="#icon-x-close"></use></svg>
                 </button>
                 <button
                     onClick={handleDownload}

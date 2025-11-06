@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CommunityPost, User, UserProfile } from '../../types';
 import Avatar from '../Avatar';
+import AudioPlayer from '../AudioPlayer';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -74,7 +75,9 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
             >
                 <div className="p-2 border-b border-primary flex justify-center items-center relative">
                     <h2 className="text-lg font-bold text-primary">Repost</h2>
-                    <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-2xl text-muted hover:text-primary">&times;</button>
+                    <button onClick={onClose} className="absolute top-1/2 right-3 -translate-y-1/2 text-muted hover:text-primary">
+                        <svg className="w-6 h-6"><use href="#icon-x-close"></use></svg>
+                    </button>
                 </div>
                 
                 <div className="p-4">
@@ -101,9 +104,16 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
                                 <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                             </div>
                             <p className="text-primary whitespace-pre-wrap text-sm">{post.text}</p>
-                            {post.mediaUrls && post.mediaUrls.length > 0 && (
-                                <div className="mt-2 rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">
-                                    <img src={post.mediaUrls[0]} alt="media" className="max-h-full max-w-full object-contain" />
+                            {post.mediaUrls && post.mediaUrls.length > 0 && post.mediaType !== 'audio' && (
+                                <div className="mt-2">
+                                    <div className="rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">
+                                        <img src={post.mediaUrls[0]} alt="media" className="max-h-full max-w-full object-contain" />
+                                    </div>
+                                </div>
+                            )}
+                            {post.audioUrl && (
+                                <div className="mt-2">
+                                    <AudioPlayer src={post.audioUrl} variant="community" />
                                 </div>
                             )}
                         </div>

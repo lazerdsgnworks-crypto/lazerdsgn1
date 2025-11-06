@@ -5,15 +5,18 @@ interface ModalProps {
     onClose: () => void;
     children: React.ReactNode;
     size?: 'md' | 'lg';
+    fullscreen?: boolean;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, size = 'md', fullscreen = false }) => {
     // isRendered controls if the modal is in the DOM
     const [isRendered, setIsRendered] = useState(isOpen);
     // isVisible controls the 'open' class for animations, allowing transitions to work correctly.
     const [isVisible, setIsVisible] = useState(false);
 
-    const sizeClass = size === 'lg' ? 'max-w-lg' : 'max-w-md';
+    const modalContentClasses = fullscreen
+        ? 'w-screen h-screen max-w-full max-h-full rounded-none p-0 overflow-y-auto'
+        : `p-8 rounded-2xl ${size === 'lg' ? 'max-w-lg' : 'max-w-md'}`;
 
     useEffect(() => {
         if (isOpen) {
@@ -61,18 +64,20 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, size = 'md' })
             role="dialog"
         >
             <div 
-                className={`modal-content bg-secondary p-8 rounded-2xl shadow-2xl w-full relative ${sizeClass}`}
+                className={`modal-content bg-secondary shadow-2xl w-full relative ${modalContentClasses}`}
                 onClick={(e) => e.stopPropagation()}
             >
-                <button 
-                    className="absolute top-4 right-4 text-muted hover:text-primary"
-                    onClick={onClose}
-                    aria-label="Close modal"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+                {!fullscreen && (
+                    <button 
+                        className="absolute top-4 right-4 text-muted hover:text-primary"
+                        onClick={onClose}
+                        aria-label="Close modal"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
                 {children}
             </div>
         </div>

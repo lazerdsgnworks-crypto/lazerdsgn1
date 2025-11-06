@@ -14,7 +14,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
     };
 
     return (
-        <footer id="footer" className="pt-16 pb-8">
+        <footer id="footer" className="pt-16 pb-8 border-t border-primary glass-surface">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-12 pb-16">
                     <div className="col-span-2 md:col-span-1">
@@ -52,14 +52,14 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
                     <div className="md:text-left">
                         <h4 className="font-semibold text-primary mb-4">Follow Us</h4>
                          <div className="flex space-x-3 mb-6">
-                            <a href="https://www.instagram.com/umardesigns_" target="_blank" rel="noopener noreferrer" className="p-2 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary transition">
-                                <svg className="h-4 w-4"><use href="#icon-instagram"></use></svg>
+                            <a href="https://www.instagram.com/umardesigns_" target="_blank" rel="noopener noreferrer" className="p-3 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary hover:bg-hover transition-colors">
+                                <svg className="h-5 w-5"><use href="#icon-instagram"></use></svg>
                             </a>
-                            <a href="#" className="p-2 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary transition">
-                                <svg className="h-4 w-4"><use href="#icon-x"></use></svg>
+                            <a href="#" className="p-3 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary hover:bg-hover transition-colors">
+                                <svg className="h-5 w-5"><use href="#icon-x"></use></svg>
                             </a>
-                             <a href="#" className="p-2 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary transition">
-                                <svg className="h-4 w-4"><use href="#icon-behance"></use></svg>
+                             <a href="#" className="p-3 border border-secondary rounded-full text-secondary hover:text-primary hover:border-primary hover:bg-hover transition-colors">
+                                <svg className="h-5 w-5"><use href="#icon-behance"></use></svg>
                             </a>
                          </div>
                         <h4 className="font-semibold text-primary mb-4">Theme</h4>

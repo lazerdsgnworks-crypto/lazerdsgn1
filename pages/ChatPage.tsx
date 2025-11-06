@@ -1,15 +1,25 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { User, ChatSession, ChatMessage, UserProfile } from '../types';
-import { db } from '../services/firebase';
+import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
+import { db } from '../services/firebase.ts';
+// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
-import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile } from '../utils/files';
-import Avatar from '../components/Avatar';
-import ImagePreviewModal from '../components/community/ImagePreviewModal';
+import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile, pcmToWav } from '../utils/files.ts';
+import Avatar from '../components/Avatar.tsx';
+import ImagePreviewModal from '../components/community/ImagePreviewModal.tsx';
+import ChatMessageItem from '../components/ChatMessageItem.tsx';
+import { GoogleGenAI, Modality } from '@google/genai';
+
+// Add SpeechRecognition to the global window object for TypeScript
+declare global {
+    interface Window {
+        SpeechRecognition: any;
+        webkitSpeechRecognition: any;
+    }
+}
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
 const WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/chatinput';
+const VOICE_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/voice';
 const ANALYSIS_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/analyze';
 const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/analysis';
 const APP_ID = 'default-lazerdsgn-app';
@@ -24,107 +34,6 @@ interface ChatPageProps {
     openDeleteModal: (title: string, onConfirm: () => void) => void;
     onViewProfile: () => void;
 }
-
-function highlightSyntax(code: string): string {
-    const keywords = ['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'import', 'from', 'export', 'default', 'async', 'await', 'class', 'new', 'try', 'catch', 'finally', 'throw', 'switch', 'case', 'break', 'continue', 'debugger', 'delete', 'in', 'instanceof', 'typeof', 'void', 'true', 'false', 'null', 'undefined'];
-
-    // Each part is a capturing group. This makes the callback logic simple.
-    const tokenRegex = new RegExp([
-        // 1. Comments
-        `(${/(\/\/.*|\/\*[\s\S]*?\*\/)/.source})`,
-        // 2. Strings
-        `(${/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`/.source})`,
-        // 3. Keywords
-        `(\\b(?:${keywords.join('|')})\\b)`,
-        // 4. Numbers
-        `(\\b\\d+(?:\\.\\d+)?\\b)`,
-        // 5. Function calls
-        `([a-zA-Z_]\\w*)(?=\\s*\\()`,
-        // 6. Punctuation
-        `([().,;[\\]{}<>=+\\-*\\/%&|!^?:])`
-    ].join('|'), 'g');
-    
-    // Callback parameters: match, g1, g2, g3, g4, g5, g6, offset, string
-    return code.replace(tokenRegex, (match, g1_comment, g2_string, g3_keyword, g4_number, g5_function, g6_punctuation) => {
-        if (g1_comment !== undefined) return `<span class="code-comment">${g1_comment}</span>`;
-        if (g2_string !== undefined) return `<span class="code-string">${g2_string}</span>`;
-        if (g3_keyword !== undefined) return `<span class="code-keyword">${g3_keyword}</span>`;
-        if (g4_number !== undefined) return `<span class="code-number">${g4_number}</span>`;
-        if (g5_function !== undefined) return `<span class="code-function">${g5_function}</span>`;
-        if (g6_punctuation !== undefined) return `<span class="code-punctuation">${g6_punctuation}</span>`;
-        return match;
-    });
-}
-
-function formatAIResponse(text: any): string {
-    if (typeof text !== 'string') {
-        if (text && typeof text === 'object') {
-            try {
-                // Format objects as a JSON code block.
-                text = "```json\n" + JSON.stringify(text, null, 2) + "\n```";
-            } catch (e) {
-                return '[Invalid AI Response]';
-            }
-        } else {
-             text = String(text || '');
-        }
-    }
-
-    if (!text) return '';
-
-    // Split by code blocks, keeping the delimiters.
-    const parts = text.split(/(```[a-zA-Z]*\n[\s\S]*?```)/g);
-
-    return parts.map((part) => {
-        if (!part) return '';
-
-        const codeBlockMatch = part.match(/^```([a-zA-Z]*)\n([\s\S]*)```$/);
-        if (codeBlockMatch) {
-            const language = codeBlockMatch[1];
-            const code = codeBlockMatch[2];
-            const escapedCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            const highlightedCode = highlightSyntax(escapedCode);
-            
-            return `<div class="code-block-wrapper">
-                        <div class="code-block-header">
-                            <span class="code-language">${language || 'code'}</span>
-                            <button class="copy-code-btn" title="Copy code">
-                                <svg class="w-4 h-4 icon-copy-initial"><use href="#icon-copy"></use></svg>
-                                <svg class="w-4 h-4 icon-copy-success hidden text-green-500"><use href="#icon-check"></use></svg>
-                            </button>
-                        </div>
-                        <pre><code class="language-${language}">${highlightedCode}</code></pre>
-                    </div>`;
-        }
-        
-        // This is a non-code block part.
-        // A simple regex to detect the presence of any HTML tag.
-        const hasHtmlTags = /<\/?[a-zA-Z][^>]*>/.test(part);
-
-        if (hasHtmlTags) {
-            // If the original text has HTML, we will render it in a sandboxed container.
-            // We must encode it to safely store it in a data attribute.
-            const encodedHtml = part
-                .replace(/&/g, "&amp;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-            
-            return `<div class="html-render-box" data-html-content="${encodedHtml}"></div>`;
-        } else {
-            // Otherwise, it's plain text. Sanitize and apply markdown.
-            let safeText = part
-              .replace(/&/g, "&amp;")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;");
-
-            safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-            safeText = safeText.replace(/\n/g, '<br />');
-            return safeText;
-        }
-    }).join('');
-}
-
 
 const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal, onViewProfile }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -145,7 +54,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     const isInitialMessagesLoad = useRef(true);
     const [sessionsLoaded, setSessionsLoaded] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-
+    const [isVoiceUIVisible, setVoiceUIVisible] = useState(false);
 
     const createNewSession = useCallback(async (setActive = true) => {
         if (!user) return;
@@ -244,9 +153,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         document.body.classList.toggle('sidebar-collapsed', isSidebarCollapsed);
     }, [isSidebarCollapsed]);
     
-    const handleSendMessage = async (message: string, imageFiles: File[]) => {
+    const handleSendMessage = async (message: string, imageFiles: File[], audioFile: File | null) => {
         if (!user || !currentSessionId || !userProfile) return;
-        if (!message.trim() && imageFiles.length === 0 && !analysisFile) return;
+        if (!message.trim() && imageFiles.length === 0 && !analysisFile && !audioFile) return;
 
         setIsLoading(true);
         if (isImageGenMode) setIsGeneratingImage(true);
@@ -267,7 +176,19 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             email: user.email!,
         };
 
+        const userSentAudio = !!audioFile;
+
         try {
+            if (audioFile) {
+                const formData = new FormData();
+                formData.append('file', audioFile);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                const response = await fetch(url, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Audio upload failed');
+                const data = await response.json();
+                userMessage.audioUrl = data.secure_url;
+            }
             if (imageFiles.length > 0) {
                 userMessage.imageUrls = await Promise.all(imageFiles.map(async (file) => {
                     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -307,12 +228,14 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             // --- UPDATED: Set initial title on first message for ALL chat types. Webhook will override for text chats. ---
             if (isFirstMessage) {
                 let newTitleText: string | null = null;
-                if (isImageGenMode) {
+                 if (isImageGenMode) {
                     newTitleText = `Image: ${message}`;
                 } else if (isVideoGenMode) {
                     newTitleText = `Video: ${message}`;
                 } else if (analysisFile) {
                     newTitleText = `Analysis of ${analysisFile.name}`;
+                } else if (audioFile) {
+                    newTitleText = "Voice Message";
                 } else {
                     // This is a regular text chat's first message. Use it for the initial title.
                     // This title will act as a fallback if the webhook fails later.
@@ -462,12 +385,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     createdAt: serverTimestamp() as Timestamp,
                 });
             } else {
-                // Regular Text or Analysis AI Response Logic
+                // Regular Text, Voice, or Analysis AI Response Logic
                 const isAnalysis = isAnalysisMode;
-                let targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : WEBHOOK_URL;
+                let targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : (audioFile ? VOICE_WEBHOOK_URL : WEBHOOK_URL);
                 let fetchOptions: RequestInit;
-
-                if (isAnalysis && !analysisFile && message.trim()) {
+                 if (isAnalysis && !analysisFile && message.trim()) {
                     // Text-only analysis request
                     targetUrl = ANALYSIS_TEXT_ONLY_WEBHOOK_URL;
                     fetchOptions = {
@@ -475,19 +397,18 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ...webhookPayload, message: message }),
                     };
-                } else if (isAnalysis || imageFiles.length > 0) {
-                    // This covers: analysis with file, and normal chat with files
+                } else if (isAnalysis || imageFiles.length > 0 || audioFile) {
+                    // This covers: analysis with file, voice, and normal chat with files
                     const payload = new FormData();
                     payload.append('message', message);
                     Object.entries(webhookPayload).forEach(([key, value]) => {
                         payload.append(key, value);
                     });
-
-
                     if (isAnalysis && analysisFile) {
                         payload.append('file', analysisFile, analysisFile.name);
+                    } else if (audioFile) {
+                        payload.append('file', audioFile, audioFile.name);
                     } else {
-                        // This is for normal chat with image files.
                         imageFiles.forEach((file) => {
                             payload.append(`files`, file, file.name);
                         });
@@ -532,10 +453,73 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 } else {
                     // Handle standard text response for normal chat or fallback for analysis.
                     const aiResponseText = resultData?.output || resultData?.text || resultData?.response || "Sorry, I couldn't get a response.";
+                    
+                    let audioUrl: string | undefined = undefined;
+                    // Only generate audio if the user sent audio and there's text to speak.
+                    if (userSentAudio && aiResponseText && aiResponseText.trim().length > 0) {
+                        try {
+                            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                            const ttsResponse = await ai.models.generateContent({
+                                model: "gemini-2.5-flash-preview-tts",
+                                contents: [{ parts: [{ text: aiResponseText }] }],
+                                config: {
+                                    responseModalities: [Modality.AUDIO],
+                                    speechConfig: {
+                                        voiceConfig: {
+                                            prebuiltVoiceConfig: { voiceName: 'Kore' },
+                                        },
+                                    },
+                                },
+                            });
 
-                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                        text: aiResponseText, role: 'ai', createdAt: serverTimestamp() as Timestamp,
-                    });
+                            const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                            
+                            if (base64Audio) {
+                                const bstr = atob(base64Audio);
+                                let n = bstr.length;
+                                const u8arr = new Uint8Array(n);
+                                while(n--){
+                                    u8arr[n] = bstr.charCodeAt(n);
+                                }
+                                
+                                const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
+                                const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
+
+                                // Upload to Cloudinary
+                                const formData = new FormData();
+                                formData.append('file', audioFile);
+                                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                                const uploadResponse = await fetch(url, { method: 'POST', body: formData });
+                                
+                                if (!uploadResponse.ok) {
+                                    console.error("AI audio upload to Cloudinary failed", await uploadResponse.text());
+                                } else {
+                                    const uploadData = await uploadResponse.json();
+                                    audioUrl = uploadData.secure_url;
+                                }
+                            }
+                        } catch (ttsError) {
+                            console.error("TTS generation or upload failed:", ttsError);
+                        }
+                    }
+
+                    const aiMessagePayload: {
+                        text: string;
+                        role: 'ai';
+                        createdAt: Timestamp;
+                        audioUrl?: string;
+                    } = {
+                        text: aiResponseText,
+                        role: 'ai',
+                        createdAt: serverTimestamp() as Timestamp,
+                    };
+
+                    if (audioUrl) {
+                        aiMessagePayload.audioUrl = audioUrl;
+                    }
+
+                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), aiMessagePayload);
 
                     // Automatically generate a title after the second user message
                     if (shouldGenerateTitle && !isAnalysisMode) {
@@ -688,7 +672,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     const currentSession = sessions.find(s => s.id === currentSessionId);
 
     return (
-        <div className="flex h-screen -mt-[68px] pt-[68px] bg-primary w-full overflow-hidden">
+        <div className="flex h-[calc(100vh-68px)] bg-primary w-full overflow-hidden">
              {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
             <ChatSidebar
                 sessions={sessions}
@@ -726,6 +710,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     isLoading={isLoading} 
                     isGeneratingImage={isGeneratingImage} 
                     isGeneratingVideo={isGeneratingVideo} 
+                    isAnalyzing={isAnalysisMode}
                     userProfile={userProfile} 
                     animatedMessageIds={animatedMessageIds}
                     onImageClick={setPreviewImageUrl}
@@ -744,6 +729,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         onAnalysisFileSelect={setAnalysisFile}
                         analysisFile={analysisFile}
                         isLoading={isLoading}
+                        onActivateVoiceMode={() => setVoiceUIVisible(true)}
                     />
                 </div>
             </div>
@@ -754,6 +740,14 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     fileName={`lazerdsgn-ai-generated-${Date.now()}.png`}
                 />
             )}
+            <VoiceUIMenu
+                isOpen={isVoiceUIVisible}
+                onClose={() => setVoiceUIVisible(false)}
+                onSendAudio={(audioFile) => {
+                    handleSendMessage('', [], audioFile);
+                    setVoiceUIVisible(false);
+                }}
+            />
         </div>
     );
 };
@@ -912,10 +906,11 @@ const ChatMessages: React.FC<{
     isLoading: boolean, 
     isGeneratingImage: boolean, 
     isGeneratingVideo: boolean, 
+    isAnalyzing?: boolean,
     userProfile: UserProfile | null,
     animatedMessageIds: React.MutableRefObject<Set<string>>,
     onImageClick: (url: string) => void;
-}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds, onImageClick }) => {
+}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -926,7 +921,7 @@ const ChatMessages: React.FC<{
         <div className="flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-4xl mx-auto">
             <div className="flex flex-col space-y-5">
                 {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={onImageClick}/>)}
-                {isLoading && <ChatMessageItem message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
+                {isLoading && <ChatMessageItem key="loading" message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} isAnalyzing={isAnalyzing} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
                 {messages.length === 0 && !isLoading && (
                     <div className="text-center text-secondary font-bold text-2xl pt-20">
                         Hey, How can I help you?
@@ -938,373 +933,8 @@ const ChatMessages: React.FC<{
     );
 };
 
-const ChatMessageItem: React.FC<{ 
-    message: ChatMessage, 
-    isLoading?: boolean, 
-    isGeneratingImage?: boolean, 
-    isGeneratingVideo?: boolean, 
-    userProfile: UserProfile | null,
-    animatedMessageIds: React.MutableRefObject<Set<string>>,
-    onImageClick?: (url: string) => void;
-}> = ({ message, isLoading, isGeneratingImage, isGeneratingVideo, userProfile, animatedMessageIds, onImageClick }) => {
-    const isUser = message.role === 'user';
-    const isAi = message.role === 'ai';
-    const [displayedText, setDisplayedText] = useState('');
-    const bubbleRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (isAi && message.text && !animatedMessageIds.current.has(message.id)) {
-            const hasCodeBlock = /```/.test(message.text);
-            const hasHtmlTags = /<\/?[a-zA-Z][^>]*>/.test(message.text);
-
-            if (hasCodeBlock || hasHtmlTags) {
-                // If code or HTML is present, render the whole message at once to avoid formatting issues.
-                setDisplayedText(message.text);
-                animatedMessageIds.current.add(message.id);
-            } else {
-                // Otherwise, use the typing animation for text-only messages.
-                let i = 0;
-                const textToAnimate = message.text;
-                animatedMessageIds.current.add(message.id);
-                
-                const intervalId = setInterval(() => {
-                    if (i < textToAnimate.length) {
-                        setDisplayedText(textToAnimate.substring(0, i + 1));
-                        i++;
-                    } else {
-                        clearInterval(intervalId);
-                    }
-                }, 5); // Typing speed
-                
-                return () => clearInterval(intervalId);
-            }
-        } else {
-            setDisplayedText(message.text || '');
-        }
-    }, [message.id, message.text, isAi, animatedMessageIds]);
-    
-    // Effect for handling delegated code copy clicks
-    useEffect(() => {
-        const bubble = bubbleRef.current;
-        if (!bubble) return;
-
-        const handleCopyClick = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            const button = target.closest('.copy-code-btn');
-            
-            if (button) {
-                e.stopPropagation(); // Prevent other clicks
-                const wrapper = button.closest('.code-block-wrapper');
-                const pre = wrapper?.querySelector('pre');
-                if (pre) {
-                    navigator.clipboard.writeText(pre.innerText);
-                    const initialIcon = button.querySelector('.icon-copy-initial');
-                    const successIcon = button.querySelector('.icon-copy-success');
-                    if (initialIcon && successIcon) {
-                        initialIcon.classList.add('hidden');
-                        successIcon.classList.remove('hidden');
-                        setTimeout(() => {
-                            initialIcon.classList.remove('hidden');
-                            successIcon.classList.add('hidden');
-                        }, 2000);
-                    }
-                }
-            }
-        };
-
-        bubble.addEventListener('click', handleCopyClick);
-        return () => {
-            if (bubble) bubble.removeEventListener('click', handleCopyClick);
-        };
-    }, []); // Runs once when component mounts.
-
-    // Effect for rendering sandboxed HTML
-    useEffect(() => {
-        if (isAi && bubbleRef.current) {
-            const htmlBoxes = bubbleRef.current.querySelectorAll<HTMLDivElement>('.html-render-box');
-            htmlBoxes.forEach(box => {
-                if (box.querySelector('iframe')) return; // Already rendered
-
-                const htmlContent = box.dataset.htmlContent;
-                if (htmlContent) {
-                    const iframe = document.createElement('iframe');
-                    // This sandbox is secure (no scripts) but allows links, forms, etc.
-                    iframe.setAttribute('sandbox', 'allow-forms allow-modals allow-popups allow-presentation allow-same-origin');
-                    iframe.style.width = '100%';
-                    iframe.style.border = 'none';
-                    iframe.style.height = '1px'; // Start with a minimal height to be in the layout flow
-                    iframe.style.display = 'block';
-                    iframe.style.transition = 'height 0.3s ease-in-out'; // Smooth resize
-                    
-                    iframe.onload = () => {
-                        try {
-                            const doc = iframe.contentWindow?.document;
-                            const body = doc?.body;
-                            if (!body) return;
-
-                            const resize = () => {
-                                // Using body.scrollHeight is more reliable with padding.
-                                const contentHeight = body.scrollHeight; 
-                                if (contentHeight > 0) {
-                                    iframe.style.height = `${contentHeight}px`;
-                                }
-                            };
-
-                            resize(); // Initial resize
-                            
-                            // Observe for changes inside the iframe (like images loading, etc.)
-                            const observer = new MutationObserver(resize);
-                            observer.observe(body, {
-                                attributes: true,
-                                childList: true,
-                                subtree: true,
-                                characterData: true,
-                            });
-                            
-                            // Fallback for tricky situations like slow-loading webfonts
-                            setTimeout(resize, 300);
-
-                        } catch (e) {
-                            console.warn("Could not auto-resize sandboxed iframe.", e);
-                        }
-                    };
-
-                    const rootStyle = getComputedStyle(document.documentElement);
-                    const textColor = rootStyle.getPropertyValue('--text-primary').trim();
-                    const fontFamily = rootStyle.getPropertyValue('--font-main').trim();
-                    
-                    const decodedHtml = htmlContent
-                        .replace(/&#39;/g, "'")
-                        .replace(/&quot;/g, '"')
-                        .replace(/&amp;/g, "&");
-                    
-                    iframe.srcdoc = `
-                        <html>
-                            <head>
-                                <style>
-                                    :root { color-scheme: ${document.documentElement.classList.contains('dark') ? 'dark' : 'light'}; }
-                                    body { 
-                                        font-family: ${fontFamily}, sans-serif;
-                                        color: ${textColor}; 
-                                        background-color: transparent;
-                                        margin: 0; /* Use padding for reliable height calculation */
-                                        padding: 1rem;
-                                        font-size: 0.95rem;
-                                        line-height: 1.7;
-                                        overflow: hidden; /* Prevent iframe's own scrollbars */
-                                        word-break: break-word;
-                                    }
-                                    /* Basic responsive and aesthetic styles */
-                                    a { color: #60a5fa; text-decoration: none; }
-                                    a:hover { text-decoration: underline; }
-                                    img { max-width: 100%; height: auto; border-radius: 0.5rem; }
-                                    h1, h2, h3 { margin-top: 1.5em; margin-bottom: 0.5em; letter-spacing: -0.025em; }
-                                    table { width: 100%; border-collapse: collapse; margin: 1em 0; table-layout: fixed; }
-                                    th, td { border: 1px solid ${rootStyle.getPropertyValue('--border-secondary').trim()}; padding: 8px; text-align: left; }
-                                    th { background-color: ${rootStyle.getPropertyValue('--bg-muted').trim()}; }
-                                    blockquote { border-left: 4px solid ${rootStyle.getPropertyValue('--border-primary').trim()}; padding-left: 1em; margin-left: 0; font-style: italic; }
-                                </style>
-                            </head>
-                            <body>${decodedHtml}</body>
-                        </html>
-                    `;
-
-                    box.innerHTML = '';
-                    box.appendChild(iframe);
-                }
-            });
-        }
-    }, [isAi, displayedText]);
-
-    const copyToClipboard = (text: string, button: HTMLButtonElement) => {
-        navigator.clipboard.writeText(text);
-        const original = button.innerHTML;
-        button.innerHTML = `<svg class="w-4 h-4 text-green-500"><use href="#icon-check"></use></svg>`;
-        setTimeout(() => button.innerHTML = original, 1500);
-    };
-
-    const handleDownload = (mediaUrl: string, fileName: string) => {
-        try {
-            let downloadUrl = mediaUrl;
-
-            // Check if it's a Google Drive webViewLink and transform it for direct download.
-            if (mediaUrl.includes('drive.google.com') && mediaUrl.includes('/view')) {
-                const fileIdMatch = mediaUrl.match(/file\/d\/([a-zA-Z0-9_-]+)/);
-                if (fileIdMatch && fileIdMatch[1]) {
-                    const fileId = fileIdMatch[1];
-                    downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-                }
-            }
-            
-            // Using window.open is more reliable for triggering downloads from services
-            // that use specific URL parameters, like Google Drive.
-            const newWindow = window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-            if (newWindow) newWindow.opener = null;
-
-        } catch (error) {
-            console.error('Download initiation failed:', error);
-            alert(`Sorry, the download could not be started automatically. Please try right-clicking the content and choosing "Save As...".`);
-            // As a final fallback, open the original content in a new tab.
-            window.open(mediaUrl, '_blank');
-        }
-    };
-
-    if (isLoading) {
-        if (isGeneratingVideo) {
-            return (
-                <div className="flex items-start gap-3 justify-start">
-                    
-                    <div className="p-4 bg-muted rounded-2xl">
-                        <div className="w-64 h-36 rounded-lg flex flex-col items-center justify-center overflow-hidden">
-                            <div className="w-full h-full shimmer-bg flex flex-col items-center justify-center">
-                                <svg className="w-12 h-12 text-secondary"><use href="#icon-video"></use></svg>
-                                <p className="mt-2 text-sm text-secondary">Crafting your video...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        if (isGeneratingImage) {
-            return (
-                <div className="flex items-start gap-3 justify-start">
-                    
-                    <div className="p-4 bg-muted rounded-2xl">
-                        <div className="w-64 h-64 rounded-lg flex flex-col items-center justify-center overflow-hidden">
-                            <div className="w-full h-full shimmer-bg flex flex-col items-center justify-center">
-                                <svg className="w-12 h-12 text-secondary"><use href="#icon-image-gen"></use></svg>
-                                <p className="mt-2 text-sm text-secondary">Conjuring pixels...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        return (
-             <div className="flex items-start gap-3 justify-start">
-                
-                <div className="chat-message-bubble bg-secondary">
-                    <div className="typing-indicator flex items-center space-x-1.5 p-2">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    const messageAlignmentClass = isUser ? 'justify-end' : 'justify-start';
-
-    const renderFilePreview = (msg: ChatMessage) => {
-        let content = null;
-        if (msg.analysisResult && msg.analysisResult.type === 'application/pdf') {
-            content = (
-                <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3 max-w-sm">
-                    <svg className="w-8 h-8 text-muted flex-shrink-0"><use href="#icon-file-text"></use></svg>
-                    <div className="flex-1 min-w-0">
-                        <span className="text-sm text-primary truncate block font-medium">{msg.analysisResult.name}</span>
-                        <button onClick={() => handleDownload(msg.analysisResult!.url, msg.analysisResult!.name)} className="text-sm font-semibold text-blue-500 hover:underline">
-                            Download PDF
-                        </button>
-                    </div>
-                </div>
-            );
-        } else if (msg.videoUrl) {
-            content = (
-                <div className="relative group max-w-sm sm:max-w-md">
-                    <video src={msg.videoUrl} controls playsInline className="rounded-lg w-full h-auto shadow-md bg-black" />
-                    <button 
-                        onClick={() => handleDownload(msg.videoUrl!, `lazerdsgn-generated-${Date.now()}.mp4`)} 
-                        className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Download Video"
-                    >
-                        <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
-                    </button>
-                </div>
-            );
-        } else if (msg.analysisFile) {
-            // If we have a thumbnail (for image or PDF), display it.
-            if (msg.imageUrl) {
-                 content = (
-                    <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-start space-x-3">
-                        <img src={msg.imageUrl} alt="File preview" className="w-16 h-16 object-cover rounded flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                            <span className="text-sm text-primary truncate block font-medium">{msg.analysisFile.name}</span>
-                            <span className="text-xs text-muted">{msg.analysisFile.type}</span>
-                        </div>
-                    </div>
-                );
-            } else {
-                // Otherwise, show an icon.
-                let iconHref = '#icon-file-text';
-                if (msg.analysisFile.type.startsWith('video/')) {
-                    iconHref = '#icon-video';
-                } else if (msg.analysisFile.type.startsWith('audio/')) {
-                    iconHref = '#icon-music';
-                }
-                content = (
-                    <div className="relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3">
-                        <svg className="w-8 h-8 text-muted flex-shrink-0"><use href={iconHref}></use></svg>
-                        <span className="text-sm text-secondary truncate">{msg.analysisFile.name}</span>
-                    </div>
-                );
-            }
-        } else if (msg.imageUrl && !msg.imageUrls) {
-            if (msg.role === 'ai') {
-                content = (
-                    <div className="relative group max-w-full sm:max-w-md">
-                        <button onClick={() => onImageClick?.(msg.imageUrl!)} className="block w-full h-auto appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg">
-                            <img src={msg.imageUrl} alt="AI generated content" className="rounded-lg w-full h-auto shadow-md" />
-                        </button>
-                        <button 
-                            onClick={() => handleDownload(msg.imageUrl!, `lazerdsgn-generated-${Date.now()}.png`)} 
-                            className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Download Image"
-                        >
-                            <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
-                        </button>
-                    </div>
-                );
-            } else {
-                 content = <img src={msg.imageUrl} alt="Uploaded content" className="rounded-lg max-w-xs max-h-48" />;
-            }
-        } else if (msg.imageUrls) {
-            content = (
-                <div className={`grid gap-2 ${msg.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    {msg.imageUrls.map((url, index) => <img key={index} src={url} alt={`Uploaded content ${index + 1}`} className="rounded-lg w-full h-auto object-cover" />)}
-                </div>
-            );
-        }
-        return content ? <div className="mb-2">{content}</div> : null;
-    }
-
-    return (
-        <div className={`flex items-start gap-3 ${messageAlignmentClass} chat-message-container`}>
-            <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
-                {renderFilePreview(message)}
-                
-                {message.text && (
-                    <div ref={bubbleRef} className={`chat-message-bubble relative ${isUser ? 'user-message' : 'ai-message'}`}>
-                        <div dangerouslySetInnerHTML={{__html: formatAIResponse(displayedText)}}></div>
-                    </div>
-                )}
-                 <div className={`chat-actions flex items-center text-sm text-muted mt-2 space-x-2 `}>
-                    {message.text && <button title="Copy" onClick={(e) => copyToClipboard(message.text, e.currentTarget)} className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-copy"></use></svg></button>}
-                    {!isUser && (
-                        <>
-                            <button title="Good" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
-                            <button title="Bad" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-flag"></use></svg></button>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const ChatInput: React.FC<{
-    onSendMessage: (message: string, files: File[]) => void,
+    onSendMessage: (message: string, files: File[], audioFile: File | null) => void,
     isAnalysisMode: boolean,
     onToggleAnalysisMode: () => void,
     isImageGenMode: boolean,
@@ -1316,7 +946,8 @@ const ChatInput: React.FC<{
     onAnalysisFileSelect: (file: File | null) => void,
     analysisFile: File | null,
     isLoading: boolean,
-}> = ({ onSendMessage, isAnalysisMode, onToggleAnalysisMode, isImageGenMode, onToggleImageGenMode, isVideoGenMode, onToggleVideoGenMode, videoAspectRatio, onVideoAspectRatioChange, onAnalysisFileSelect, analysisFile, isLoading }) => {
+    onActivateVoiceMode: () => void;
+}> = ({ onSendMessage, isAnalysisMode, onToggleAnalysisMode, isImageGenMode, onToggleImageGenMode, isVideoGenMode, onToggleVideoGenMode, videoAspectRatio, onVideoAspectRatioChange, onAnalysisFileSelect, analysisFile, isLoading, onActivateVoiceMode }) => {
     const [input, setInput] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const analysisInputRef = useRef<HTMLInputElement>(null);
@@ -1336,45 +967,68 @@ const ChatInput: React.FC<{
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Speech Recognition setup
+    // Set up Speech Recognition
     useEffect(() => {
-        // @ts-ignore
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event: any) => {
+                let newTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        newTranscript += event.results[i][0].transcript;
+                    }
+                }
+                setInput(prev => (prev ? prev.trim() + ' ' : '') + newTranscript.trim());
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
+            recognition.onerror = (event: any) => {
+                console.error('Speech recognition error', event.error);
+                setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+        } else {
             console.warn("Speech recognition not supported in this browser.");
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, []);
+
+    const handleToggleListening = () => {
+        const recognition = recognitionRef.current;
+        if (!recognition) {
+            alert("Speech recognition is not supported by your browser.");
             return;
         }
 
-        // FIX: The expression `new SpeechRecognition()` was causing a "not constructable" error because TypeScript couldn't infer the correct type for the vendor-prefixed `webkitSpeechRecognition`. By casting `SpeechRecognition` to `any`, we bypass the type check and allow the constructor to be called, resolving the runtime error.
-        const recognition = new (SpeechRecognition as any)();
-        recognition.continuous = false;
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        
-        recognition.onresult = (event: any) => {
-            const transcript = event.results[event.results.length - 1][0].transcript;
-            setInput(prev => (prev ? prev.trim() + ' ' : '') + transcript);
-        };
-
-        recognition.onstart = () => {
-            setIsListening(true);
-        };
-        
-        recognition.onend = () => {
-            setIsListening(false);
-        };
-        
-        recognition.onerror = (event: any) => {
-            console.error('Speech recognition error:', event.error);
-            if (event.error === 'not-allowed') {
-                alert('Microphone access was denied. Please allow microphone access in your browser settings.');
+        if (isListening) {
+            recognition.stop();
+        } else {
+            try {
+                recognition.start();
+                setIsListening(true);
+            } catch (e) {
+                console.error("Could not start recognition", e);
+                if (recognitionRef.current.state !== 'listening') {
+                    setIsListening(false);
+                }
             }
-            setIsListening(false);
-        };
-        
-        recognitionRef.current = recognition;
+        }
+    };
 
-    }, []);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -1389,20 +1043,8 @@ const ChatInput: React.FC<{
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isLoading || (!input.trim() && !analysisFile)) return;
-        onSendMessage(input, []);
+        onSendMessage(input, [], null);
         setInput('');
-    };
-
-    const handleMicClick = () => {
-        if (!recognitionRef.current) {
-            alert('Speech recognition is not supported in this browser.');
-            return;
-        }
-        if (isListening) {
-            recognitionRef.current.stop();
-        } else {
-            recognitionRef.current.start();
-        }
     };
     
     const handleAnalysisFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1438,6 +1080,8 @@ const ChatInput: React.FC<{
     };
     
     const isAnyModeActive = isImageGenMode || isAnalysisMode || isVideoGenMode;
+    const showSendIcon = input.trim().length > 0 || !!analysisFile;
+
 
     return (
         <div className="w-full max-w-3xl mx-auto">
@@ -1455,7 +1099,7 @@ const ChatInput: React.FC<{
                                 {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-enhance"></use></svg><span className="truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span></>}
                             </div>
                             <button type="button" onClick={dismissMode} className="p-1 rounded-full hover:bg-hover flex-shrink-0">
-                                <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
                         {isVideoGenMode && (
@@ -1468,8 +1112,7 @@ const ChatInput: React.FC<{
                         )}
                     </div>
 
-
-                    <div className="flex items-end p-2 space-x-2">
+                    <div className="flex items-end p-2 space-x-1.5">
                         <div className="relative self-end" ref={menuRef}>
                             <div className={`absolute bottom-full mb-3 flex flex-col items-center gap-3 transition-all duration-300 ease-in-out ${isMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
                                 <button type="button" onClick={handleSelectVideoGen} title="Video Gen" className="w-10 h-10 flex items-center justify-center bg-secondary border border-primary rounded-full shadow-lg hover:bg-hover transition-transform hover:scale-110">
@@ -1492,12 +1135,18 @@ const ChatInput: React.FC<{
                             </button>
                         </div>
                         
-                        {isAnalysisMode && (
+                        {isAnalysisMode ? (
                              <div className="self-end">
                                 <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition">
                                     <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
                                 </button>
                                 <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden />
+                            </div>
+                        ) : (
+                             <div className="self-end">
+                                <button type="button" onClick={handleToggleListening} title="Speech-to-Text" className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition ${isListening ? 'mic-recording' : 'bg-hover text-muted hover:bg-primary/20'}`}>
+                                    <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
+                                </button>
                             </div>
                         )}
                         
@@ -1513,12 +1162,15 @@ const ChatInput: React.FC<{
                         />
 
                         <div className="flex items-center self-end">
-                            <button type="button" onClick={handleMicClick} className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full hover:bg-hover text-muted transition ${isListening ? 'mic-listening' : ''}`}>
-                                <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
-                            </button>
-                            <button type="submit" disabled={isLoading || (!input.trim() && !analysisFile)} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-6 h-6 p-0.5"><use href="#icon-arrow-up"></use></svg>}
-                            </button>
+                             {showSendIcon ? (
+                                <button type="submit" disabled={isLoading} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-6 h-6 p-0.5"><use href="#icon-paper-plane-filled"></use></svg>}
+                                </button>
+                            ) : (
+                                <button type="button" onClick={onActivateVoiceMode} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition-colors bg-hover text-muted hover:bg-primary/20">
+                                    <svg className="w-6 h-6"><use href="#icon-waves-sound"></use></svg>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </form>
@@ -1526,4 +1178,94 @@ const ChatInput: React.FC<{
         </div>
     );
 };
+
+
+const VoiceUIMenu: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSendAudio: (audioFile: File) => void;
+}> = ({ isOpen, onClose, onSendAudio }) => {
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Start recording automatically when the modal opens
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                    mediaRecorderRef.current = recorder;
+                    audioChunksRef.current = [];
+                    
+                    recorder.ondataavailable = e => {
+                        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+                    };
+
+                    recorder.onstop = () => {
+                        stream.getTracks().forEach(track => track.stop());
+                        setIsRecording(false);
+                    };
+
+                    recorder.start();
+                    setIsRecording(true);
+                })
+                .catch(err => {
+                    alert("Microphone access denied. Please check browser permissions to use voice chat.");
+                    onClose();
+                });
+        } else {
+            // Cleanup on close
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            }
+        }
+
+        return () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            }
+        };
+    }, [isOpen, onClose]);
+
+    const handleStopAndSend = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                if (audioBlob.size > 0) {
+                    const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`);
+                    onSendAudio(audioFile);
+                }
+                setIsRecording(false);
+            };
+            mediaRecorderRef.current.stop();
+        }
+    };
+    
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-primary/90 backdrop-blur-lg z-50 flex flex-col items-center justify-center p-4">
+             <button onClick={onClose} className="absolute top-6 right-6 text-muted hover:text-primary z-20 p-2 rounded-full hover:bg-hover transition-colors" aria-label="Close">
+                <svg className="w-7 h-7"><use href="#icon-x-close"></use></svg>
+            </button>
+            <div className="flex-1 flex items-center justify-center">
+                 {isRecording && (
+                    <div className="voice-recording-circle w-48 h-48 bg-secondary-accent rounded-full flex items-center justify-center">
+                         <svg className="w-16 h-16 text-white"><use href="#icon-waves-sound"></use></svg>
+                    </div>
+                )}
+            </div>
+            <div className="pb-12">
+                <button 
+                    onClick={handleStopAndSend}
+                    className="w-20 h-20 bg-primary-accent text-on-primary-accent rounded-full flex items-center justify-center shadow-lg transform transition-transform hover:scale-105"
+                >
+                    <svg className="w-8 h-8"><use href="#icon-arrow-up"></use></svg>
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export default ChatPage;

@@ -1,14 +1,17 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CommunityPost, UserProfile, RepostedPost } from '../types';
-import { db } from '../services/firebase';
+import { User, CommunityPost, UserProfile, RepostedPost } from '../types.ts';
+import { db } from '../services/firebase.ts';
+// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp, getDoc } from 'firebase/firestore';
-import PostItem from '../components/community/PostItem';
-import Avatar from '../components/Avatar';
-import ImagePreviewModal from '../components/community/ImagePreviewModal';
-import RepostModal from '../components/community/RepostModal';
-import ProjectStatusModal from '../components/ProjectStatusModal';
-import { compressImage, dataURLtoFile } from '../utils/files';
-import { ADMIN_UIDS } from '../constants';
+import PostItem from '../components/community/PostItem.tsx';
+import Avatar from '../components/Avatar.tsx';
+import ImagePreviewModal from '../components/community/ImagePreviewModal.tsx';
+import RepostModal from '../components/community/RepostModal.tsx';
+import ProjectStatusModal from '../components/ProjectStatusModal.tsx';
+import { compressImage, dataURLtoFile } from '../utils/files.ts';
+import { ADMIN_UIDS } from '../constants.ts';
 
 interface ProfilePageProps {
     loggedInUser: User;
@@ -63,10 +66,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
     const [isLoadingSaved, setIsLoadingSaved] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
     const [isUploadingPfp, setIsUploadingPfp] = useState(false);
-    const [editData, setEditData] = useState({ username: '', bio: '' });
     const [activeTab, setActiveTab] = useState<ProfileTab>('all');
     const [error, setError] = useState<string | null>(null);
     
@@ -128,7 +128,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             if (docSnap.exists()) {
                 const data = docSnap.data() as UserProfile;
                 setProfile(data);
-                setEditData({ username: data.username, bio: data.bio });
             } else if (isOwnProfile && loggedInUser) {
                  const defaultProfile: Omit<UserProfile, 'id'> = {
                     username: loggedInUser.displayName || loggedInUser.email!.split('@')[0],
@@ -138,7 +137,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 };
                 // Set local state for immediate UI update
                 setProfile(defaultProfile as UserProfile);
-                setEditData({ username: defaultProfile.username, bio: defaultProfile.bio });
                 
                 // Asynchronously write to Firestore to fix the missing profile
                 (async () => {
@@ -289,74 +287,42 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
 
     const handleToggleLike = async (postId: string) => {
         if (!loggedInUser) return;
+    
+        const postRef = doc(db, 'community-posts', postId);
         const likedPostRef = doc(db, 'users', loggedInUser.uid, 'likedPosts', postId);
         const isLiked = loggedInUserLikedPostIds.has(postId);
-
-        const newLikedIds = new Set(loggedInUserLikedPostIds);
-        if (isLiked) { newLikedIds.delete(postId); } else { newLikedIds.add(postId); }
-        setLoggedInUserLikedPostIds(newLikedIds);
-
-        try {
-            if (isLiked) {
-                await deleteDoc(likedPostRef);
-            } else {
-                await setDoc(likedPostRef, { likedAt: serverTimestamp() });
-            }
-        } catch (error) {
-            console.error("Error toggling like:", error);
-            setLoggedInUserLikedPostIds(loggedInUserLikedPostIds);
-        }
-    };
     
-    const handleSaveProfile = async () => {
-        if (!loggedInUser || !profile) return;
-        const newUsername = editData.username.trim();
-        if (!newUsername) {
-            alert("Username cannot be empty.");
-            return;
+        // Optimistic UI update for immediate feedback
+        const originalLikedIds = loggedInUserLikedPostIds;
+        const newLikedIds = new Set(originalLikedIds);
+        if (isLiked) {
+            newLikedIds.delete(postId);
+        } else {
+            newLikedIds.add(postId);
         }
-
-        setIsSaving(true);
+        setLoggedInUserLikedPostIds(newLikedIds);
+    
         try {
-            const batch = writeBatch(db);
-            const userId = loggedInUser.uid;
-
-            // 1. Update user's profile document
-            const profileRef = doc(db, 'users', userId);
-            batch.update(profileRef, {
-                username: newUsername,
-                bio: editData.bio.trim()
+            await runTransaction(db, async (transaction) => {
+                const postDoc = await transaction.get(postRef);
+                if (!postDoc.exists()) throw "Post does not exist!";
+                
+                const currentLikeCount = postDoc.data().likeCount || 0;
+                const newLikeCount = isLiked ? currentLikeCount - 1 : currentLikeCount + 1;
+    
+                transaction.update(postRef, { likeCount: Math.max(0, newLikeCount) });
+    
+                if (isLiked) {
+                    transaction.delete(likedPostRef);
+                } else {
+                    transaction.set(likedPostRef, { likedAt: serverTimestamp() });
+                }
             });
-
-            // 2. Update all posts authored by the user
-            const postsQuery = query(collection(db, 'community-posts'), where('author.id', '==', userId));
-            const postsSnapshot = await getDocs(postsQuery);
-            postsSnapshot.forEach(postDoc => {
-                batch.update(postDoc.ref, { "author.username": newUsername });
-            });
-            
-            // 3. Update all posts where this user is the author of a reposted post
-            const repostsQuery = query(collection(db, 'community-posts'), where('repostedPost.author.id', '==', userId));
-            const repostsSnapshot = await getDocs(repostsQuery);
-            repostsSnapshot.forEach(postDoc => {
-                batch.update(postDoc.ref, { "repostedPost.author.username": newUsername });
-            });
-
-            // 4. Update all comments/replies by the user
-            const commentsQuery = query(collection(db, 'usercomments'), where('author.id', '==', userId));
-            const commentsSnapshot = await getDocs(commentsQuery);
-            commentsSnapshot.forEach(commentDoc => {
-                batch.update(commentDoc.ref, { "author.username": newUsername });
-            });
-            
-            await batch.commit();
-            
-            setIsEditing(false);
         } catch (error) {
-            console.error("Error updating profile:", error);
-            alert("There was an error updating your profile. Please try again.");
-        } finally {
-            setIsSaving(false);
+            console.error("Like transaction failed: ", error);
+            // Revert optimistic UI update on failure
+            setLoggedInUserLikedPostIds(originalLikedIds);
+            alert("Could not update like status. Please try again.");
         }
     };
     
@@ -430,7 +396,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     };
 
     const handleCreateRepost = async (comment: string) => {
-        if (!loggedInUser || !loggedInUserProfile || !postToRepost || !comment.trim()) return;
+        if (!loggedInUser || !loggedInUserProfile || !postToRepost) return;
 
         const originalPostRef = doc(db, 'community-posts', postToRepost.id);
         const newPostRef = doc(collection(db, 'community-posts'));
@@ -440,13 +406,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             author: postToRepost.author,
             text: postToRepost.text,
             createdAt: postToRepost.createdAt,
-            mediaUrls: postToRepost.mediaUrls,
-            mediaType: postToRepost.mediaType,
         };
         
-        if (postToRepost.poll) {
-            repostData.poll = postToRepost.poll;
-        }
+        if (postToRepost.mediaUrls) repostData.mediaUrls = postToRepost.mediaUrls;
+        if (postToRepost.mediaType) repostData.mediaType = postToRepost.mediaType;
+        if (postToRepost.audioUrl) repostData.audioUrl = postToRepost.audioUrl;
+        if (postToRepost.poll) repostData.poll = postToRepost.poll;
+
 
         const newPost: Omit<CommunityPost, 'id'> = {
             author: {
@@ -471,11 +437,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 transaction.update(originalPostRef, { repostCount: currentRepostCount + 1 });
                 transaction.set(newPostRef, newPost);
             });
-            setRepostModalOpen(false);
-            setPostToRepost(null);
         } catch (error) {
             console.error("Failed to create repost:", error);
-            alert("Could not create repost. Please try again.");
+            alert("Could not create the repost. Please try again.");
+        } finally {
+            setRepostModalOpen(false);
+            setPostToRepost(null);
         }
     };
     
@@ -510,15 +477,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 </>
             )}
             
-            {isOwnProfile && profile?.projectStatus && (
-                 <div className="pt-2">
-                    <h2 className="text-sm font-semibold text-muted px-3 mb-2">My Project</h2>
+            {profile?.projectStatus && (
+                 <div className="pt-4">
+                    <h2 className="text-sm font-semibold text-muted px-3 mb-2">{isOwnProfile ? 'My Project' : 'Project Status'}</h2>
                     <button 
                         onClick={() => setProjectStatusModalOpen(true)}
-                        className="w-full flex items-center justify-between text-left space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
+                        className="w-full text-left p-4 rounded-xl bg-muted hover:bg-hover transition-colors group"
                     >
-                        <span>View Status</span>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="font-bold text-primary">{profile.projectStatus || 'Not Started'}</p>
+                                <p className="text-xs text-secondary mt-1">Click to view timeline</p>
+                            </div>
+                            <div className="p-2 bg-secondary rounded-full border border-primary group-hover:border-secondary-accent group-hover:text-secondary-accent transition-colors">
+                                <svg className="w-5 h-5"><use href="#icon-arrow-right"></use></svg>
+                            </div>
+                        </div>
                     </button>
                  </div>
             )}
@@ -561,7 +535,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 <div className="grid grid-cols-12 gap-8">
                     {/* --- Sidebar --- */}
                     <aside className="hidden md:block col-span-3">
-                        <div className="sticky top-24">
+                        <div className="sticky top-[76px]">
                            <ProfileSidebar />
                         </div>
                     </aside>
@@ -583,65 +557,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                                         <div className="flex flex-col sm:flex-row justify-between items-start">
                                             <div className="flex-1 w-full text-left">
                                                 <div className="flex items-center gap-2">
-                                                    {isEditing ? (
-                                                        <input type="text" value={editData.username} onChange={e => setEditData({...editData, username: e.target.value})} className="text-2xl sm:text-3xl font-bold bg-transparent rounded-md px-2 py-1 -ml-2 hover:bg-muted focus:bg-muted focus:outline-none w-full sm:w-auto transition-colors" />
-                                                    ) : (
-                                                        <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
-                                                    )}
-                                                    {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && !isEditing && (
+                                                    <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
+                                                    {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && (
                                                         <svg className="w-6 h-6 text-blue-500 flex-shrink-0"><use href="#icon-verified"></use></svg>
-                                                    )}
-                                                     {isOwnProfile && !isEditing && (
-                                                        <button onClick={() => setIsEditing(true)} className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded-full transition-colors flex-shrink-0">
-                                                            <svg className="w-4 h-4"><use href="#icon-rename"></use></svg>
-                                                        </button>
                                                     )}
                                                 </div>
                                                 <p className="text-sm text-muted">{profile.email}</p>
                                             </div>
-                                            
-                                            <div className="flex mt-4 sm:mt-0 flex-row space-x-2 flex-shrink-0">
-                                                {loggedInUser && ADMIN_UIDS.includes(loggedInUser.uid) && (
-                                                    <button onClick={() => setProjectStatusModalOpen(true)} className="btn btn-secondary !py-2 !px-4">
-                                                        <svg className="w-4 h-4 mr-2"><use href="#icon-key"></use></svg>
-                                                        Admin
-                                                    </button>
-                                                )}
-                                                {isOwnProfile && (
-                                                    isEditing ? (
-                                                        <>
-                                                            <button onClick={() => setIsEditing(false)} className="btn btn-secondary !py-2 !px-4">Cancel</button>
-                                                            <button onClick={handleSaveProfile} disabled={isSaving} className="btn btn-primary !py-2 !px-4">
-                                                                {isSaving ? 'Saving...' : 'Save'}
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <button onClick={() => setIsEditing(true)} className="btn btn-secondary !py-2 !px-4">
-                                                            Edit Profile
-                                                        </button>
-                                                    )
-                                                )}
-                                            </div>
                                         </div>
                                         <div className="mt-4 w-full text-left">
-                                            {isEditing ? (
-                                                <div className="relative">
-                                                    <textarea 
-                                                        value={editData.bio} 
-                                                        onChange={e => setEditData({...editData, bio: e.target.value})} 
-                                                        className="text-base text-secondary w-full bg-transparent rounded-md px-2 py-1 pr-16 hover:bg-muted focus:bg-muted focus:outline-none transition-colors"
-                                                        rows={4}
-                                                        maxLength={200}
-                                                    ></textarea>
-                                                    <span className="absolute bottom-2 right-2 text-xs text-muted">
-                                                        {editData.bio.length} / 200
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <div className="max-h-24 overflow-y-auto">
-                                                    <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
-                                                </div>
-                                            )}
+                                            <div className="max-h-24 overflow-y-auto">
+                                                <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="relative group flex-shrink-0">

@@ -138,3 +138,53 @@ export function compressImage(file: File, targetSizeInBytes = 1 * 1024 * 1024): 
         reader.onerror = reject;
     });
 }
+
+/**
+ * Encodes raw PCM audio data into a valid WAV file format.
+ * @param pcmData The raw audio data.
+ * @param sampleRate The sample rate of the audio (e.g., 24000).
+ * @param numChannels The number of audio channels (e.g., 1 for mono).
+ * @param bitsPerSample The number of bits per sample (e.g., 16).
+ * @returns A Blob representing the WAV file.
+ */
+export function pcmToWav(pcmData: Uint8Array, sampleRate: number, numChannels: number, bitsPerSample: number): Blob {
+    const dataSize = pcmData.length;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, string: string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const byteRate = sampleRate * blockAlign;
+
+    // RIFF header
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true); // chunkSize
+    writeString(8, 'WAVE');
+
+    // fmt chunk
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // subchunk1Size (16 for PCM)
+    view.setUint16(20, 1, true); // audioFormat (1 for PCM)
+    view.setUint16(22, numChannels, true); // numChannels
+    view.setUint32(24, sampleRate, true); // sampleRate
+    view.setUint32(28, byteRate, true); // byteRate
+    view.setUint16(32, blockAlign, true); // blockAlign
+    view.setUint16(34, bitsPerSample, true); // bitsPerSample
+
+    // data chunk
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true); // subchunk2Size
+
+    // Write PCM data
+    const pcmAsDataView = new Uint8Array(pcmData.buffer);
+    for (let i = 0; i < dataSize; i++) {
+        view.setUint8(44 + i, pcmAsDataView[i]);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+}
