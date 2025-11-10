@@ -603,7 +603,6 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             postData.mediaType = postData.mediaType === 'image' ? 'mixed' : 'audio';
         }
 
-
         if (pollOptions && pollOptions.length >= 2) {
             postData.poll = {
                 options: pollOptions.map(opt => ({ text: opt, votes: 0 })),
@@ -612,25 +611,50 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         }
 
         try {
-            const postRef = await addDoc(collection(db, 'community-posts'), postData);
-
             if (isAiQuery) {
-                // fire and forget webhook
-                fetch(AI_QUERY_WEBHOOK_URL, {
+                // Fetch the AI response synchronously before creating the post.
+                const response = await fetch(AI_QUERY_WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        postId: postRef.id,
                         userId: user.uid,
                         query: text,
                     })
-                }).catch(e => console.error("AI query webhook failed:", e));
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`AI service failed: ${errorText}`);
+                }
+
+                const result = await response.json();
+                
+                // Robustly extract the AI's text response.
+                const resultData = Array.isArray(result) ? result[0] : result;
+                let aiResponseText = resultData?.output || resultData?.text || resultData?.response || "Sorry, the AI could not provide a response.";
+                
+                // FIX: More robustly remove 'undefined' text that can appear at the end of AI responses,
+                // handling variations like "*undefined" or " undefined".
+                if (typeof aiResponseText === 'string') {
+                    aiResponseText = aiResponseText.replace(/[\s*]*undefined\s*$/gi, '').trim();
+                }
+
+                // Embed the AI reply directly into the post data.
+                postData.aiReply = {
+                    text: aiResponseText,
+                    createdAt: serverTimestamp() as Timestamp,
+                };
+                // The AI reply counts as a comment.
+                postData.commentCount = 1;
             }
+
+            // Create the post document, now with the AI reply if applicable.
+            await addDoc(collection(db, 'community-posts'), postData);
 
             setCreatePostModalOpen(false);
         } catch (error) {
             console.error("Error creating post:", error);
-            alert("There was an error creating your post. Please try again.");
+            alert(`There was an error creating your post: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }, [user, userProfile]);
 
@@ -786,7 +810,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                             <h1 className="text-xl font-bold text-primary px-4">Community Feed</h1>
                         </div>
                         
-                        <div className="space-y-4 p-0 sm:p-4">
+                        <div className="sm:space-y-4 p-0 sm:p-4">
                             {isLoading ? (
                                 Array.from({ length: 5 }).map((_, i) => <PostSkeleton key={i} />)
                             ) : error ? (

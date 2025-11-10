@@ -6,6 +6,7 @@ import { collection, query, orderBy, onSnapshot, runTransaction, doc, where, get
 import Avatar from '../Avatar.tsx';
 import { ADMIN_UIDS } from '../../constants.ts';
 import AudioPlayer from '../AudioPlayer.tsx';
+import CommentItem from './CommentItem.tsx';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -252,117 +253,6 @@ const CommentForm: React.FC<{ user: User; userProfile: UserProfile | null; onSub
     );
 };
 
-interface CommentItemProps extends ProfileNavigable {
-    comment: Comment;
-    user: User;
-    userProfile: UserProfile | null;
-    onDelete: (comment: Comment) => void;
-    onAddReply: (text: string, comment: Comment) => void;
-    onDeleteReply: (replyId: string) => void;
-    author: Author | null;
-}
-
-const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, onDelete, onAddReply, onDeleteReply, author, onViewProfile }) => {
-    const [replies, setReplies] = useState<Reply[]>([]);
-    const [showReplyForm, setShowReplyForm] = useState(false);
-    const [showReplies, setShowReplies] = useState(false);
-    const timeAgo = comment.createdAt ? formatTimeAgoShort(comment.createdAt.toDate()) : '...';
-    const isAiComment = comment.author.id === 'ai-assistant';
-
-    useEffect(() => {
-        if (!user) {
-            setReplies([]);
-            return;
-        }
-        const q = query(
-            collection(db, 'usercomments'),
-            where('postId', '==', comment.postId),
-            where('commentId', '==', comment.id),
-            orderBy('createdAt', 'asc')
-        );
-        const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reply));
-            setReplies(fetchedReplies);
-        });
-        return unsubscribe;
-    }, [comment.id, comment.postId, user]);
-    
-    const handleAddReply = (text: string) => {
-        onAddReply(text, comment);
-        setShowReplyForm(false);
-    };
-    
-    // FIX: Added the missing return statement with JSX to render the component.
-    return (
-        <div className="flex space-x-3">
-            <div className="flex-shrink-0">
-                {isAiComment ? (
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary-accent text-on-primary-accent">
-                        <svg className="w-5 h-5"><use href="#icon-sparkle"></use></svg>
-                    </div>
-                ) : (
-                    <button onClick={() => onViewProfile(comment.author.id)} className="cursor-pointer">
-                        <Avatar email={comment.author.email} photoURL={comment.author.photoURL} size="sm" />
-                    </button>
-                )}
-            </div>
-            <div className="flex-1 min-w-0">
-                <div className={`${isAiComment ? '' : 'bg-muted'} rounded-xl p-3`}>
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                            {isAiComment ? (
-                                <p className="font-bold text-sm text-primary">AI Assistant</p>
-                            ) : (
-                                <button onClick={() => onViewProfile(comment.author.id)} className="font-bold text-sm text-primary hover:underline">{comment.author.username}</button>
-                            )}
-                            <p className="text-xs text-secondary">{timeAgo}</p>
-                        </div>
-                        {(user && (user.uid === comment.author.id || ADMIN_UIDS.includes(user.uid))) && (
-                            <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 text-xs p-1">Delete</button>
-                        )}
-                    </div>
-                    <p className="text-sm text-primary mt-1 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatText(comment.text) }}></p>
-                </div>
-
-                <div className="flex items-center space-x-3 text-xs text-secondary mt-1">
-                    <button onClick={() => setShowReplyForm(!showReplyForm)} className="font-semibold hover:underline">Reply</button>
-                    {comment.replyCount > 0 && (
-                        <button onClick={() => setShowReplies(!showReplies)} className="font-semibold hover:underline">
-                            {showReplies ? 'Hide' : `View ${comment.replyCount} ${comment.replyCount > 1 ? 'replies' : 'reply'}`}
-                        </button>
-                    )}
-                </div>
-
-                {showReplyForm && <CommentForm user={user} userProfile={userProfile} onSubmit={handleAddReply} placeholder="Write a reply..." autoFocus />}
-
-                {showReplies && replies.length > 0 && (
-                    <div className="mt-2 space-y-2">
-                        {replies.map(reply => (
-                            <div key={reply.id} className="flex space-x-3">
-                                <button onClick={() => onViewProfile(reply.author.id)} className="cursor-pointer flex-shrink-0">
-                                    <Avatar email={reply.author.email} photoURL={reply.author.photoURL} size="sm" />
-                                </button>
-                                <div className="flex-1 min-w-0">
-                                    <div className="bg-muted rounded-xl p-3">
-                                        <div className="flex items-center space-x-2">
-                                            <button onClick={() => onViewProfile(reply.author.id)} className="font-bold text-sm text-primary hover:underline">{reply.author.username}</button>
-                                            <p className="text-xs text-secondary">{reply.createdAt ? formatTimeAgoShort(reply.createdAt.toDate()) : '...'}</p>
-                                        </div>
-                                        <p className="text-sm text-primary mt-1" dangerouslySetInnerHTML={{ __html: formatText(reply.text) }}></p>
-                                    </div>
-                                    {(user && (user.uid === reply.author.id || ADMIN_UIDS.includes(user.uid))) && (
-                                        <button onClick={() => onDeleteReply(reply.id)} className="text-xs text-muted hover:text-red-500 mt-1">Delete</button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 // --- Post Component ---
 interface PostItemProps extends ProfileNavigable {
     post: CommunityPost;
@@ -379,8 +269,9 @@ interface PostItemProps extends ProfileNavigable {
 
 const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost }) => {
     const [comments, setComments] = useState<Comment[]>([]);
-    const [showComments, setShowComments] = useState(false);
+    const [showComments, setShowComments] = useState(post.isAiPost && !!post.aiReply && user?.uid === post.author.id);
     const [isMenuOpen, setMenuOpen] = useState(false);
+    
     const menuRef = useRef<HTMLDivElement>(null);
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
     
@@ -427,6 +318,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                 createdAt: post.aiReply.createdAt,
                 postId: post.id,
                 replyCount: 0,
+                audioUrl: post.aiReply.audioUrl,
             };
             allComments.unshift(aiComment);
         }
@@ -603,7 +495,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     const hasMedia = post.mediaUrls?.length > 0 || post.audioUrl || post.poll;
 
     return (
-        <div className="bg-secondary sm:rounded-xl p-4 overflow-hidden">
+        <div className="bg-secondary sm:rounded-xl p-4 overflow-hidden border-b border-primary sm:border-b-0">
             <div className="flex space-x-4">
                 <div className="flex-shrink-0">
                     <button onClick={() => onViewProfile(post.author.id)}>
@@ -699,16 +591,25 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                     </div>
                     
                     <div className="flex justify-start items-center text-secondary mt-4 -ml-2 text-sm">
-                        <button onClick={() => onToggleLike(post.id)} className={`flex items-center space-x-1.5 p-2 rounded-full hover:bg-hover hover:text-primary-accent transition-colors ${likedPostIds.has(post.id) ? 'text-primary-accent' : ''}`}>
+                        <button onClick={() => onToggleLike(post.id)} className={`flex items-center space-x-1.5 p-2 rounded-full hover:bg-red-500/10 hover:text-red-500 transition-colors ${likedPostIds.has(post.id) ? 'text-red-500' : ''}`}>
                             <svg className="w-5 h-5"><use href={likedPostIds.has(post.id) ? "#icon-heart-filled" : "#icon-heart"}></use></svg>
+                            {post.likeCount > 0 && (
+                                <span className="text-xs font-semibold">{post.likeCount}</span>
+                            )}
                         </button>
                         <button onClick={() => setShowComments(!showComments)} className="flex items-center space-x-1.5 p-2 rounded-full hover:bg-hover hover:text-blue-500 transition-colors">
                             <svg className="w-5 h-5"><use href="#icon-comment"></use></svg>
+                            {post.commentCount > 0 && (
+                                <span className="text-xs font-semibold">{post.commentCount}</span>
+                            )}
                         </button>
                         <button onClick={() => onRepost(post)} className="flex items-center space-x-1.5 p-2 rounded-full hover:bg-hover hover:text-green-500 transition-colors">
                             <svg className="w-5 h-5"><use href="#icon-repost"></use></svg>
+                             {post.repostCount > 0 && (
+                                <span className="text-xs font-semibold">{post.repostCount}</span>
+                            )}
                         </button>
-                        <button onClick={() => onToggleSave(post.id)} className={`flex items-center p-2 rounded-full hover:bg-hover hover:text-primary-accent transition-colors ${savedPostIds.has(post.id) ? 'text-primary-accent' : ''}`}>
+                        <button onClick={() => onToggleSave(post.id)} className={`flex items-center p-2 rounded-full hover:bg-yellow-500/10 hover:text-yellow-500 transition-colors ${savedPostIds.has(post.id) ? 'text-yellow-500' : ''}`}>
                             <svg className="w-5 h-5"><use href={savedPostIds.has(post.id) ? "#icon-bookmark-filled" : "#icon-bookmark"}></use></svg>
                         </button>
                     </div>

@@ -93,7 +93,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
     
     return (
         <div ref={pageRef} className="page-transition">
-            <section id="hero" className="relative pt-32 pb-24 md:py-40 text-center overflow-hidden">
+            <section id="hero" className="relative pt-40 pb-16 md:pt-48 md:pb-24 text-center overflow-hidden">
                 <LiquidBackground />
                 <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 className="hero-headline tracking-tighter text-primary mb-6">
@@ -126,7 +126,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                 </div>
             </section>
 
-            <section id="projects" className="py-24 md:py-32 bg-primary text-primary overflow-hidden">
+            <section id="projects" className="py-16 md:py-24 bg-primary text-primary overflow-hidden">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-8">
                         Curating high-impact visual identities.

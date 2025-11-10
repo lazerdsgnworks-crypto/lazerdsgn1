@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import LiveWaveform from './ui/LiveWaveform.tsx';
 
@@ -83,6 +84,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, variant = 'chat' }) => {
         return (
             <div className="flex items-center gap-2 w-full max-w-xs">
                 <button
+                    type="button"
                     onClick={handlePlayPause}
                     disabled={isLoading}
                     className="w-8 h-8 flex-shrink-0 bg-secondary border border-primary rounded-full flex items-center justify-center transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-muted focus:ring-primary-accent disabled:opacity-50 disabled:scale-100"
@@ -114,6 +116,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, variant = 'chat' }) => {
     return (
         <div className="flex items-center gap-3 bg-bg-muted rounded-full px-2 py-1.5 w-full max-w-[240px] border border-primary" aria-label="Audio player">
             <button
+                type="button"
                 onClick={handlePlayPause}
                 disabled={isLoading}
                 className="w-8 h-8 flex-shrink-0 bg-secondary rounded-full flex items-center justify-center transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-muted focus:ring-primary-accent disabled:opacity-50 disabled:scale-100"

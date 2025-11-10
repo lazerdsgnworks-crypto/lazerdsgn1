@@ -62,10 +62,11 @@ const ChatMessageItem: React.FC<{
             if (part.startsWith('```')) {
                 structuredParts.push({ type: 'code', content: part });
             } else {
-                const subParts = part.split(/((?:\|[^\n\r]+\|\r?\n){2,})/g);
+                const subParts = part.split(/((?:\|.*\|[ \t]*\r?\n)+(?:\|.*\|))/g);
                 subParts.forEach(subPart => {
                     if (!subPart) return;
-                    const isTable = subPart.trim().startsWith('|') && subPart.includes('\n|');
+                    const trimmedSubPart = subPart.trim();
+                    const isTable = trimmedSubPart.startsWith('|') && /\|.*-.*\|/.test(trimmedSubPart);
                     if (isTable) {
                         structuredParts.push({ type: 'table', content: subPart });
                     } else if (subPart.trim()) {
@@ -257,10 +258,11 @@ const ChatMessageItem: React.FC<{
                              <>
                                 {shouldAnimate ? (
                                     partsToRender.map((part, index) => {
-                                        if (part.type === 'text') {
-                                            const isLastPart = index === partsToRender.length - 1;
-                                            return <AnimatedTextPart key={index} text={part.content} onComplete={isLastPart ? handleAnimationComplete : () => {}} />;
+                                        const isCurrentlyAnimatingPart = index === renderedPartsCount - 1;
+                                        if (part.type === 'text' && isCurrentlyAnimatingPart) {
+                                            return <AnimatedTextPart key={index} text={part.content} onComplete={handleAnimationComplete} />;
                                         }
+                                        // Render completed text parts, and all code/table parts, statically
                                         return <Response key={index}>{part.content}</Response>;
                                     })
                                 ) : (

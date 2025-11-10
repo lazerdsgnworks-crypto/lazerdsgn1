@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile, RepostedPost } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -12,6 +11,7 @@ import RepostModal from '../components/community/RepostModal.tsx';
 import ProjectStatusModal from '../components/ProjectStatusModal.tsx';
 import { compressImage, dataURLtoFile } from '../utils/files.ts';
 import { ADMIN_UIDS } from '../constants.ts';
+import Modal from '../components/Modal.tsx';
 
 interface ProfilePageProps {
     loggedInUser: User;
@@ -59,6 +59,71 @@ const ProfileHeaderSkeleton: React.FC = () => (
     </div>
 );
 
+const EditProfileModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    profile: UserProfile | null;
+    onSave: (username: string, bio: string) => Promise<void>;
+}> = ({ isOpen, onClose, profile, onSave }) => {
+    const [username, setUsername] = useState('');
+    const [bio, setBio] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    
+    useEffect(() => {
+        if (profile) {
+            setUsername(profile.username);
+            setBio(profile.bio);
+        }
+    }, [profile, isOpen]);
+    
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        await onSave(username, bio);
+        setIsSaving(false);
+    };
+
+    if (!profile) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose}>
+            <div>
+                <h2 className="text-2xl font-bold text-primary mb-2">Edit Profile</h2>
+                <p className="text-secondary mb-6">Update your profile information.</p>
+                <form onSubmit={handleFormSubmit} className="space-y-4">
+                    <div>
+                        <label htmlFor="username" className="text-sm font-medium text-secondary">Username</label>
+                        <input
+                            id="username"
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            className="w-full px-3 py-2 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="bio" className="text-sm font-medium text-secondary">Bio</label>
+                        <textarea
+                            id="bio"
+                            value={bio}
+                            onChange={(e) => setBio(e.target.value)}
+                            className="w-full px-3 py-2 mt-1 text-base border-secondary rounded-lg focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 bg-muted text-primary transition-colors min-h-[100px] resize-y"
+                            rows={4}
+                        />
+                    </div>
+                    <div className="flex justify-end pt-4 space-x-3">
+                        <button type="button" onClick={onClose} className="btn btn-secondary !py-2 !px-5">Cancel</button>
+                        <button type="submit" disabled={isSaving} className="btn btn-primary !py-2 !px-5">
+                            {isSaving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+    );
+};
+
 const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal }) => {
     const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
     const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
@@ -76,6 +141,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [isRepostModalOpen, setRepostModalOpen] = useState(false);
     const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
+    const [isEditProfileModalOpen, setEditProfileModalOpen] = useState(false);
     
     // Project status modal state
     const [isProjectStatusModalOpen, setProjectStatusModalOpen] = useState(false);
@@ -446,6 +512,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
         }
     };
     
+    const handleUpdateProfile = async (newUsername: string, newBio: string) => {
+        if (!loggedInUser) return;
+        if (!newUsername.trim()) {
+            alert("Username cannot be empty.");
+            return;
+        }
+
+        const profileRef = doc(db, 'users', loggedInUser.uid);
+        try {
+            await updateDoc(profileRef, {
+                username: newUsername.trim(),
+                bio: newBio.trim(),
+            });
+            setEditProfileModalOpen(false);
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            alert("Failed to update profile. Please try again.");
+        }
+    };
+    
     // Determine which posts to display based on the active tab
     const displayedPosts = (() => {
         switch (activeTab) {
@@ -477,7 +563,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 </>
             )}
             
-            {profile?.projectStatus && (
+            {profile && (
                  <div className="pt-4">
                     <h2 className="text-sm font-semibold text-muted px-3 mb-2">{isOwnProfile ? 'My Project' : 'Project Status'}</h2>
                     <button 
@@ -500,7 +586,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             {isOwnProfile && (
                 <div className="pt-4">
                     <h2 className="text-sm font-semibold text-muted px-3">Account</h2>
-                        <button
+                    <button
+                        onClick={() => { setEditProfileModalOpen(true); setMobileSidebarOpen(false); }}
+                        className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
+                    >
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-rename"></use></svg>
+                        <span>Edit Profile</span>
+                    </button>
+                    <button
                         onClick={() => { onOpenChangePasswordModal(); setMobileSidebarOpen(false); }}
                         className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
                     >
@@ -561,6 +654,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                                                     {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && (
                                                         <svg className="w-6 h-6 text-blue-500 flex-shrink-0"><use href="#icon-verified"></use></svg>
                                                     )}
+                                                    {isOwnProfile && (
+                                                        <button
+                                                            onClick={() => setEditProfileModalOpen(true)}
+                                                            className="p-2 -m-2 rounded-full hover:bg-hover sm:hidden"
+                                                            aria-label="Edit Profile"
+                                                        >
+                                                            <svg className="w-5 h-5 text-secondary"><use href="#icon-rename"></use></svg>
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <p className="text-sm text-muted">{profile.email}</p>
                                             </div>
@@ -570,6 +672,29 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                                                 <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
                                             </div>
                                         </div>
+                                         {isOwnProfile && (
+                                            <div className="mt-6 hidden sm:flex flex-wrap items-center gap-3">
+                                                <button
+                                                    onClick={() => setEditProfileModalOpen(true)}
+                                                    className="btn btn-primary !py-2 !px-4 text-sm inline-flex items-center"
+                                                >
+                                                    <svg className="w-4 h-4 mr-2"><use href="#icon-rename"></use></svg>
+                                                    Edit Profile
+                                                </button>
+                                                <button
+                                                    onClick={onOpenChangePasswordModal}
+                                                    className="btn btn-secondary !py-2 !px-4 text-sm"
+                                                >
+                                                    Change Password
+                                                </button>
+                                                <button
+                                                    onClick={onLogout}
+                                                    className="btn btn-secondary !py-2 !px-4 text-sm"
+                                                >
+                                                    Logout
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="relative group flex-shrink-0">
                                         <Avatar email={profile.email} photoURL={profile.photoURL} size="xxl" />
@@ -622,6 +747,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                     </main>
                 </div>
             </div>
+
+            <EditProfileModal
+                isOpen={isEditProfileModalOpen}
+                onClose={() => setEditProfileModalOpen(false)}
+                profile={profile}
+                onSave={handleUpdateProfile}
+            />
 
             {previewImageUrl && <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />}
             
