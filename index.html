@@ -604,7 +604,8 @@
         }
         .response-wrapper pre code {
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-            white-space: pre;
+            white-space: pre-wrap; /* Allow code to wrap */
+            word-break: break-word; /* Break long words/strings */
             color: var(--text-primary);
             background-color: transparent;
             padding: 0;
@@ -646,6 +647,8 @@
         /* NEW: Markdown Response Styles */
         .ai-message ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.75em; }
         .ai-message ul li { margin-bottom: 0.25em; }
+        .ai-message ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: 0.75em; }
+        .ai-message ol li { margin-bottom: 0.25em; }
         .ai-message > div > h2, .ai-message > div > h3 { font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; line-height: 1.2; }
         .ai-message > div > h2 { font-size: 1.25rem; }
         .ai-message > div > h3 { font-size: 1.1rem; }
@@ -737,7 +740,7 @@
             border-color: var(--border-secondary);
         }
     </style>
-  <script type="module" crossorigin src="/lazerdsgn1/assets/index-Bvk6gGr_.js"></script>
+  <script type="module" crossorigin src="/lazerdsgn1/assets/index-jY2ayI3M.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -763,13 +766,15 @@
         <symbol id="icon-behance" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2,6.4H15.5V4h6.7V6.4z M15,10.1h5.8c-0.4,2.5-2.4,4.1-5.1,4.1c-2.9,0-4.6-2.1-4.6-5.1c0-3.2,1.9-5.3,4.6-5.3 c2.3,0,3.5,1.1,3.5,1.1l-1.5,1.5c0,0-0.9-0.7-1.9-0.7c-1.3,0-2.3,1.3-2.3,3.4c0,2.1,1.1,3.4,2.4,3.4c1.6,0,2.4-1.2,2.4-1.2H15V10.1z M8.8,17.2c-2.1,0-3.3-1.2-3.3-3.8V8h6.5v1.4h-4.3v1.8c0,1,0.5,1.5,1.6,1.5c1,0,1.8-0.3,2.1-0.5l0.7,1.3C10.7,16.8,9.7,17.2,8.8,17.2z M12,20H2c-1.1,0-2-0.9-2-2V6c0-1.1,0.9-2,2-2h20c1.1,0,2,0.9,2,2v12C24,19.1,23.1,20,12,20z"></path></symbol>
         <symbol id="icon-search" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></symbol>
         <symbol id="icon-video" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" /></symbol>
-        <symbol id="icon-image" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></symbol>
+        <symbol id="icon-image" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 017.5 0z" /></symbol>
         <symbol id="icon-file-text" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></symbol>
         <symbol id="icon-music" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></symbol>
         <symbol id="icon-copy" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></symbol>
         <symbol id="icon-heart" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></symbol>
         <symbol id="icon-flag" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></symbol>
-        <symbol id="icon-sparkle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.562L16.25 21.75l-.648-1.188a2.25 2.25 0 01-1.47-1.47L12.964 18l1.188-.648a2.25 2.25 0 011.47-1.47L16.25 15l.648 1.188a2.25 2.25 0 011.47 1.47L19.536 18l-1.188.648a2.25 2.25 0 01-1.47 1.47z" /></symbol>
+        <symbol id="icon-sparkle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m12 2.25 1.838 7.913L21.75 12l-7.912 1.838L12 21.75l-1.838-7.912L2.25 12l7.912-1.837L12 2.25Z" />
+        </symbol>
         <symbol id="icon-plus" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></symbol>
         <symbol id="icon-paperclip" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></symbol>
         <symbol id="icon-microphone" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></symbol>
