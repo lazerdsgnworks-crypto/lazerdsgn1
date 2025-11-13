@@ -364,12 +364,17 @@
             0% { transform: translateY(0); }
             100% { transform: translateY(var(--scroll-height)); }
         }
+        /* UPDATED: Collapsed Sidebar styles for better icon alignment */
         #chat-sidebar.collapsed {
-            width: 0;
-            padding: 0;
-            border: none;
-            overflow: hidden;
+            width: 72px;
+            padding: 1rem 0;
         }
+        #chat-sidebar.collapsed > .p-4,
+        #chat-sidebar.collapsed > .px-4,
+        #chat-sidebar.collapsed > .flex-1 {
+            display: none;
+        }
+
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.6);
@@ -739,8 +744,32 @@
             background-color: var(--bg-hover);
             border-color: var(--border-secondary);
         }
+
+        /* NEW: Styles for "Generation Stopped" message */
+        @keyframes stop-message-animation {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stop-message {
+            animation: stop-message-animation 0.5s ease-out forwards;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            background-color: color-mix(in srgb, #f59e0b 15%, transparent); /* amber-500 at 15% opacity */
+            color: #d97706; /* amber-600 */
+            border: 1px solid color-mix(in srgb, #f59e0b 25%, transparent);
+        }
+        html.dark .stop-message {
+            background-color: color-mix(in srgb, #f59e0b 20%, transparent);
+            color: #fbbf24; /* amber-400 */
+            border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+        }
     </style>
-  <script type="module" crossorigin src="/lazerdsgn1/assets/index-jY2ayI3M.js"></script>
+  <script type="module" crossorigin src="/lazerdsgn1/assets/index-c250cn8Z.js"></script>
 </head>
 <body>
     <div id="root"></div>
