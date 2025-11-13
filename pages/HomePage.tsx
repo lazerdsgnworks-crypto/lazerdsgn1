@@ -63,7 +63,7 @@ const testimonials = [
     { name: "Saman Malik", title: "Brand Director", avatar: "https://placehold.co/40x40/9CA3AF/ffffff?text=S", text: "LazerDsgn guided our brand through a complex re-design process, providing ongoing expertise and ensuring our final look was pitch perfect." },
     { name: "Ahmed Khan", title: "Marketing Lead", avatar: null, avatarInitial: "A", text: "The new visual system LazerDsgn delivered instantly elevated our presence in a crowded market. Their process is smooth and highly collaborative." },
     { name: "Hassan Ali", title: "Digital Strategist", avatar: "https://placehold.co/40x40/1F2937/ffffff?text=H", text: "Our website conversions doubled after the UI/UX overhaul. LazerDsgn's focus on user experience married with beautiful design is unmatched." },
-    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://placehold.co/40x40/D1D5DB/ffffff?text=Z", text: "The robust design consultation and fast delivery from LazerDsgn have streamlined our production workflow, making our internal marketing significantly more efficient." },
+    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png", text: "The robust design consultation and fast delivery from LazerDsgn have streamlined our production workflow, making our internal marketing significantly more efficient." },
     { name: "Maria Rodriguez", title: "Founder, Small Retail", avatar: null, avatarInitial: "M", text: "The execution of our campaign assets exceeded expectations. Every touchpoint felt integrated and premium, improving overall brand perception." },
 ];
 
@@ -143,6 +143,31 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                             </div>
                         </div>
                     ))}
+                </div>
+            </section>
+            
+            <section id="about" className="py-24 md:py-32 bg-primary relative overflow-hidden">
+                <div className="absolute -left-32 -top-32 w-96 h-96 bg-secondary-accent/5 dark:bg-secondary-accent/10 rounded-full blur-3xl"></div>
+                <div className="absolute -right-32 -bottom-48 w-96 h-96 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl"></div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-x-16 gap-y-12 items-center relative z-10">
+                    <div className="order-2 md:order-1">
+                        <h2 className="text-sm font-bold uppercase tracking-widest text-secondary-accent mb-3">Our Mission</h2>
+                        <h3 className="text-3xl lg:text-4xl font-extrabold tracking-tight text-primary mb-6">We build brands that resonate.</h3>
+                        <p className="text-secondary mb-4 text-lg leading-relaxed">
+                            Our mission is simple: to help brands connect with their audiences through exceptional design. We believe that great design is not just about aesthetics; it's about creating meaningful experiences that drive results.
+                        </p>
+                        <p className="text-secondary text-lg leading-relaxed">
+                            From startups to established enterprises, we provide the creative firepower to help you stand out.
+                        </p>
+                        <button onClick={() => navigateTo(Page.Chat)} className="btn btn-primary mt-8">Let's Talk Design</button>
+                    </div>
+                    <div 
+                        className="order-1 md:order-2 rounded-2xl shadow-2xl aspect-[4/5] bg-muted bg-cover bg-center transform md:hover:scale-105 transition-transform duration-500 ease-in-out"
+                        style={{ backgroundImage: `url('https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png')` }}
+                        role="img"
+                        aria-label="Abstract design artwork"
+                    >
+                    </div>
                 </div>
             </section>
 

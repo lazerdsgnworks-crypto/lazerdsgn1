@@ -1,14 +1,17 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
 // FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, getDocs, QuerySnapshot, DocumentData, Timestamp, writeBatch, setDoc } from 'firebase/firestore';
 import { createThumbnail, createPdfThumbnail, compressImage, dataURLtoFile, pcmToWav } from '../utils/files.ts';
 import Avatar from '../components/Avatar.tsx';
 import ImagePreviewModal from '../components/community/ImagePreviewModal.tsx';
 import ChatMessageItem from '../components/ChatMessageItem.tsx';
 import { GoogleGenAI, Modality } from '@google/genai';
+// FIX: Added missing import for LiveWaveform component.
+import LiveWaveform from '../components/ui/LiveWaveform.tsx';
 
 // Add SpeechRecognition to the global window object for TypeScript
 declare global {
@@ -19,10 +22,10 @@ declare global {
 }
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
-const WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/chatinput';
-const VOICE_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/voice';
-const ANALYSIS_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/analyze';
-const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://umarworks2.app.n8n.cloud/webhook/analysis';
+const WEBHOOK_URL = 'https://umarworks3.app.n8n.cloud/webhook/chatinput';
+const VOICE_WEBHOOK_URL = 'https://umarworks3.app.n8n.cloud/webhook/voice';
+const ANALYSIS_WEBHOOK_URL = 'https://umarworks3.app.n8n.cloud/webhook/analyze';
+const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://umarworks3.app.n8n.cloud/webhook/analysis';
 const APP_ID = 'default-lazerdsgn-app';
 const CHATS_COLLECTION = `artifacts/${APP_ID}/users/`;
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
@@ -56,6 +59,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
     const [sessionsLoaded, setSessionsLoaded] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [isVoiceUIVisible, setVoiceUIVisible] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const [streamingId, setStreamingId] = useState<string | null>(null);
 
     const createNewSession = useCallback(async (setActive = true) => {
         if (!user) return;
@@ -72,18 +77,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
 
     // Effect to create a new session every time the chat page is opened/mounted.
     useEffect(() => {
-        if (sessionsLoaded && sessions.length === 0) {
-            createNewSession(true);
-        } else if (sessionsLoaded && !sessions.find(s => s.id === currentSessionId)) {
-            // If current session is invalid (e.g., deleted), switch to the most recent one
-            const mostRecentSession = sessions[0];
-            if (mostRecentSession) {
-                setCurrentSessionId(mostRecentSession.id);
-            } else {
-                 createNewSession(true);
-            }
-        }
-    }, [sessions, sessionsLoaded, currentSessionId, createNewSession]);
+        createNewSession(true);
+    }, [createNewSession]);
 
     // Effect to listen for session list changes for the sidebar.
      useEffect(() => {
@@ -120,39 +115,12 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             return;
         };
         
-        // Reset for the new session
-        isInitialMessagesLoad.current = true;
-        animatedMessageIds.current.clear();
-
         const messagesRef = collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`);
         const q = query(messagesRef, orderBy('createdAt', 'asc'));
 
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            if (snapshot.empty) {
-                setMessages([]);
-                isInitialMessagesLoad.current = false;
-                return;
-            }
-
-            if (isInitialMessagesLoad.current) {
-                const initialMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
-                // Pre-populate animated IDs to prevent animation on load
-                initialMessages.forEach(msg => {
-                    if (msg.role === 'ai') {
-                        animatedMessageIds.current.add(msg.id);
-                    }
-                });
-                setMessages(initialMessages);
-                isInitialMessagesLoad.current = false;
-            } else {
-                // Handle subsequent changes (new messages)
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === "added") {
-                        const newMessage = { id: change.doc.id, ...change.doc.data() } as ChatMessage;
-                        setMessages(prev => prev.find(m => m.id === newMessage.id) ? prev : [...prev, newMessage]);
-                    }
-                });
-            }
+            const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+            setMessages(newMessages);
         }, (err) => {
             console.error("Firebase messages listener error:", err);
         });
@@ -164,16 +132,25 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         document.body.classList.toggle('sidebar-collapsed', isSidebarCollapsed);
     }, [isSidebarCollapsed]);
     
+    const handleStopGenerating = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+    };
+
     const handleSendMessage = async (message: string, imageFiles: File[], audioFile: File | null) => {
         if (!user || !currentSessionId || !userProfile) return;
         if (!message.trim() && imageFiles.length === 0 && !analysisFile && !audioFile) return;
+
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
 
         setIsLoading(true);
         if (isImageGenMode) setIsGeneratingImage(true);
         if (isVideoGenMode) setIsGeneratingVideo(true);
         
         const userMessagesInHistory = messages.filter(m => m.role === 'user');
-        const shouldGenerateTitle = userMessagesInHistory.length === 1;
+        const shouldGenerateTitle = userMessagesInHistory.length === 0;
 
         const currentSession = sessions.find(s => s.id === currentSessionId);
         const isFirstMessage = currentSession?.title.startsWith(TEMP_TITLE_PREFIX) ?? false;
@@ -195,7 +172,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 formData.append('file', audioFile);
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                 const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-                const response = await fetch(url, { method: 'POST', body: formData });
+                const response = await fetch(url, { method: 'POST', body: formData, signal });
                 if (!response.ok) throw new Error('Audio upload failed');
                 const data = await response.json();
                 userMessage.audioUrl = data.secure_url;
@@ -226,7 +203,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         userMessage.imageUrl = await createPdfThumbnail(analysisFile);
                     } catch (pdfError) {
                         console.error("Failed to generate PDF thumbnail:", pdfError);
-                        // Don't add imageUrl if thumbnail generation fails, it will fallback to an icon
                     }
                 }
             }
@@ -236,368 +212,228 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 createdAt: serverTimestamp() as Timestamp,
             });
 
-            // --- UPDATED: Set initial title on first message for ALL chat types. Webhook will override for text chats. ---
             if (isFirstMessage) {
                 let newTitleText: string | null = null;
-                 if (isImageGenMode) {
-                    newTitleText = `Image: ${message}`;
-                } else if (isVideoGenMode) {
-                    newTitleText = `Video: ${message}`;
-                } else if (analysisFile) {
-                    newTitleText = `Analysis of ${analysisFile.name}`;
-                } else if (audioFile) {
-                    newTitleText = "Voice Message";
-                } else {
-                    // This is a regular text chat's first message. Use it for the initial title.
-                    // This title will act as a fallback if the webhook fails later.
-                    newTitleText = message;
-                }
+                 if (isImageGenMode) newTitleText = `Image: ${message}`;
+                 else if (isVideoGenMode) newTitleText = `Video: ${message}`;
+                 else if (analysisFile) newTitleText = `Analysis of ${analysisFile.name}`;
+                 else if (audioFile) newTitleText = "Voice Message";
+                 else newTitleText = message;
 
                 if (newTitleText && newTitleText.trim()) {
                     const newTitle = newTitleText.trim().substring(0, 40) + (newTitleText.length > 40 ? '...' : '');
                     await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { title: newTitle, updatedAt: serverTimestamp() as Timestamp });
                 } else {
-                    // Fallback for empty initial messages, just update timestamp
                     await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { updatedAt: serverTimestamp() as Timestamp });
                 }
             } else {
-                 // For subsequent messages, just update the timestamp to bump it in the session list.
                  await updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { updatedAt: serverTimestamp() as Timestamp });
             }
 
-            // A helper function to robustly extract a URL from a webhook response.
             const extractUrlFromResponse = (responseData: any): string | null => {
                 if (!responseData) return null;
                 const dataToInspect = Array.isArray(responseData) && responseData.length > 0 ? responseData[0] : responseData;
-                
                 if (dataToInspect && typeof dataToInspect === 'object') {
                     const commonKeys = ['videoUrl', 'imageUrl', 'url', 'output'];
                     for (const key of commonKeys) {
-                        if (typeof dataToInspect[key] === 'string' && dataToInspect[key].startsWith('http')) {
-                            return dataToInspect[key];
-                        }
+                        if (typeof dataToInspect[key] === 'string' && dataToInspect[key].startsWith('http')) return dataToInspect[key];
                     }
-                    // Fallback to check any value in the object
                     for (const value of Object.values(dataToInspect)) {
-                        if (typeof value === 'string' && value.startsWith('http')) {
-                            return value as string;
-                        }
+                        if (typeof value === 'string' && value.startsWith('http')) return value as string;
                     }
                 }
                 return null;
             };
 
-
-            // Branching logic for AI response type
             if (isImageGenMode) {
-                const genResponse = await fetch('https://umarworks2.app.n8n.cloud/webhook/imagegen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...webhookPayload, prompt: message }),
-                });
+                const genResponse = await fetch('https://umarworks3.app.n8n.cloud/webhook/imagegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message }), signal });
                 if (!genResponse.ok) throw new Error('Image generation service failed.');
-                
-                let genResult;
-                try {
-                    genResult = await genResponse.json();
-                } catch (e) {
-                    console.error("Failed to parse image generation JSON:", e);
-                    throw new Error("Image generation service returned an invalid response.");
-                }
-
+                const genResult = await genResponse.json();
                 const tempImageUrl = extractUrlFromResponse(genResult);
                 if (!tempImageUrl) throw new Error('Image generation did not return a URL.');
-
-                const imageResponse = await fetch(tempImageUrl);
+                const imageResponse = await fetch(tempImageUrl, { signal });
                 if (!imageResponse.ok) throw new Error('Could not fetch the generated image.');
                 const imageBlob = await imageResponse.blob();
                 const imageFile = new File([imageBlob], "generated.png", { type: imageBlob.type });
-
                 const formData = new FormData();
                 formData.append('file', imageFile);
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                 const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-                const cloudinaryResponse = await fetch(cloudinaryUrl, { method: 'POST', body: formData });
-                if (!cloudinaryResponse.ok) {
-                    const errorData = await cloudinaryResponse.json().catch(() => ({}));
-                    throw new Error(errorData?.error?.message || `Cloudinary upload failed with status: ${cloudinaryResponse.status}`);
-                }
-                
-                let cloudinaryData;
-                try {
-                    cloudinaryData = await cloudinaryResponse.json();
-                } catch(e) {
-                    console.error("Failed to parse Cloudinary response:", e);
-                    throw new Error("Cloudinary returned an invalid response after upload.");
-                }
-                const permanentImageUrl = cloudinaryData.secure_url;
-
-                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                    text: `Here's the image for your prompt:`,
-                    role: 'ai',
-                    imageUrl: permanentImageUrl,
-                    createdAt: serverTimestamp() as Timestamp,
-                });
+                const cloudinaryResponse = await fetch(cloudinaryUrl, { method: 'POST', body: formData, signal });
+                if (!cloudinaryResponse.ok) throw new Error((await cloudinaryResponse.json().catch(() => ({})))?.error?.message || `Cloudinary upload failed with status: ${cloudinaryResponse.status}`);
+                const cloudinaryData = await cloudinaryResponse.json();
+                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), { text: `Here's the image for your prompt:`, role: 'ai', imageUrl: cloudinaryData.secure_url, createdAt: serverTimestamp() as Timestamp });
             } else if (isVideoGenMode) {
-                const genResponse = await fetch('https://umarworks2.app.n8n.cloud/webhook/videogen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...webhookPayload, prompt: message, ratio: videoAspectRatio }),
-                });
+                const genResponse = await fetch('https://umarworks3.app.n8n.cloud/webhook/videogen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message, ratio: videoAspectRatio }), signal });
                 if (!genResponse.ok) throw new Error(`Video generation service failed with status ${genResponse.status}.`);
-                
-                let genResult;
-                try {
-                     genResult = await genResponse.json();
-                } catch(e) {
-                    console.error("Failed to parse video generation response:", e);
-                    throw new Error("Video generation service returned an invalid response.");
-                }
-
+                const genResult = await genResponse.json();
                 const tempVideoUrl = extractUrlFromResponse(genResult);
                 if (!tempVideoUrl) throw new Error('Video generation did not return a URL.');
-
-                const videoResponse = await fetch(tempVideoUrl);
+                const videoResponse = await fetch(tempVideoUrl, { signal });
                 if (!videoResponse.ok) throw new Error('Could not fetch the generated video.');
                 const videoBlob = await videoResponse.blob();
                 const videoFile = new File([videoBlob], "generated.mp4", { type: videoBlob.type });
-
                 const formData = new FormData();
                 formData.append('file', videoFile);
                 formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
                 const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-                const cloudinaryResponse = await fetch(cloudinaryUrl, { method: 'POST', body: formData });
-                if (!cloudinaryResponse.ok) {
-                    const errorData = await cloudinaryResponse.json().catch(() => ({}));
-                    throw new Error(errorData?.error?.message || `Cloudinary video upload failed with status: ${cloudinaryResponse.status}`);
-                }
-                
-                let cloudinaryData;
-                 try {
-                    cloudinaryData = await cloudinaryResponse.json();
-                } catch(e) {
-                    console.error("Failed to parse Cloudinary video response:", e);
-                    throw new Error("Cloudinary returned an invalid response after video upload.");
-                }
+                const cloudinaryResponse = await fetch(cloudinaryUrl, { method: 'POST', body: formData, signal });
+                if (!cloudinaryResponse.ok) throw new Error((await cloudinaryResponse.json().catch(() => ({})))?.error?.message || `Cloudinary video upload failed with status: ${cloudinaryResponse.status}`);
+                let cloudinaryData = await cloudinaryResponse.json();
                 let permanentVideoUrl = cloudinaryData.secure_url;
-
-                // If video is larger than 4MB, apply Cloudinary's on-the-fly compression transformations.
-                const FOUR_MB = 4 * 1024 * 1024;
-                if (videoBlob.size > FOUR_MB) {
-                    // vc_auto: automatically chooses the best video codec.
-                    // q_auto: automatically determines the best quality/compression level.
-                    permanentVideoUrl = permanentVideoUrl.replace('/upload/', '/upload/vc_auto,q_auto/');
-                }
-
-                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                    text: `Here's the video for your prompt:`,
-                    role: 'ai',
-                    videoUrl: permanentVideoUrl,
-                    createdAt: serverTimestamp() as Timestamp,
-                });
+                if (videoBlob.size > 4 * 1024 * 1024) permanentVideoUrl = permanentVideoUrl.replace('/upload/', '/upload/vc_auto,q_auto/');
+                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), { text: `Here's the video for your prompt:`, role: 'ai', videoUrl: permanentVideoUrl, createdAt: serverTimestamp() as Timestamp });
             } else {
-                // Regular Text, Voice, or Analysis AI Response Logic
-                const isAnalysis = isAnalysisMode;
-                let targetUrl = isAnalysis ? ANALYSIS_WEBHOOK_URL : (audioFile ? VOICE_WEBHOOK_URL : WEBHOOK_URL);
+                let targetUrl = WEBHOOK_URL;
                 let fetchOptions: RequestInit;
-                 if (isAnalysis && !analysisFile && message.trim()) {
-                    // Text-only analysis request
-                    targetUrl = ANALYSIS_TEXT_ONLY_WEBHOOK_URL;
-                    fetchOptions = {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...webhookPayload, message: message }),
-                    };
-                } else if (isAnalysis || imageFiles.length > 0 || audioFile) {
-                    // This covers: analysis with file, voice, and normal chat with files
+
+                if (isAnalysisMode) {
+                    if (analysisFile) {
+                        targetUrl = ANALYSIS_WEBHOOK_URL;
+                        const payload = new FormData();
+                        payload.append('message', message);
+                        Object.entries(webhookPayload).forEach(([key, value]) => payload.append(key, value as string));
+                        payload.append('file', analysisFile, analysisFile.name);
+                        fetchOptions = { method: 'POST', body: payload };
+                    } else {
+                        targetUrl = ANALYSIS_TEXT_ONLY_WEBHOOK_URL;
+                        fetchOptions = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, message: message }) };
+                    }
+                } else if (audioFile) {
+                    targetUrl = VOICE_WEBHOOK_URL;
                     const payload = new FormData();
                     payload.append('message', message);
-                    Object.entries(webhookPayload).forEach(([key, value]) => {
-                        payload.append(key, value);
-                    });
-                    if (isAnalysis && analysisFile) {
-                        payload.append('file', analysisFile, analysisFile.name);
-                    } else if (audioFile) {
-                        payload.append('file', audioFile, audioFile.name);
-                    } else {
-                        imageFiles.forEach((file) => {
-                            payload.append(`files`, file, file.name);
-                        });
-                    }
+                    Object.entries(webhookPayload).forEach(([key, value]) => payload.append(key, value as string));
+                    payload.append('file', audioFile, audioFile.name);
                     fetchOptions = { method: 'POST', body: payload };
                 } else {
-                    // This handles normal text-only chat
-                    fetchOptions = {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...webhookPayload, message: message }),
-                    };
+                    targetUrl = WEBHOOK_URL;
+                    fetchOptions = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, message: message }) };
                 }
 
-                const response = await fetch(targetUrl, fetchOptions);
+                const response = await fetch(targetUrl, { ...fetchOptions, signal });
                 if (!response.ok) throw new Error(`Webhook failed with status ${response.status}`);
+
+                // All modes including file analysis now expect a streaming markdown response.
+                if (!response.body) throw new Error("Response body is not available for streaming.");
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let aiResponseText = '';
+                const aiMessageRef = doc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`));
+                setStreamingId(aiMessageRef.id);
+                await setDoc(aiMessageRef, { 
+                    text: '', 
+                    role: 'ai', 
+                    createdAt: serverTimestamp() as Timestamp,
+                    isAnalysisResponse: isAnalysisMode 
+                });
                 
-                let result;
-                try {
-                    result = await response.json();
-                } catch (e) {
-                    console.error("Failed to parse chat/analysis JSON response:", e);
-                    throw new Error("The server returned an invalid response.");
+                let buffer = '';
+
+                const processChunk = async (chunk: string) => {
+                    let textToAdd = '';
+                    try {
+                        const parsed = JSON.parse(chunk);
+                        const content = parsed.output || parsed.text || parsed.response || '';
+                        if (typeof content === 'string') {
+                            textToAdd = content;
+                        }
+                    } catch (e) {
+                        textToAdd = chunk;
+                    }
+                    
+                    if (textToAdd) {
+                        aiResponseText += textToAdd;
+                        await updateDoc(aiMessageRef, { text: aiResponseText });
+                    }
+                };
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (signal.aborted) {
+                       reader.cancel();
+                       throw new DOMException('Aborted by user', 'AbortError');
+                    }
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    let boundary = buffer.indexOf('\n');
+                    while (boundary !== -1) {
+                        const line = buffer.substring(0, boundary);
+                        buffer = buffer.substring(boundary + 1);
+                        if (line.trim()) {
+                            await processChunk(line);
+                        }
+                        boundary = buffer.indexOf('\n');
+                    }
+                }
+
+                if (buffer.trim()) {
+                    await processChunk(buffer);
                 }
                 
-                // Robustly check for a Google Drive link in the webhook response.
-                const resultData = Array.isArray(result) ? result[0] : result;
-                const driveLink = resultData?.output || resultData?.webViewLink || resultData?.url;
-
-                if (isAnalysis && driveLink && typeof driveLink === 'string' && driveLink.includes('drive.google.com')) {
-                    // Analysis resulted in a Google Drive link. Save it to Firestore.
-                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                        text: `The analysis of ${analysisFile?.name || 'your file'} is complete. You can view the generated PDF below.`,
-                        role: 'ai',
-                        analysisResult: {
-                            url: driveLink, // Store the provided Drive link
-                            name: analysisFile?.name || `analysis-result-${Date.now()}.pdf`,
-                            type: 'application/pdf',
-                        },
-                        createdAt: serverTimestamp() as Timestamp,
-                    });
-                } else {
-                    // Handle standard text response for normal chat or fallback for analysis.
-                    let aiResponseText = resultData?.output || resultData?.text || resultData?.response || "Sorry, I couldn't get a response.";
-                    
-                    if (typeof aiResponseText === 'string') {
-                        // FIX: More robustly remove 'undefined' text that can appear at the end of AI responses,
-                        // handling variations like "*undefined" or " undefined". Also cleans up extra whitespace.
-                        aiResponseText = aiResponseText.replace(/[\s*]*undefined\s*$/gi, '').replace(/\s{2,}/g, ' ').trim();
-                    }
-                    
-                    let audioUrl: string | undefined = undefined;
-                    // Only generate audio if the user sent audio and there's text to speak.
-                    if (userSentAudio && aiResponseText && aiResponseText.trim().length > 0) {
-                        try {
-                            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                            const ttsResponse = await ai.models.generateContent({
-                                model: "gemini-2.5-flash-preview-tts",
-                                contents: [{ parts: [{ text: aiResponseText }] }],
-                                config: {
-                                    responseModalities: [Modality.AUDIO],
-                                    speechConfig: {
-                                        voiceConfig: {
-                                            prebuiltVoiceConfig: { voiceName: 'Kore' },
-                                        },
-                                    },
-                                },
-                            });
-
-                            const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-                            
-                            if (base64Audio) {
-                                const bstr = atob(base64Audio);
-                                let n = bstr.length;
-                                const u8arr = new Uint8Array(n);
-                                while(n--){
-                                    u8arr[n] = bstr.charCodeAt(n);
-                                }
-                                
-                                const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
-                                const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
-
-                                // Upload to Cloudinary
-                                const formData = new FormData();
-                                formData.append('file', audioFile);
-                                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-                                const uploadResponse = await fetch(url, { method: 'POST', body: formData });
-                                
-                                if (!uploadResponse.ok) {
-                                    console.error("AI audio upload to Cloudinary failed", await uploadResponse.text());
-                                } else {
-                                    const uploadData = await uploadResponse.json();
-                                    audioUrl = uploadData.secure_url;
-                                }
+                const finalAiText = aiResponseText;
+                let audioUrl: string | undefined = undefined;
+                if (userSentAudio && finalAiText && finalAiText.trim().length > 0 && finalAiText !== "Sorry, I couldn't get a response.") {
+                    try {
+                        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                        const ttsResponse = await ai.models.generateContent({ model: "gemini-2.5-flash-preview-tts", contents: [{ parts: [{ text: finalAiText }] }], config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } } });
+                        const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                        if (base64Audio) {
+                            const bstr = atob(base64Audio);
+                            let n = bstr.length;
+                            const u8arr = new Uint8Array(n);
+                            while(n--) u8arr[n] = bstr.charCodeAt(n);
+                            const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
+                            const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
+                            const formData = new FormData();
+                            formData.append('file', audioFile);
+                            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                            const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                            const uploadResponse = await fetch(url, { method: 'POST', body: formData, signal });
+                            if (uploadResponse.ok) {
+                                const uploadData = await uploadResponse.json();
+                                audioUrl = uploadData.secure_url;
+                            } else {
+                                console.error("AI audio upload to Cloudinary failed", await uploadResponse.text());
                             }
-                        } catch (ttsError) {
-                            console.error("TTS generation or upload failed:", ttsError);
                         }
-                    }
+                    } catch (ttsError) { console.error("TTS generation or upload failed:", ttsError); }
+                }
+                if (audioUrl) await updateDoc(aiMessageRef, { audioUrl });
 
-                    const aiMessagePayload: {
-                        text: string;
-                        role: 'ai';
-                        createdAt: Timestamp;
-                        audioUrl?: string;
-                    } = {
-                        text: aiResponseText,
-                        role: 'ai',
-                        createdAt: serverTimestamp() as Timestamp,
-                    };
-
-                    if (audioUrl) {
-                        aiMessagePayload.audioUrl = audioUrl;
-                    }
-
-                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), aiMessagePayload);
-
-                    // Automatically generate a title after the second user message
-                    if (shouldGenerateTitle && !isAnalysisMode) {
-                        const chatHistoryForTitleGen = messages
-                            .map(m => ({ role: m.role, text: m.text }))
-                            .concat([
-                                { role: 'user', text: message },
-                                { role: 'ai', text: aiResponseText }
-                            ]);
-                        
-                        // Fire-and-forget fetch to generate and update title
-                        fetch('https://umarworks2.app.n8n.cloud/webhook/titlegen', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ...webhookPayload, history: chatHistoryForTitleGen })
-                        })
-                        .then(async res => {
-                            if (!res.ok) {
-                                console.error('Title generation webhook failed.', res.status);
-                                return null;
-                            }
-                            try {
-                                return await res.json();
-                            } catch (e) {
-                                console.error("Failed to parse title generation JSON response:", e);
-                                return null;
-                            }
-                        })
-                        .then(titleResult => {
-                            if (!titleResult) return;
-
-                            // FIX: Robustly extract title from various possible webhook response structures.
-                            let newTitle: string | null = null;
-                            const data = Array.isArray(titleResult) ? titleResult[0] : titleResult;
-
-                            if (typeof data === 'string') {
-                                newTitle = data.trim();
-                            } else if (typeof data === 'object' && data !== null) {
-                                // Check for common keys where a title might be found.
-                                newTitle = data.title || data.output || data.text || data.response || null;
-                            }
-
-                            if (newTitle && typeof newTitle === 'string') {
-                                const cleanedTitle = newTitle.replace(/^"|"$/g, '').substring(0, 50);
-                                return updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { 
-                                    title: cleanedTitle
-                                });
-                            }
-                        })
-                        .catch(e => {
-                            console.error("Failed to generate/update session title:", e);
-                        });
-                    }
+                if (shouldGenerateTitle && !isAnalysisMode) {
+                    fetch('https://umarworks3.app.n8n.cloud/webhook/titlegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, history: [{ role: 'user', text: message }, { role: 'ai', text: finalAiText }] }) })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(titleResult => {
+                        if (!titleResult) return;
+                        let newTitle: string | null = null;
+                        const data = Array.isArray(titleResult) ? titleResult[0] : titleResult;
+                        if (typeof data === 'string') newTitle = data.trim();
+                        else if (typeof data === 'object' && data !== null) newTitle = data.title || data.output || data.text || data.response || null;
+                        if (newTitle) {
+                            let cleanedTitle = String(newTitle).replace(/^"|"$/g, '').substring(0, 50).trim().replace(/undefined\s*$/, '').trim();
+                            if (cleanedTitle) updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { title: cleanedTitle });
+                        }
+                    }).catch(e => console.error("Failed to generate/update session title:", e));
                 }
             }
         } catch (error) {
-            console.error("Error during message send:", error);
-            const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
-            await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
-                text: `Sorry, something went wrong: ${errorMessage}`, role: 'ai', createdAt: serverTimestamp() as Timestamp,
-            });
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('Fetch aborted by user.');
+                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
+                    text: `Generation stopped.`,
+                    role: 'ai',
+                    createdAt: serverTimestamp() as Timestamp,
+                    isStopMessage: true,
+                });
+            } else {
+                console.error("Error during message send:", error);
+                const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+                await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
+                    text: `Sorry, something went wrong: ${errorMessage}`, role: 'ai', createdAt: serverTimestamp() as Timestamp,
+                });
+            }
         } finally {
             setIsLoading(false);
             setIsGeneratingImage(false);
@@ -605,6 +441,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             if (isAnalysisMode) setAnalysisFile(null);
             if (isImageGenMode) setIsImageGenMode(false);
             if (isVideoGenMode) setIsVideoGenMode(false);
+            abortControllerRef.current = null;
+            setStreamingId(null);
         }
     };
 
@@ -651,27 +489,21 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             const sessionRef = doc(db, `${CHATS_COLLECTION}${user.uid}/sessions`, sessionId);
             const messagesRef = collection(sessionRef, 'messages');
             
-            // Get all messages to delete them in a batch
             const messagesSnapshot = await getDocs(messagesRef);
             const batch = writeBatch(db);
             messagesSnapshot.forEach(doc => {
                 batch.delete(doc.ref);
             });
             
-            // Delete the session document itself
             batch.delete(sessionRef);
 
             await batch.commit();
 
             if (currentSessionId === sessionId) {
-                // After deletion, find the next session to make active.
-                // The `sessions` state array is already sorted by `updatedAt` descending.
                 const remainingSessions = sessions.filter(s => s.id !== sessionId);
                 if (remainingSessions.length > 0) {
-                    // Switch to the most recent remaining session.
                     setCurrentSessionId(remainingSessions[0].id);
                 } else {
-                    // If no sessions are left, create a new one.
                     createNewSession(true);
                 }
             }
@@ -690,7 +522,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
 
     return (
         <div className="flex h-[calc(100vh-68px)] bg-primary w-full overflow-hidden">
-             {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)}></div>}
+             {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-[55] md:hidden" onClick={() => setSidebarOpen(false)}></div>}
             <ChatSidebar
                 sessions={sessions}
                 activeSessionId={currentSessionId}
@@ -700,30 +532,25 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 onRenameSession={handleRenameSession}
                 userProfile={userProfile}
                 isOpen={isSidebarOpen}
+                onClose={() => setSidebarOpen(false)}
                 isCollapsed={isSidebarCollapsed}
+                onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
                 error={error}
                 onViewProfile={onViewProfile}
             />
             <div className="flex-1 flex flex-col overflow-hidden h-full bg-primary">
-                <header className="p-4 flex items-center justify-between z-10 flex-shrink-0 relative">
-                     <div className="flex items-center">
-                        <button onClick={() => {
-                            if (window.innerWidth < 768) setSidebarOpen(!isSidebarOpen)
-                            else setSidebarCollapsed(!isSidebarCollapsed)
-                        }} id="sidebar-toggle-btn" className="p-2 rounded-full hover:bg-muted">
-                            <svg className="w-6 h-6 transition-transform text-muted"><use href="#icon-sidebar-toggle"></use></svg>
-                        </button>
-                         <button onClick={() => createNewSession(true)} id="collapsed-new-chat-btn" className={`${isSidebarCollapsed ? 'inline-flex' : 'hidden'} p-2 rounded-full hover:bg-muted ml-2`}>
-                             <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
-                        </button>
-                    </div>
-
+                <header className="p-4 flex items-center justify-between z-10 flex-shrink-0 relative h-[68px]">
+                    <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 rounded-full hover:bg-muted md:hidden" aria-label="Open sidebar">
+                        <svg className="w-6 h-6 text-muted"><use href="#icon-sidebar-toggle"></use></svg>
+                    </button>
+                    <div className="flex-1"></div>
                     <button onClick={() => createNewSession(true)} className="p-2 rounded-full hover:bg-muted md:hidden" aria-label="New Chat">
                          <svg className="w-6 h-6 text-muted"><use href="#icon-rename"></use></svg>
                     </button>
                 </header>
                 <ChatMessages 
                     messages={messages} 
+                    streamingId={streamingId}
                     isLoading={isLoading} 
                     isGeneratingImage={isGeneratingImage} 
                     isGeneratingVideo={isGeneratingVideo} 
@@ -747,6 +574,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         analysisFile={analysisFile}
                         isLoading={isLoading}
                         onActivateVoiceMode={() => setVoiceUIVisible(true)}
+                        onStopGenerating={handleStopGenerating}
                     />
                 </div>
             </div>
@@ -779,23 +607,59 @@ const ChatSidebar: React.FC<{
     onRenameSession: (id: string, newTitle: string) => void,
     userProfile: UserProfile | null,
     isOpen: boolean,
+    onClose: () => void,
     isCollapsed: boolean,
+    onToggleCollapse: () => void;
     error: string | null,
     onViewProfile: () => void,
-}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, isCollapsed, error, onViewProfile }) => {
+}> = ({ sessions, activeSessionId, onSelectSession, onNewChat, onDeleteSession, onRenameSession, userProfile, isOpen, onClose, isCollapsed, onToggleCollapse, error, onViewProfile }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredSessions = sessions
         .filter(s => !s.title.startsWith(TEMP_TITLE_PREFIX))
         .filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
+    if (isCollapsed && typeof window !== 'undefined' && window.innerWidth >= 768) {
+        return (
+             <div id="chat-sidebar" className="h-full flex flex-col items-center py-4 w-[72px] border-r border-primary transition-all duration-300 ease-in-out flex-shrink-0">
+                <button onClick={onToggleCollapse} className="p-2 rounded-full hover:bg-muted mb-4">
+                    <svg className="w-6 h-6 text-muted"><use href="#icon-sidebar-toggle"></use></svg>
+                </button>
+                <button onClick={onNewChat} title="New Chat" className="p-2 rounded-full hover:bg-muted">
+                    <svg className="w-6 h-6 text-muted"><use href="#icon-plus-square"></use></svg>
+                </button>
+            </div>
+        );
+    }
+
+
     return (
-        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-40 md:relative md:h-full transition-all duration-300 ease-in-out flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isCollapsed ? 'collapsed' : ''}`}>
-             <div className="p-4 flex-shrink-0 h-[68px]">
+        <div id="chat-sidebar" className={`fixed top-0 bottom-0 left-0 h-full z-[60] md:relative md:z-auto md:h-full transition-all duration-300 ease-in-out flex flex-col w-72 flex-shrink-0 md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+             <div className="p-4 flex-shrink-0 h-[68px] flex justify-between items-center border-b border-primary">
+                 {/* Mobile Header */}
+                 <div className="flex items-center justify-between w-full md:hidden">
+                    <div className="text-xl font-bold tracking-tight text-primary">LazerDsgn.</div>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-muted">
+                        <svg className="w-6 h-6 text-muted"><use href="#icon-x-close"></use></svg>
+                    </button>
+                </div>
+                {/* Desktop Header */}
+                <div className="hidden md:flex w-full items-center justify-between">
                     <button id="new-chat-btn" onClick={onNewChat} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-full font-medium hover:bg-accent-hover transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-lg">
                         <svg className="w-5 h-5 mr-2"><use href="#icon-rename"></use></svg>
                         New Chat
                     </button>
+                    <button onClick={onToggleCollapse} className="p-2 rounded-full hover:bg-muted ml-2">
+                        <svg className="w-6 h-6 text-muted"><use href="#icon-sidebar-toggle"></use></svg>
+                    </button>
+                </div>
+            </div>
+            {/* New Chat Button for Mobile */}
+            <div className="p-4 md:hidden">
+                <button onClick={() => { onNewChat(); onClose(); }} className="flex items-center justify-center w-full px-4 py-2 bg-primary-accent text-on-primary-accent rounded-full font-medium hover:bg-accent-hover transition-all duration-300 hover:scale-105 shadow-sm hover:shadow-lg">
+                    <svg className="w-5 h-5 mr-2"><use href="#icon-rename"></use></svg>
+                    New Chat
+                </button>
             </div>
             <div className="px-4 pb-2 flex-shrink-0">
                 <div className="relative">
@@ -844,32 +708,37 @@ const SidebarItem: React.FC<{
     const [isEditing, setIsEditing] = useState(false);
     const [editInputValue, setEditInputValue] = useState(session.title);
     const inputRef = useRef<HTMLInputElement>(null);
-    const [displayedTitle, setDisplayedTitle] = useState('');
-    const previousTitleRef = useRef<string | null>(null);
+    const [displayedTitle, setDisplayedTitle] = useState(session.title);
+    const previousTitleRef = useRef<string>(session.title);
 
     useEffect(() => {
-        const isInitialLoad = previousTitleRef.current === null;
-        const titleChanged = previousTitleRef.current !== session.title;
-        const isTempTitle = session.title.startsWith(TEMP_TITLE_PREFIX);
+        const prevTitle = previousTitleRef.current;
+        const newTitle = session.title;
+        const isTempTitleUpdate = prevTitle.startsWith(TEMP_TITLE_PREFIX) && !newTitle.startsWith(TEMP_TITLE_PREFIX);
 
-        if (isInitialLoad || isTempTitle || isEditing) {
-            setDisplayedTitle(session.title);
-        } else if (titleChanged) {
+        // Animate only if the title has genuinely changed from a temporary one or been renamed.
+        if (!isEditing && (isTempTitleUpdate || (prevTitle !== newTitle && !prevTitle.startsWith(TEMP_TITLE_PREFIX)))) {
             setDisplayedTitle('');
             let i = 0;
             const intervalId = setInterval(() => {
-                if (i < session.title.length) {
-                    setDisplayedTitle(prev => prev + session.title.charAt(i));
+                if (i < newTitle.length) {
+                    setDisplayedTitle(prev => prev + newTitle.charAt(i));
                     i++;
                 } else {
                     clearInterval(intervalId);
                 }
             }, 20); // Typing speed
-
+            
             return () => clearInterval(intervalId);
+        } else if (prevTitle !== newTitle) {
+            // For initial load or non-animated changes, just set the title.
+            setDisplayedTitle(newTitle);
         }
-        previousTitleRef.current = session.title;
+        
+        // Always update the ref for the next render.
+        previousTitleRef.current = newTitle;
     }, [session.title, isEditing]);
+
 
     useEffect(() => { setEditInputValue(session.title) }, [session.title]);
 
@@ -920,6 +789,7 @@ const SidebarItem: React.FC<{
 
 const ChatMessages: React.FC<{ 
     messages: ChatMessage[], 
+    streamingId: string | null,
     isLoading: boolean, 
     isGeneratingImage: boolean, 
     isGeneratingVideo: boolean, 
@@ -927,7 +797,7 @@ const ChatMessages: React.FC<{
     userProfile: UserProfile | null,
     animatedMessageIds: React.MutableRefObject<Set<string>>,
     onImageClick: (url: string) => void;
-}> = ({ messages, isLoading, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
+}> = ({ messages, streamingId, isLoading, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -937,8 +807,8 @@ const ChatMessages: React.FC<{
     return (
         <div className="flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-4xl mx-auto">
             <div className="flex flex-col space-y-5">
-                {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={onImageClick}/>)}
-                {isLoading && <ChatMessageItem key="loading" message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} isAnalyzing={isAnalyzing} userProfile={userProfile} animatedMessageIds={animatedMessageIds}/>}
+                {messages.map(msg => <ChatMessageItem key={msg.id} message={msg} userProfile={userProfile} animatedMessageIds={animatedMessageIds} onImageClick={onImageClick} isStreaming={msg.id === streamingId} />)}
+                {isLoading && <ChatMessageItem key="loading" message={{ role: 'ai', id: 'loading' } as ChatMessage} isLoading={true} isGeneratingImage={isGeneratingImage} isGeneratingVideo={isGeneratingVideo} isAnalyzing={isAnalyzing} userProfile={userProfile} animatedMessageIds={animatedMessageIds} isStreaming={false}/>}
                 {messages.length === 0 && !isLoading && (
                     <div className="text-center text-secondary font-bold text-2xl pt-20">
                         Hey, How can I help you?
@@ -964,7 +834,8 @@ const ChatInput: React.FC<{
     analysisFile: File | null,
     isLoading: boolean,
     onActivateVoiceMode: () => void;
-}> = ({ onSendMessage, isAnalysisMode, onToggleAnalysisMode, isImageGenMode, onToggleImageGenMode, isVideoGenMode, onToggleVideoGenMode, videoAspectRatio, onVideoAspectRatioChange, onAnalysisFileSelect, analysisFile, isLoading, onActivateVoiceMode }) => {
+    onStopGenerating: () => void;
+}> = ({ onSendMessage, isAnalysisMode, onToggleAnalysisMode, isImageGenMode, onToggleImageGenMode, isVideoGenMode, onToggleVideoGenMode, videoAspectRatio, onVideoAspectRatioChange, onAnalysisFileSelect, analysisFile, isLoading, onActivateVoiceMode, onStopGenerating }) => {
     const [input, setInput] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const analysisInputRef = useRef<HTMLInputElement>(null);
@@ -1179,9 +1050,18 @@ const ChatInput: React.FC<{
                         />
 
                         <div className="flex items-center self-end">
-                             {showSendIcon ? (
-                                <button type="submit" disabled={isLoading} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isLoading ? <svg className="w-5 h-5 animate-spin"><use href="#icon-spinner"></use></svg> : <svg className="w-6 h-6 p-0.5"><use href="#icon-paper-plane-filled"></use></svg>}
+                             {isLoading ? (
+                                <button 
+                                    type="button"
+                                    onClick={onStopGenerating}
+                                    className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out hover:scale-110"
+                                    aria-label="Stop generating response"
+                                >
+                                    <svg className="w-5 h-5"><use href="#icon-stop-square"></use></svg>
+                                </button>
+                            ) : showSendIcon ? (
+                                <button type="submit" className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-primary-accent text-on-primary-accent rounded-full hover:bg-accent-hover transition-transform duration-200 ease-in-out enabled:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <svg className="w-6 h-6"><use href="#icon-arrow-up"></use></svg>
                                 </button>
                             ) : (
                                 <button type="button" onClick={onActivateVoiceMode} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition-colors bg-hover text-muted hover:bg-primary/20">
@@ -1197,6 +1077,7 @@ const ChatInput: React.FC<{
 };
 
 
+// FIX: Completed the VoiceUIMenu component which was previously truncated. This component now returns JSX and handles the audio recording lifecycle correctly, fixing the type error.
 const VoiceUIMenu: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -1250,33 +1131,43 @@ const VoiceUIMenu: React.FC<{
             mediaRecorderRef.current.onstop = () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 if (audioBlob.size > 0) {
-                    const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`);
+                    const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
                     onSendAudio(audioFile);
                 }
-                setIsRecording(false);
+                onClose();
             };
             mediaRecorderRef.current.stop();
+        } else {
+            onClose();
         }
     };
     
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 bg-primary/90 backdrop-blur-lg z-50 flex flex-col items-center justify-center p-4">
-             <button onClick={onClose} className="absolute top-6 right-6 text-muted hover:text-primary z-20 p-2 rounded-full hover:bg-hover transition-colors" aria-label="Close">
-                <svg className="w-7 h-7"><use href="#icon-x-close"></use></svg>
-            </button>
-            <div className="flex-1 flex items-center justify-center">
-                 {isRecording && (
-                    <div className="voice-recording-circle w-48 h-48 bg-secondary-accent rounded-full flex items-center justify-center">
-                         <svg className="w-16 h-16 text-white"><use href="#icon-waves-sound"></use></svg>
-                    </div>
-                )}
+        <div
+            className={`fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex flex-col items-center justify-center transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={onClose}
+        >
+            <div className="text-center text-white mb-8" onClick={e => e.stopPropagation()}>
+                <p className="text-2xl font-bold">Speak now...</p>
+                <p className="text-muted">Your message is being recorded.</p>
             </div>
-            <div className="pb-12">
+            
+            <div className="w-full max-w-md h-24" onClick={e => e.stopPropagation()}>
+                <LiveWaveform active={true} processing={isRecording} />
+            </div>
+
+            <div className="mt-12 flex items-center space-x-6" onClick={e => e.stopPropagation()}>
                 <button 
-                    onClick={handleStopAndSend}
-                    className="w-20 h-20 bg-primary-accent text-on-primary-accent rounded-full flex items-center justify-center shadow-lg transform transition-transform hover:scale-105"
+                    onClick={onClose} 
+                    className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform transition-transform hover:scale-110"
+                    aria-label="Cancel recording"
+                >
+                    <svg className="w-7 h-7"><use href="#icon-x-close"></use></svg>
+                </button>
+                <button 
+                    onClick={handleStopAndSend} 
+                    className="w-20 h-20 bg-primary-accent rounded-full flex items-center justify-center text-on-primary-accent shadow-lg transform transition-transform hover:scale-110"
+                    aria-label="Stop and send recording"
                 >
                     <svg className="w-8 h-8"><use href="#icon-arrow-up"></use></svg>
                 </button>
@@ -1285,4 +1176,5 @@ const VoiceUIMenu: React.FC<{
     );
 };
 
+// FIX: Added default export for ChatPage component to resolve module not found error.
 export default ChatPage;

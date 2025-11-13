@@ -31,8 +31,9 @@ const formatText = (text: string): string => {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    // 2. Apply bold formatting for **text** and *text*.
-    // Replace ** 먼저 처리
+    // 2. UPDATED: Bold any text surrounded by *, **, or ***.
+    // Process from most specific (***) to least specific (*) to avoid conflicts.
+    safeText = safeText.replace(/\*\*\*(.*?)\*\*\*/g, '<strong>$1</strong>');
     safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
 

@@ -1,115 +1,97 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, ChatMessage } from '../types.ts';
 import AudioPlayer from './AudioPlayer.tsx';
 import Response from './ui/Response.tsx';
 import AnalyzingIndicator from './AnalyzingIndicator.tsx';
 
-const AnimatedTextPart: React.FC<{ text: string; onComplete: () => void; }> = ({ text, onComplete }) => {
+// NEW: A component to handle character-by-character animation for plain text.
+// It tracks the previously rendered text to only animate the new "diff".
+// FIX: Refactored to use a simpler, more idiomatic React approach for character-by-character animation.
+// This avoids complex recursive setTimeout calls within useEffect that may have caused a misleading compile error.
+const AnimatedTextPart: React.FC<{ children: string }> = ({ children: text }) => {
     const [displayedText, setDisplayedText] = useState('');
-    const onCompleteRef = useRef(onComplete);
 
     useEffect(() => {
-        onCompleteRef.current = onComplete;
-    }, [onComplete]);
-
-    useEffect(() => {
-        const tokens = text.match(/(\s+|\S+)/g) || [];
-        if (tokens.length === 0) {
-            onCompleteRef.current();
+        // If the incoming text is not an extension of the current text, just snap to the new text.
+        // This handles cases where the stream might correct itself or text is replaced.
+        if (displayedText.length > text.length || !text.startsWith(displayedText)) {
+            setDisplayedText(text);
             return;
         }
 
-        let tokenIndex = 0;
-        const intervalId = setInterval(() => {
-            if (tokenIndex < tokens.length) {
-                setDisplayedText(prev => prev + tokens[tokenIndex]);
-                tokenIndex++;
-            } else {
-                clearInterval(intervalId);
-                onCompleteRef.current();
-            }
-        }, 30);
+        // Animate the new portion of the text
+        if (displayedText.length < text.length) {
+            const timeoutId = setTimeout(() => {
+                // Append one character from the target text
+                setDisplayedText(text.slice(0, displayedText.length + 1));
+            }, 10); // Typing speed
 
-        return () => clearInterval(intervalId);
-    }, [text]);
-
+            // Cleanup function to clear the timeout if the component unmounts or text changes
+            return () => clearTimeout(timeoutId);
+        }
+    }, [text, displayedText]);
+    
+    // Using Response component ensures markdown within the animated text is rendered correctly.
     return <Response>{displayedText}</Response>;
 };
+
+// NEW: A component to parse the AI's response and decide what to animate and what to render directly.
+const StreamingResponseRenderer: React.FC<{ text: string }> = ({ text }) => {
+    // Regex to split the text by complete code blocks.
+    const codeBlockRegex = /(```(?:[a-zA-Z]+)?\n[\s\S]*?\n```)/g;
+    const parts = text.split(codeBlockRegex);
+
+    return (
+        <>
+            {parts.map((part, index) => {
+                if (!part) return null;
+
+                // If a part is a complete code block, render it instantly using the Response component.
+                if (part.startsWith('```')) {
+                    return <Response key={index}>{part}</Response>;
+                }
+                
+                // For other parts, check for tables. Render them instantly.
+                // An incomplete code block will be treated as plain text and animated here,
+                // which is acceptable as it will flash into a formatted block once complete.
+                const tableRegex = /((?:^\|.*\|\r?\n)+(?:^\|.*-.*\|\r?\n)(?:^\|.*\|\r?\n?)+)/gm;
+                const tableParts = part.split(tableRegex);
+
+                return (
+                    <React.Fragment key={index}>
+                        {tableParts.map((subPart, subIndex) => {
+                            if (!subPart) return null;
+                            const isTable = subPart.trim().startsWith('|') && /\|.*-.*\|/.test(subPart);
+                            
+                            if (isTable) {
+                                return <Response key={`${index}-${subIndex}`}>{subPart}</Response>;
+                            }
+                            // The rest is plain text, animate it.
+                            return <AnimatedTextPart key={`${index}-${subIndex}`}>{subPart}</AnimatedTextPart>;
+                        })}
+                    </React.Fragment>
+                );
+            })}
+        </>
+    );
+};
+
 
 const ChatMessageItem: React.FC<{ 
     message: ChatMessage, 
     isLoading?: boolean, 
+    isStreaming: boolean,
     isGeneratingImage?: boolean, 
     isGeneratingVideo?: boolean, 
     isAnalyzing?: boolean,
     userProfile: UserProfile | null,
     animatedMessageIds: React.MutableRefObject<Set<string>>,
     onImageClick?: (url: string) => void;
-}> = ({ message, isLoading, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
+}> = ({ message, isLoading, isStreaming, isGeneratingImage, isGeneratingVideo, isAnalyzing, userProfile, animatedMessageIds, onImageClick }) => {
     const isUser = message.role === 'user';
-    const isAi = message.role === 'ai';
     const [showTranscription, setShowTranscription] = useState(false);
-
-    type MessagePart = { type: 'text' | 'code' | 'table'; content: string };
-
-    const allParts = useMemo<MessagePart[]>(() => {
-        if (!isAi || !message.text) return [];
-        
-        const rawParts = message.text.split(/(```[\s\S]*?```)/g);
-        const structuredParts: MessagePart[] = [];
-        rawParts.forEach(part => {
-            if (!part) return;
-            if (part.startsWith('```')) {
-                structuredParts.push({ type: 'code', content: part });
-            } else {
-                const subParts = part.split(/((?:\|.*\|[ \t]*\r?\n)+(?:\|.*\|))/g);
-                subParts.forEach(subPart => {
-                    if (!subPart) return;
-                    const trimmedSubPart = subPart.trim();
-                    const isTable = trimmedSubPart.startsWith('|') && /\|.*-.*\|/.test(trimmedSubPart);
-                    if (isTable) {
-                        structuredParts.push({ type: 'table', content: subPart });
-                    } else if (subPart.trim()) {
-                        structuredParts.push({ type: 'text', content: subPart });
-                    }
-                });
-            }
-        });
-        return structuredParts;
-    }, [isAi, message.text]);
-
-    const [renderedPartsCount, setRenderedPartsCount] = useState(0);
-    const shouldAnimate = isAi && !animatedMessageIds.current.has(message.id);
-
-    useEffect(() => {
-        if (shouldAnimate) {
-            setRenderedPartsCount(allParts.length > 0 ? 1 : 0);
-        } else {
-            setRenderedPartsCount(allParts.length);
-        }
-    }, [message.id, allParts.length, shouldAnimate]);
-
-    const handleAnimationComplete = useCallback(() => {
-        if (renderedPartsCount >= allParts.length) {
-            animatedMessageIds.current.add(message.id);
-            return;
-        }
-        setRenderedPartsCount(count => count + 1);
-    }, [renderedPartsCount, allParts.length, message.id, animatedMessageIds]);
-
-    useEffect(() => {
-        if (shouldAnimate && renderedPartsCount > 0 && renderedPartsCount <= allParts.length) {
-            const lastRenderedPart = allParts[renderedPartsCount - 1];
-            if (lastRenderedPart.type !== 'text') {
-                const timer = setTimeout(() => {
-                    handleAnimationComplete();
-                }, 100); 
-                return () => clearTimeout(timer);
-            }
-        }
-    }, [renderedPartsCount, allParts, shouldAnimate, handleAnimationComplete]);
-
-    const partsToRender = allParts.slice(0, renderedPartsCount);
 
     const copyToClipboard = (text: string, button: HTMLButtonElement) => {
         navigator.clipboard.writeText(text);
@@ -230,6 +212,17 @@ const ChatMessageItem: React.FC<{
         return content ? <div className="mb-2">{content}</div> : null;
     }
 
+    if (message.isStopMessage) {
+        return (
+            <div className={`flex items-start gap-3 justify-start chat-message-container`}>
+                <div className="stop-message">
+                    <svg className="w-4 h-4 flex-shrink-0"><use href="#icon-stop-square"></use></svg>
+                    <span>{message.text}</span>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={`flex items-start gap-3 ${messageAlignmentClass} chat-message-container`}>
             {isUser ? (
@@ -252,74 +245,107 @@ const ChatMessageItem: React.FC<{
                     </div>
                 </div>
             ) : ( // AI Message
-                <div className={`flex flex-col max-w-[85%] items-start`}>
-                    <div className={`chat-message-bubble relative ai-message`}>
-                        {(!message.audioUrl || showTranscription) && message.text && (
-                             <>
-                                {shouldAnimate ? (
-                                    partsToRender.map((part, index) => {
-                                        const isCurrentlyAnimatingPart = index === renderedPartsCount - 1;
-                                        if (part.type === 'text' && isCurrentlyAnimatingPart) {
-                                            return <AnimatedTextPart key={index} text={part.content} onComplete={handleAnimationComplete} />;
-                                        }
-                                        // Render completed text parts, and all code/table parts, statically
-                                        return <Response key={index}>{part.content}</Response>;
-                                    })
-                                ) : (
-                                    <Response>{message.text}</Response>
-                                )}
-                            </>
-                        )}
+                (() => {
+                    const urlRegex = /(https?:\/\/[^\s]+)/;
+                    const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/;
+                    let analysisLinkInfo: { url: string; name: string } | null = null;
+                    let remainingText = message.text || '';
 
-                        {message.audioUrl && (
-                            <div className={showTranscription && message.text ? "mt-2" : ""}>
-                                <AudioPlayer src={message.audioUrl} />
+                    if (message.isAnalysisResponse && message.text) {
+                        const markdownMatch = remainingText.match(markdownLinkRegex);
+                        if (markdownMatch) {
+                            analysisLinkInfo = { url: markdownMatch[2], name: markdownMatch[1] };
+                            remainingText = remainingText.replace(markdownLinkRegex, '').trim();
+                        } else {
+                            const urlMatch = remainingText.match(urlRegex);
+                            if (urlMatch) {
+                                const url = urlMatch[0];
+                                let name = 'Download File';
+                                let isValidUrl = false;
+                                try {
+                                    const urlObj = new URL(url);
+                                    const pathname = urlObj.pathname;
+                                    const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+                                    if (filename) {
+                                        name = decodeURIComponent(filename);
+                                    }
+                                    isValidUrl = true;
+                                } catch (e) {
+                                    // Not a valid URL, do nothing
+                                }
+                                if (isValidUrl) {
+                                    analysisLinkInfo = { url: url, name: name };
+                                    remainingText = remainingText.replace(urlRegex, '').trim();
+                                }
+                            }
+                        }
+                    }
+
+                    return (
+                        <div className={`flex flex-col max-w-[85%] items-start`}>
+                            <div className={`chat-message-bubble relative ai-message`}>
+                                <>
+                                    {analysisLinkInfo && (
+                                        <div className="mb-3 glass-surface rounded-xl p-3 flex items-center space-x-4 max-w-sm border border-primary">
+                                            <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-full flex items-center justify-center border border-primary">
+                                                <svg className="w-5 h-5 text-secondary"><use href="#icon-file-text"></use></svg>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm text-primary font-semibold truncate">{analysisLinkInfo.name}</p>
+                                                <p className="text-xs text-muted">Analysis Result</p>
+                                            </div>
+                                            <button onClick={() => handleDownload(analysisLinkInfo!.url, analysisLinkInfo!.name)} className="flex-shrink-0 w-9 h-9 bg-primary-accent text-on-primary-accent rounded-full flex items-center justify-center transform transition-transform hover:scale-110" title="Download">
+                                                <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {(!message.audioUrl || showTranscription) && remainingText && (
+                                       isStreaming 
+                                        ? <StreamingResponseRenderer text={remainingText} />
+                                        : <Response>{remainingText}</Response>
+                                    )}
+
+                                    {message.audioUrl && (
+                                        <div className={showTranscription && remainingText ? "mt-2" : ""}>
+                                            <AudioPlayer src={message.audioUrl} />
+                                        </div>
+                                    )}
+                                    
+                                    {message.videoUrl && (
+                                        <div className="mt-2 relative group max-w-sm sm:max-w-md">
+                                            <video src={message.videoUrl} controls playsInline className="rounded-lg w-full h-auto shadow-md bg-black" />
+                                            <button onClick={() => handleDownload(message.videoUrl!, `lazerdsgn-generated-${Date.now()}.mp4`)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Download Video">
+                                                <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {message.imageUrl && (
+                                        <div className="mt-2 relative group max-w-full sm:max-w-md">
+                                            <button onClick={() => onImageClick?.(message.imageUrl!)} className="block w-full h-auto appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg">
+                                                <img src={message.imageUrl} alt="AI generated content" className="rounded-lg w-full h-auto shadow-md" />
+                                            </button>
+                                            <button onClick={() => handleDownload(message.imageUrl!, `lazerdsgn-generated-${Date.now()}.png`)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Download Image">
+                                                <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
                             </div>
-                        )}
-                        
-                        {message.analysisResult?.type === 'application/pdf' && (
-                            <div className="mt-2 relative bg-hover border border-secondary rounded-lg p-3 flex items-center space-x-3 max-w-sm">
-                                <svg className="w-8 h-8 text-muted flex-shrink-0"><use href="#icon-file-text"></use></svg>
-                                <div className="flex-1 min-w-0">
-                                    <span className="text-sm text-primary truncate block font-medium">{message.analysisResult.name}</span>
-                                    <button onClick={() => handleDownload(message.analysisResult!.url, message.analysisResult!.name)} className="text-sm font-semibold text-blue-500 hover:underline">
-                                        Download PDF
+                            <div className={`chat-actions flex items-center text-sm text-muted mt-2 space-x-2 `}>
+                                {message.text && (!message.audioUrl || showTranscription) && <button title="Copy" onClick={(e) => copyToClipboard(message.text, e.currentTarget)} className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-copy"></use></svg></button>}
+                                
+                                {message.audioUrl && message.text && (
+                                    <button title={showTranscription ? "Hide transcription" : "Show transcription"} onClick={() => setShowTranscription(s => !s)} className={`p-1 hover:text-primary ${showTranscription ? 'text-primary' : ''}`}>
+                                        <svg className="w-4 h-4"><use href="#icon-transcribe"></use></svg>
                                     </button>
-                                </div>
-                            </div>
-                        )}
-                        {message.videoUrl && (
-                            <div className="mt-2 relative group max-w-sm sm:max-w-md">
-                                <video src={message.videoUrl} controls playsInline className="rounded-lg w-full h-auto shadow-md bg-black" />
-                                <button onClick={() => handleDownload(message.videoUrl!, `lazerdsgn-generated-${Date.now()}.mp4`)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Download Video">
-                                    <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
-                                </button>
-                            </div>
-                        )}
-                        {message.imageUrl && (
-                            <div className="mt-2 relative group max-w-full sm:max-w-md">
-                                <button onClick={() => onImageClick?.(message.imageUrl!)} className="block w-full h-auto appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg">
-                                    <img src={message.imageUrl} alt="AI generated content" className="rounded-lg w-full h-auto shadow-md" />
-                                </button>
-                                <button onClick={() => handleDownload(message.imageUrl!, `lazerdsgn-generated-${Date.now()}.png`)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Download Image">
-                                    <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                    <div className={`chat-actions flex items-center text-sm text-muted mt-2 space-x-2 `}>
-                        {message.text && (!message.audioUrl || showTranscription) && <button title="Copy" onClick={(e) => copyToClipboard(message.text, e.currentTarget)} className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-copy"></use></svg></button>}
-                        
-                        {message.audioUrl && message.text && (
-                            <button title={showTranscription ? "Hide transcription" : "Show transcription"} onClick={() => setShowTranscription(s => !s)} className={`p-1 hover:text-primary ${showTranscription ? 'text-primary' : ''}`}>
-                                <svg className="w-4 h-4"><use href="#icon-transcribe"></use></svg>
-                            </button>
-                        )}
+                                )}
 
-                        <button title="Good" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
-                        <button title="Bad" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-flag"></use></svg></button>
-                    </div>
-                </div>
+                                <button title="Good" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-heart"></use></svg></button>
+                                <button title="Bad" className="p-1 hover:text-primary"><svg className="w-4 h-4"><use href="#icon-flag"></use></svg></button>
+                            </div>
+                        </div>
+                    )
+                })()
             )}
         </div>
     );

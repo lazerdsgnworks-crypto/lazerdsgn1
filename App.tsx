@@ -12,7 +12,6 @@ import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDo
 
 import HomePage from './pages/HomePage.tsx';
 import PortfolioPage from './pages/PortfolioPage.tsx';
-import AboutPage from './pages/AboutPage.tsx';
 import ChatPage from './pages/ChatPage.tsx';
 import CommunityPage from './pages/CommunityPage.tsx';
 import ProfilePage from './pages/ProfilePage.tsx';
@@ -736,8 +735,6 @@ const App: React.FC = () => {
         switch (currentPage) {
             case Page.Portfolio:
                 return <PortfolioPage />;
-            case Page.About:
-                return <AboutPage />;
             case Page.Chat:
                 return <ChatPage user={user} userProfile={userProfile} openDeleteModal={openDeleteModal} onViewProfile={() => handleViewProfile(null)} />;
             case Page.Community:

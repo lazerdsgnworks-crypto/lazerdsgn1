@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -18,8 +17,8 @@ import AudioPlayer from '../components/AudioPlayer.tsx';
 // --- Cloudinary Configuration ---
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
-const AI_QUERY_WEBHOOK_URL = "https://umarworks2.app.n8n.cloud/webhook/queries";
-const ENHANCE_POST_WEBHOOK_URL = "https://umarworks2.app.n8n.cloud/webhook/enhancepost";
+const AI_QUERY_WEBHOOK_URL = "https://umarworks3.app.n8n.cloud/webhook/queries";
+const ENHANCE_POST_WEBHOOK_URL = "https://umarworks3.app.n8n.cloud/webhook/enhancepost";
 const POST_MAX_LENGTH = 500;
 // const USER_SEARCH_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/user-search";
 
@@ -629,14 +628,22 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
 
                 const result = await response.json();
                 
-                // Robustly extract the AI's text response.
                 const resultData = Array.isArray(result) ? result[0] : result;
-                let aiResponseText = resultData?.output || resultData?.text || resultData?.response || "Sorry, the AI could not provide a response.";
                 
-                // FIX: More robustly remove 'undefined' text that can appear at the end of AI responses,
-                // handling variations like "*undefined" or " undefined".
-                if (typeof aiResponseText === 'string') {
-                    aiResponseText = aiResponseText.replace(/[\s*]*undefined\s*$/gi, '').trim();
+                // --- NEW: Robustly handle and clean AI text response ---
+                const potentialText = resultData?.output || resultData?.text || resultData?.response;
+                let aiResponseText = String(potentialText || '').trim(); // Coerce to string
+
+                // Check for invalid coerced strings and provide a fallback
+                if (!aiResponseText || aiResponseText === 'null' || aiResponseText === 'undefined') {
+                    aiResponseText = "Sorry, the AI could not provide a response.";
+                    if (potentialText != null && potentialText !== '') { 
+                        console.warn("Received an unusual but empty AI response:", potentialText);
+                    }
+                } else {
+                    // Clean up trailing "undefined" and markdown artifacts from valid responses
+                    let cleanedText = aiResponseText.replace(/undefined\s*$/, '').trim();
+                    aiResponseText = cleanedText.replace(/(\w)\*\*(?=\s|$)/g, '$1').trim();
                 }
 
                 // Embed the AI reply directly into the post data.

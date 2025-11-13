@@ -138,7 +138,6 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                             <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                             <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                             <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
-                            <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
                         </nav>
 
                         {/* Right: AuthLinks */}
@@ -173,7 +172,6 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                     <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
-                    <a href="#" className="hover:text-primary" onClick={(e) => handleNav(Page.About, e)}>About</a>
                     {user && (
                         <div className="pt-6">
                             <a href="#" className="flex items-center space-x-3 group" onClick={(e) => handleProfileNav(e)}>

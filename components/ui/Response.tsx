@@ -1,17 +1,21 @@
 import React, { useEffect, useRef } from 'react';
 
+// ---------------------- Syntax Highlighter ----------------------
 function highlightSyntax(code: string): string {
     const keywords = [
-        'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'import', 'from', 'export', 'default', 'async', 'await', 'class', 'new', 'try', 'catch', 'finally', 'throw', 'switch', 'case', 'break', 'continue', 'debugger', 'delete', 'in', 'instanceof', 'typeof', 'void', 'true', 'false', 'null', 'undefined', 'def', 'print', 'in', 'is', 'not', 'and', 'or', 'lambda', 'with', 'as', 'yield', 'assert', 'pass', 'raise'
+        'const','let','var','function','return','if','else','for','while','import','from','export','default',
+        'async','await','class','new','try','catch','finally','throw','switch','case','break','continue',
+        'debugger','delete','in','instanceof','typeof','void','true','false','null','undefined','def','print',
+        'is','not','and','or','lambda','with','as','yield','assert','pass','raise'
     ];
 
     const tokenRegex = new RegExp([
-        `(${/(\/\/.*|\/\*[\s\S]*?\*\/|#.*)/.source})`,
-        `(${/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`/.source})`,
-        `(\\b(?:${keywords.join('|')})\\b)`,
-        `(\\b\\d+(?:\\.\\d+)?\\b)`,
-        `([a-zA-Z_]\\w*)(?=\\s*\\()`,
-        `([().,;[\\]{}<>=+\\-*\\/%&|!^?:])`
+        `(\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/|#.*)`,                  // Comments
+        `("([^"\\\\]|\\\\.)*"|'([^'\\\\]|\\\\.)*'|\\\`([^\\\`\\\\]|\\\\.)*\\\`)`, // Strings
+        `(\\b(?:${keywords.join('|')})\\b)`,                     // Keywords
+        `(\\b\\d+(?:\\.\\d+)?\\b)`,                              // Numbers
+        `([a-zA-Z_]\\w*)(?=\\s*\\()`,                            // Function calls
+        `([().,;[\\]{}<>=+\\-*\\/%&|!^?:])`                      // Punctuation
     ].join('|'), 'g');
 
     return code
@@ -19,16 +23,17 @@ function highlightSyntax(code: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(tokenRegex, (match, g1_comment, g2_string, g3_keyword, g4_number, g5_function, g6_punctuation) => {
-            if (g1_comment !== undefined) return `<span class="code-comment">${g1_comment}</span>`;
-            if (g2_string !== undefined) return `<span class="code-string">${g2_string}</span>`;
-            if (g3_keyword !== undefined) return `<span class="code-keyword">${g3_keyword}</span>`;
-            if (g4_number !== undefined) return `<span class="code-number">${g4_number}</span>`;
-            if (g5_function !== undefined) return `<span class="code-function">${g5_function}</span>`;
-            if (g6_punctuation !== undefined) return `<span class="code-punctuation">${g6_punctuation}</span>`;
+            if (g1_comment) return `<span class="code-comment">${g1_comment}</span>`;
+            if (g2_string) return `<span class="code-string">${g2_string}</span>`;
+            if (g3_keyword) return `<span class="code-keyword">${g3_keyword}</span>`;
+            if (g4_number) return `<span class="code-number">${g4_number}</span>`;
+            if (g5_function) return `<span class="code-function">${g5_function}</span>`;
+            if (g6_punctuation) return `<span class="code-punctuation">${g6_punctuation}</span>`;
             return match;
         });
 }
 
+// ---------------------- Inline Markdown Processor ----------------------
 function processInlineMarkdown(text: string): string {
     let processed = text;
 
@@ -49,26 +54,27 @@ function processInlineMarkdown(text: string): string {
                 </a>`;
     });
 
-    // Clean up stray (url)
+    // Remove stray (url)
     processed = processed.replace(/\s*\(\s*(https?:\/\/[^\s)]+)\s*\)/g, '');
 
     // Formatting
     processed = processed
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')        // **bold**
-        .replace(/(?<!\*)\*(?!\*)(.*?)\*(?!\*)/g, '<em>$1</em>') // *italic*
-        .replace(/__(.*?)__/g, '<u>$1</u>')                      // __underline__
-        .replace(/~~(.*?)~~/g, '<del>$1</del>')                  // ~~strike~~
-        .replace(/`(.*?)`/g, '<code class="inline-code">$1</code>'); // `inline code`
+        .replace(/\*\*\*(.*?)\*\*\*/g, '<strong>$1</strong>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<u>$1</u>')
+        .replace(/~~(.*?)~~/g, '<del>$1</del>')
+        .replace(/`(.*?)`/g, '<code class="inline-code">$1</code>');
 
-    // Handle newlines (single \n → <br>)
+    // Newlines
     processed = processed.replace(/\n/g, '<br />');
 
     return processed;
 }
 
+// ---------------------- Table Processor ----------------------
 function processTableMarkdown(tableLines: string[]): string {
     if (tableLines.length < 2) return '';
-
     const headerLine = tableLines[0];
     const separatorRegex = /^\s*\|?(:?-+:?\|)+(:?-+:?)?\s*$/;
     const bodyLines = tableLines.slice(1).filter(line => !separatorRegex.test(line.trim()));
@@ -85,9 +91,9 @@ function processTableMarkdown(tableLines: string[]): string {
     return tableHtml;
 }
 
+// ---------------------- Regular Markdown Processor ----------------------
 function processRegularMarkdown(text: string): string {
     if (!text.trim()) return '';
-
     const lines = text.split('\n');
     const output: string[] = [];
     let buffer: string[] = [];
@@ -110,59 +116,33 @@ function processRegularMarkdown(text: string): string {
 
     for (const line of lines) {
         const trimmed = line.trim();
+        if (!trimmed) { flushBuffer(); continue; }
 
-        if (trimmed.length === 0) {
-            flushBuffer();
-            continue;
-        }
+        if (trimmed.startsWith('### ')) { flushBuffer(); output.push(`<h3><strong>${processInlineMarkdown(trimmed.slice(4))}</strong></h3>`); continue; }
+        if (trimmed.startsWith('## ')) { flushBuffer(); output.push(`<h2><strong>${processInlineMarkdown(trimmed.slice(3))}</strong></h2>`); continue; }
+        if (trimmed.startsWith('# ')) { flushBuffer(); output.push(`<h1><strong>${processInlineMarkdown(trimmed.slice(2))}</strong></h1>`); continue; }
+        if (trimmed.startsWith('>')) { flushBuffer(); output.push(`<blockquote><p>${processInlineMarkdown(trimmed.slice(1).trim())}</p></blockquote>`); continue; }
 
-        if (trimmed.startsWith('### ')) {
-            flushBuffer();
-            output.push(`<h3>${processInlineMarkdown(trimmed.slice(4))}</h3>`);
-            continue;
-        }
-        if (trimmed.startsWith('## ')) {
-            flushBuffer();
-            output.push(`<h2>${processInlineMarkdown(trimmed.slice(3))}</h2>`);
-            continue;
-        }
-        if (trimmed.startsWith('# ')) {
-            flushBuffer();
-            output.push(`<h1>${processInlineMarkdown(trimmed.slice(2))}</h1>`);
-            continue;
-        }
-        if (trimmed.startsWith('>')) {
-            flushBuffer();
-            output.push(`<blockquote><p>${processInlineMarkdown(trimmed.slice(1).trim())}</p></blockquote>`);
-            continue;
-        }
-        
         const isUl = /^\s*(\*|-)\s/.test(trimmed);
         const isOl = /^\s*(\d+\.)\s/.test(trimmed);
         const currentListType = isUl ? 'ul' : (isOl ? 'ol' : '');
 
         if (currentListType) {
-            if (listType !== '' && listType !== currentListType) {
-                flushBuffer();
-            }
+            if (listType !== '' && listType !== currentListType) flushBuffer();
             listType = currentListType;
             buffer.push(line);
         } else {
-            if (listType !== '') {
-                flushBuffer();
-            }
+            if (listType !== '') flushBuffer();
             buffer.push(line);
         }
     }
-    
     flushBuffer();
-
     return output.join('');
 }
 
-
+// ---------------------- Main Markdown Formatter ----------------------
 function formatMarkdown(text: string): string {
-    if (typeof text !== 'string' || !text) return '';
+    if (typeof text !== 'string' || !text.trim()) return '<p>_Generating response..._</p>';
 
     // Split code blocks
     const parts = text.split(/(```(?:[a-zA-Z]+)?\n[\s\S]*?\n```)/g);
@@ -200,6 +180,7 @@ function formatMarkdown(text: string): string {
     }).join('');
 }
 
+// ---------------------- React Response Component ----------------------
 interface ResponseProps {
     className?: string;
     children: string;
@@ -215,7 +196,6 @@ const Response: React.FC<ResponseProps> = ({ className, children }) => {
         const clickHandler = (e: MouseEvent) => {
             const button = (e.target as HTMLElement).closest('.copy-btn, .download-btn');
             if (!button) return;
-
             e.preventDefault();
             e.stopPropagation();
 

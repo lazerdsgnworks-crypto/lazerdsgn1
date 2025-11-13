@@ -37,7 +37,6 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
                             <li><a href="#" className="hover:text-primary transition" onClick={(e) => handleNav(Page.Home, e)}>Home</a></li>
                             <li><a href="#" className="hover:text-primary transition" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a></li>
                             <li><a href="#" className="hover:text-primary transition" onClick={(e) => handleNav(Page.Community, e)}>Community</a></li>
-                            <li><a href="#" className="hover:text-primary transition" onClick={(e) => handleNav(Page.About, e)}>About</a></li>
                             <li><a href="#" className="hover:text-primary transition" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a></li>
                         </ul>
                     </div>

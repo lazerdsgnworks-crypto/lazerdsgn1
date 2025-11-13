@@ -1,4 +1,3 @@
-
 import type { User as FirebaseUser } from 'firebase/auth';
 // FIX: Changed import type to regular import to fix module resolution issue for Timestamp.
 import { Timestamp } from 'firebase/firestore';
@@ -6,7 +5,6 @@ import { Timestamp } from 'firebase/firestore';
 export enum Page {
   Home = 'home',
   Portfolio = 'portfolio',
-  About = 'about',
   Chat = 'chat',
   Community = 'community',
   Profile = 'profile',
@@ -43,6 +41,8 @@ export interface ChatMessage {
     name: string;
     type: string;
   };
+  isStopMessage?: boolean;
+  isAnalysisResponse?: boolean;
 }
 
 export interface ChatSession {
