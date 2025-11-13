@@ -4,12 +4,12 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/lazerdsgn1/', // 👈 Base path for GitHub Pages
   plugins: [react()],
   resolve: {
     alias: {
       // FIX: `__dirname` is not available in ES modules by default.
-      // Replaced it with a path resolution from the current working directory,
-      // which is the project root when running Vite.
+      // Using project root path for src alias.
       "@": path.resolve("./src"),
     },
   },
