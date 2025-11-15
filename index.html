@@ -22,7 +22,12 @@
     "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.552.0",
     "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "remark-gfm": "https://aistudiocdn.com/remark-gfm@^4.0.1",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "prismjs/": "https://aistudiocdn.com/prismjs@^1.30.0/",
+    "prismjs": "https://aistudiocdn.com/prismjs@^1.30.0",
+    "remark-breaks": "https://aistudiocdn.com/remark-breaks@^4.0.0"
   }
 }
 </script>
@@ -629,13 +634,13 @@
         .response-wrapper table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.9rem;
+            font-size: 0.875rem; /* UPDATED: Reduced font size for better mobile fit */
             font-family: var(--font-main);
         }
         .response-wrapper th, 
         .response-wrapper td {
             border: 1px solid var(--border-primary);
-            padding: 0.75rem 1rem;
+            padding: 0.5rem 0.75rem; /* UPDATED: Reduced padding for better mobile fit */
             text-align: left;
         }
         .response-wrapper th {
@@ -657,7 +662,7 @@
         .ai-message > div > h2, .ai-message > div > h3 { font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; line-height: 1.2; }
         .ai-message > div > h2 { font-size: 1.25rem; }
         .ai-message > div > h3 { font-size: 1.1rem; }
-        .ai-message > div > p { margin-bottom: 0.75em; }
+        .ai-message > div > p { margin-bottom: 0.75em; white-space: pre-wrap; }
         .ai-message > div > hr { border-color: var(--border-primary); margin: 1.5em 0; }
         .ai-message > div > blockquote { border-left: 3px solid var(--border-secondary); padding-left: 1em; margin-left: 0; font-style: italic; color: var(--text-secondary); }
         .ai-message .inline-code { background-color: var(--bg-muted); color: var(--text-primary); padding: 0.2em 0.4em; margin: 0; font-size: 85%; border-radius: 6px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; }
@@ -847,6 +852,9 @@
             <path d="M13.11524,6.90324A11.50222,11.50222,0,0,1,1.19332,18.82516,11.50222,11.50222,0,0,1,13.11524,30.74708a11.5022,11.5022,0,0,1,11.9219-11.92192A11.5022,11.5022,0,0,1,13.11524,6.90324Z"/>
             <path d="M25.22294,1.47538a6.02232,6.02232,0,0,1-6.24207,6.24207,6.02231,6.02231,0,0,1,6.24207,6.24206A6.02231,6.02231,0,0,1,31.465,7.71745a6.02232,6.02232,0,0,1-6.24206-6.24207Z"/>
         </symbol>
+        <!-- NEW: Thumbs Up/Down Icons for Feedback -->
+        <symbol id="icon-thumbs-up" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M7 11v 4.586c0 1.293 1.015 2.414 2.308 2.414h4.416a2.5 2.5 0 0 0 2.417-2.035l1.625-7.312a.5.5 0 0 0-.488-.553H11V5.5C11 4.672 10.328 4 9.5 4S8 4.672 8 5.5v5.5H7z M7 11H5.5C4.672 11 4 11.672 4 12.5v5C4 18.328 4.672 19 5.5 19H7v-8z"/></symbol>
+        <symbol id="icon-thumbs-down" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M7 13v-4.586c0-1.293 1.015-2.414 2.308-2.414h4.416a2.5 2.5 0 0 1 2.417 2.035l1.625 7.312a.5.5 0 0 1-.488.553H11v3.5c0 .828-.672 1.5-1.5 1.5S8 18.828 8 18v-5H7z M7 13H5.5C4.672 13 4 12.328 4 11.5v-5C4 5.672 4.672 5 5.5 5H7v8z"/></symbol>
     </svg>
 </body>
 </html>

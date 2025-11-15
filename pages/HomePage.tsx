@@ -163,9 +163,9 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                     </div>
                     <div 
                         className="order-1 md:order-2 rounded-2xl shadow-2xl aspect-[4/5] bg-muted bg-cover bg-center transform md:hover:scale-105 transition-transform duration-500 ease-in-out"
-                        style={{ backgroundImage: `url('https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png')` }}
+                        style={{ backgroundImage: `url('https://i.ibb.co/v4q4PtnQ/IMG-1247.jpg')` }}
                         role="img"
-                        aria-label="Abstract design artwork"
+                        aria-label="A portrait of the designer"
                     >
                     </div>
                 </div>

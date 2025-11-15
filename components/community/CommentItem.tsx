@@ -6,6 +6,7 @@ import { collection, query, orderBy, onSnapshot, where, QuerySnapshot, DocumentD
 import Avatar from '../Avatar.tsx';
 import { ADMIN_UIDS } from '../../constants.ts';
 import AudioPlayer from '../AudioPlayer.tsx';
+import Response from '../ui/Response.tsx';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -21,26 +22,6 @@ const formatTimeAgoShort = (date: Date): string => {
 
   const days = Math.floor(hours / 24);
   return `${days}d`;
-};
-
-const formatText = (text: string): string => {
-    if (!text) return '';
-    // 1. Escape HTML to prevent XSS.
-    let safeText = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    // 2. UPDATED: Bold any text surrounded by *, **, or ***.
-    // Process from most specific (***) to least specific (*) to avoid conflicts.
-    safeText = safeText.replace(/\*\*\*(.*?)\*\*\*/g, '<strong>$1</strong>');
-    safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-
-    // 3. Handle newlines.
-    safeText = safeText.replace(/\n/g, '<br />');
-    
-    return safeText;
 };
 
 // --- Comment-related Components (scoped to this file) ---
@@ -143,7 +124,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                             <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 text-xs p-1">Delete</button>
                         )}
                     </div>
-                    {comment.text && <p className="text-sm text-primary mt-1 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatText(comment.text) }}></p>}
+                    {comment.text && <div className="text-sm text-primary mt-1"><Response>{comment.text}</Response></div>}
                     {/* FIX: Add AudioPlayer for comments with audio */}
                     {comment.audioUrl && (
                         <div className="mt-2">
@@ -176,7 +157,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                                         <button onClick={() => onViewProfile(reply.author.id)} className="font-bold text-sm text-primary hover:underline">{reply.author.username}</button>
                                         <p className="text-xs text-secondary">{reply.createdAt ? formatTimeAgoShort(reply.createdAt.toDate()) : '...'}</p>
                                     </div>
-                                    <p className="text-sm text-primary mt-1" dangerouslySetInnerHTML={{ __html: formatText(reply.text) }}></p>
+                                    <div className="text-sm text-primary mt-1"><Response>{reply.text}</Response></div>
                                     {(user && (user.uid === reply.author.id || ADMIN_UIDS.includes(user.uid))) && (
                                         <button onClick={() => onDeleteReply(reply.id)} className="text-xs text-muted hover:text-red-500 mt-1">Delete</button>
                                     )}

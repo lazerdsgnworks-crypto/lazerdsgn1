@@ -7,6 +7,7 @@ import Avatar from '../Avatar.tsx';
 import { ADMIN_UIDS } from '../../constants.ts';
 import AudioPlayer from '../AudioPlayer.tsx';
 import CommentItem from './CommentItem.tsx';
+import Response from '../ui/Response.tsx';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -22,26 +23,6 @@ const formatTimeAgoShort = (date: Date): string => {
 
   const days = Math.floor(hours / 24);
   return `${days}d`;
-};
-
-const formatText = (text: string): string => {
-    if (!text) return '';
-    // 1. Escape HTML to prevent XSS.
-    let safeText = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    // 2. UPDATED: Bold any text surrounded by *, **, or ***.
-    // Process from most specific (***) to least specific (*) to avoid conflicts.
-    safeText = safeText.replace(/\*\*\*(.*?)\*\*\*/g, '<strong>$1</strong>');
-    safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    safeText = safeText.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-
-    // 3. Handle newlines.
-    safeText = safeText.replace(/\n/g, '<br />');
-    
-    return safeText;
 };
 
 const TruncatedText: React.FC<{ text: string; className?: string; lineClamp?: string }> = ({ text, className, lineClamp = 'line-clamp-2' }) => {
@@ -76,8 +57,9 @@ const TruncatedText: React.FC<{ text: string; className?: string; lineClamp?: st
             <div
                 ref={textRef}
                 className={`whitespace-pre-wrap break-words ${className} ${!isExpanded ? lineClamp : ''}`}
-                dangerouslySetInnerHTML={{ __html: formatText(text) }}
-            />
+            >
+                <Response>{text}</Response>
+            </div>
             {showButton && (
                 <button onClick={() => setIsExpanded(!isExpanded)} className="text-sm font-medium text-secondary hover:text-primary transition-colors mt-1">
                     {isExpanded ? 'Show less' : 'See more'}
@@ -460,10 +442,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         hasMedia ? (
                             <TruncatedText text={reposted.text} className="text-sm text-primary" />
                         ) : (
-                            <div
-                                className="whitespace-pre-wrap break-words text-sm text-primary"
-                                dangerouslySetInnerHTML={{ __html: formatText(reposted.text) }}
-                            />
+                            <Response>{reposted.text}</Response>
                         )
                     )}
                     
@@ -546,10 +525,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                             hasMedia ? (
                                 <TruncatedText text={post.text} className="text-primary" />
                             ) : (
-                                <div
-                                    className="whitespace-pre-wrap break-words text-primary"
-                                    dangerouslySetInnerHTML={{ __html: formatText(post.text) }}
-                                />
+                                <Response>{post.text}</Response>
                             )
                         )}
                         

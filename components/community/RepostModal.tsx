@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CommunityPost, User, UserProfile } from '../../types';
 import Avatar from '../Avatar';
 import AudioPlayer from '../AudioPlayer';
+import Response from '../ui/Response';
 
 const formatTimeAgoShort = (date: Date): string => {
   const now = new Date();
@@ -103,7 +104,7 @@ const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, onSubmit, po
                                 <p className="font-bold text-sm truncate text-primary">{post.author.username}</p>
                                 <p className="text-xs text-muted flex-shrink-0">{timeAgo}</p>
                             </div>
-                            <p className="text-primary whitespace-pre-wrap text-sm">{post.text}</p>
+                            <div className="text-sm"><Response>{post.text}</Response></div>
                             {post.mediaUrls && post.mediaUrls.length > 0 && post.mediaType !== 'audio' && (
                                 <div className="mt-2">
                                     <div className="rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">

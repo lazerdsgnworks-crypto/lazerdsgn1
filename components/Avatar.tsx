@@ -8,6 +8,14 @@ const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 
         xl: 'w-24 h-24',
         xxl: 'w-20 h-20 sm:w-28 sm:h-28',
     };
+    
+    const fontSizeClasses = {
+        sm: 'text-lg',
+        md: 'text-xl',
+        lg: 'text-2xl',
+        xl: 'text-5xl',
+        xxl: 'text-4xl sm:text-6xl',
+    };
 
     if (photoURL) {
         return (
@@ -21,8 +29,8 @@ const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 
 
     if (email === 'ai@lazerdsgn.com') {
         return (
-            <div className={`rounded-full flex items-center justify-center flex-shrink-0 bg-primary-accent text-on-primary-accent ${sizeClasses[size]}`}>
-                <svg className="w-3/4 h-3/4"><use href="#icon-sparkle"></use></svg>
+            <div className={`rounded-full flex items-center justify-center flex-shrink-0 bg-primary-accent text-on-primary-accent font-bold ${sizeClasses[size]}`}>
+                <span className={fontSizeClasses[size]}>L</span>
             </div>
         );
     }

@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -563,10 +566,12 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             setLikedPostIds(new Set());
             return;
         }
-        const savedSub = onSnapshot(collection(db, 'users', user.uid, 'savedPosts'), snapshot => {
+// FIX: Explicitly type the snapshot parameter as QuerySnapshot<DocumentData> to resolve incorrect type inference from Firebase's onSnapshot.
+        const savedSub = onSnapshot(collection(db, 'users', user.uid, 'savedPosts'), (snapshot: QuerySnapshot<DocumentData>) => {
             setSavedPostIds(new Set(snapshot.docs.map(doc => doc.id)));
         });
-        const likedSub = onSnapshot(collection(db, 'users', user.uid, 'likedPosts'), snapshot => {
+// FIX: Explicitly type the snapshot parameter as QuerySnapshot<DocumentData> to resolve incorrect type inference from Firebase's onSnapshot.
+        const likedSub = onSnapshot(collection(db, 'users', user.uid, 'likedPosts'), (snapshot: QuerySnapshot<DocumentData>) => {
             setLikedPostIds(new Set(snapshot.docs.map(doc => doc.id)));
         });
         return () => {
@@ -635,17 +640,12 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                 let aiResponseText = String(potentialText || '').trim(); // Coerce to string
 
                 // Check for invalid coerced strings and provide a fallback
-                if (!aiResponseText || aiResponseText === 'null' || aiResponseText === 'undefined') {
+                if (!aiResponseText || aiResponseText === 'null' || aiResponseText === 'undefined' || aiResponseText === '[object Object]') {
                     aiResponseText = "Sorry, the AI could not provide a response.";
                     if (potentialText != null && potentialText !== '') { 
                         console.warn("Received an unusual but empty AI response:", potentialText);
                     }
-                } else {
-                    // Clean up trailing "undefined" and markdown artifacts from valid responses
-                    let cleanedText = aiResponseText.replace(/undefined\s*$/, '').trim();
-                    aiResponseText = cleanedText.replace(/(\w)\*\*(?=\s|$)/g, '$1').trim();
                 }
-
                 // Embed the AI reply directly into the post data.
                 postData.aiReply = {
                     text: aiResponseText,
@@ -796,7 +796,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
 
         try {
             const querySnapshot = await getDocs(q);
-            const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+// FIX: Reordered properties to place the spread operator first, which can resolve obscure TypeScript type inference issues with the spread syntax.
+            const results = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as UserProfile));
             setSearchResults(results);
         } catch (error) {
             console.error("Error searching users:", error);

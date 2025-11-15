@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -331,21 +333,26 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 let buffer = '';
 
                 const processChunk = async (chunk: string) => {
-                    let textToAdd = '';
+                    let content;
                     try {
                         const parsed = JSON.parse(chunk);
-                        const content = parsed.output || parsed.text || parsed.response || '';
-                        if (typeof content === 'string') {
-                            textToAdd = content;
-                        }
+                        content = parsed.output || parsed.text || parsed.response;
                     } catch (e) {
-                        textToAdd = chunk;
+                        content = chunk;
                     }
                     
-                    if (textToAdd) {
-                        aiResponseText += textToAdd;
-                        await updateDoc(aiMessageRef, { text: aiResponseText });
+                    if (content === null || content === undefined || typeof content === 'object') {
+                        return; // Ignore these invalid types
                     }
+                    
+                    const stringContent = String(content);
+                    // Also ignore chunks that are just the string "null" or "undefined"
+                    if (stringContent.trim() === 'null' || stringContent.trim() === 'undefined') {
+                        return;
+                    }
+                
+                    aiResponseText += stringContent;
+                    await updateDoc(aiMessageRef, { text: aiResponseText });
                 };
                 
                 while (true) {
@@ -372,6 +379,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     await processChunk(buffer);
                 }
                 
+                // If after all chunks, the response is still empty, show a fallback.
+                if (!aiResponseText.trim()) {
+                    const fallbackText = "Sorry, I couldn't get a response.";
+                    await updateDoc(aiMessageRef, { text: fallbackText });
+                    aiResponseText = fallbackText;
+                }
+
                 const finalAiText = aiResponseText;
                 let audioUrl: string | undefined = undefined;
                 if (userSentAudio && finalAiText && finalAiText.trim().length > 0 && finalAiText !== "Sorry, I couldn't get a response.") {
