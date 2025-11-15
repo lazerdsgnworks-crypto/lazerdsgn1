@@ -12,7 +12,7 @@ const codeTableRegex = /(```[\s\S]*?```)|((?:^\|.*\|\r?\n)+(?:^\|.*-.*\|\r?\n)(?
 
 // --- MODIFIED AnimatedTextPart Component ---
 // This component now animates text parts and renders code/tables instantly.
-const AnimatedTextPart: React.FC<{ text: string }> = ({ text }) => {
+const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }> = ({ text, isAnalysisResponse }) => {
     const [displayedText, setDisplayedText] = useState('');
     const animationFrameRef = useRef<number | null>(null);
     const textRef = useRef(text);
@@ -96,8 +96,34 @@ const AnimatedTextPart: React.FC<{ text: string }> = ({ text }) => {
 
     // This single <Response> component receives the intelligently-built string,
     // ensuring lists and other markdown elements render correctly.
-    return <Response>{displayedText}</Response>;
+    return <Response isAnalysisResponse={isAnalysisResponse}>{displayedText}</Response>;
 };
+
+const AnalysisResultBox: React.FC<{ result: Required<ChatMessage>['analysisResult'] }> = ({ result }) => {
+    // Determine a user-friendly file type from the name
+    const downloadText = useMemo(() => {
+        const name = result.name.toLowerCase();
+        if (name.endsWith('.pdf')) return 'Download Pdf';
+        if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'Download Image';
+        if (name.endsWith('.zip')) return 'Download Zip';
+        return 'Download File';
+    }, [result.name]);
+
+    return (
+        <a
+            href={result.url}
+            download={result.name}
+            className="mb-2 p-3 rounded-2xl border border-secondary flex items-center justify-start gap-3 hover:bg-hover transition-colors group"
+            title={`Download ${result.name}`}
+        >
+            <div className="flex-shrink-0 w-10 h-10 bg-secondary rounded-full flex items-center justify-center border border-primary group-hover:border-secondary transition-colors">
+                <svg className="w-5 h-5 text-primary"><use href="#icon-download"></use></svg>
+            </div>
+            <p className="text-sm font-semibold text-primary">{downloadText}</p>
+        </a>
+    );
+};
+
 
 // --- Main ChatMessageItem Component (Icons Updated Below) ---
 const ChatMessageItem: React.FC<{
@@ -292,7 +318,7 @@ const ChatMessageItem: React.FC<{
     return (
         <div className={`flex items-start ${alignment} animate-geminiFadeIn`}>
             <div className="flex flex-col max-w-[85%] items-start">
-                <div className={`chat-message-bubble ai-message ${message.isAnalysisResponse ? 'border-2 border-green-500/50' : ''} overflow-hidden`}>
+                <div className={`chat-message-bubble ai-message overflow-hidden`}>
                     {message.videoUrl && (
                         <div className="mb-2 rounded-xl overflow-hidden shadow-lg">
                             <video src={message.videoUrl} controls playsInline className="w-full h-auto" />
@@ -304,11 +330,12 @@ const ChatMessageItem: React.FC<{
                     {message.audioUrl && (
                         <div className="mb-2"><AudioPlayer src={message.audioUrl} /></div>
                     )}
+                    {message.analysisResult && <AnalysisResultBox result={message.analysisResult} />}
                     
                     {(shouldAnimate && aiText) ? (
-                        <AnimatedTextPart text={aiText} />
+                        <AnimatedTextPart text={aiText} isAnalysisResponse={message.isAnalysisResponse} />
                     ) : (aiText) ? (
-                        <Response>{aiText}</Response>
+                        <Response isAnalysisResponse={message.isAnalysisResponse}>{aiText}</Response>
                     ) : null}
 
                 </div>

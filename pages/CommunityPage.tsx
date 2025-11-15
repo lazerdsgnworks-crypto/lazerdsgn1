@@ -2,6 +2,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -796,8 +798,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
 
         try {
             const querySnapshot = await getDocs(q);
-// FIX: Reordered properties to place the spread operator first, which can resolve obscure TypeScript type inference issues with the spread syntax.
-            const results = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as UserProfile));
+            // FIX: Reordered properties to place the spread operator after explicit properties. This resolves a TypeScript type inference issue.
+            const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
             setSearchResults(results);
         } catch (error) {
             console.error("Error searching users:", error);

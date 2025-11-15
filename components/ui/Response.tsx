@@ -6,6 +6,7 @@ import remarkBreaks from 'remark-breaks';
 interface ResponseProps {
     className?: string;
     children: string;
+    isAnalysisResponse?: boolean;
 }
 
 // Re-using the existing syntax highlighter for style consistency
@@ -41,7 +42,7 @@ function highlightSyntax(code: string): string {
         });
 }
 
-const Response: React.FC<ResponseProps> = ({ className, children }) => {
+const Response: React.FC<ResponseProps> = ({ className, children, isAnalysisResponse }) => {
     
     const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
         // Find the closest code block to the button that was clicked
@@ -167,12 +168,63 @@ const Response: React.FC<ResponseProps> = ({ className, children }) => {
                         />
                     ),
 
-                    a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-                        <a 
-                            className="inline-block bg-neutral-800 border border-neutral-700 rounded-md px-2 py-0.5 text-sm font-medium text-blue-400 no-underline hover:bg-neutral-700"
-                            {...props} 
-                        />
-                    ),
+                    a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+                        const { children, href } = props;
+                        // A raw URL is when the text of the link is the same as the href
+                        const isRawUrl = children === href;
+
+                        if (isRawUrl && typeof href === 'string') {
+                            if (isAnalysisResponse) {
+                                return (
+                                    <a
+                                        className="inline-flex items-center gap-3 border border-secondary rounded-2xl px-4 py-2 my-2 text-sm font-medium text-primary no-underline hover:bg-hover transition-colors"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        {...props}
+                                    >
+                                        <svg className="w-5 h-5 flex-shrink-0 text-secondary"><use href="#icon-download"></use></svg>
+                                        <span>Download File</span>
+                                    </a>
+                                );
+                            }
+
+                            let linkText = href;
+                            try {
+                                const url = new URL(href);
+                                // Shorten the displayed URL for better UI
+                                const path = url.pathname;
+                                const shortenedPath = path.length > 20 ? `${path.substring(0, 15)}...` : path;
+                                linkText = `${url.hostname}${shortenedPath === '/' ? '' : shortenedPath}`;
+                            } catch (e) {
+                                // Fallback for non-URL strings or parsing errors
+                                linkText = href.length > 40 ? `${href.substring(0, 40)}...` : href;
+                            }
+                            
+                            return (
+                                <a 
+                                    className="inline-flex items-center gap-2 bg-muted border border-secondary rounded-lg px-3 py-1.5 text-sm font-medium text-primary no-underline hover:bg-hover transition-colors"
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    {...props}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 flex-shrink-0 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    <span className="truncate" title={href}>{linkText}</span>
+                                </a>
+                            );
+                        }
+
+                        // For regular markdown links like [Click here](url), render as a standard blue link
+                        return (
+                            <a 
+                                className="text-secondary-accent font-medium underline hover:no-underline" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                {...props} 
+                            />
+                        );
+                    },
 
                     p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <p {...props} />,
                     h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <h1 className="text-2xl font-bold mt-4 mb-2" {...props} />,

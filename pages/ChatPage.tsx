@@ -2,6 +2,7 @@
 
 
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -316,120 +317,139 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const response = await fetch(targetUrl, { ...fetchOptions, signal });
                 if (!response.ok) throw new Error(`Webhook failed with status ${response.status}`);
 
-                // All modes including file analysis now expect a streaming markdown response.
-                if (!response.body) throw new Error("Response body is not available for streaming.");
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let aiResponseText = '';
-                const aiMessageRef = doc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`));
-                setStreamingId(aiMessageRef.id);
-                await setDoc(aiMessageRef, { 
-                    text: '', 
-                    role: 'ai', 
-                    createdAt: serverTimestamp() as Timestamp,
-                    isAnalysisResponse: isAnalysisMode 
-                });
-                
-                let buffer = '';
+                const contentType = response.headers.get("content-type");
+                if (isAnalysisMode && contentType && contentType.includes("application/json")) {
+                    const result = await response.json();
+                    const aiResponseText = result.text || result.output || result.response || "Here is your analysis result.";
+                    const analysisResultFile = result.file;
 
-                const processChunk = async (chunk: string) => {
-                    let content;
-                    try {
-                        const parsed = JSON.parse(chunk);
-                        content = parsed.output || parsed.text || parsed.response;
-                    } catch (e) {
-                        content = chunk;
-                    }
-                    
-                    if (content === null || content === undefined || typeof content === 'object') {
-                        return; // Ignore these invalid types
-                    }
-                    
-                    const stringContent = String(content);
-                    // Also ignore chunks that are just the string "null" or "undefined"
-                    if (stringContent.trim() === 'null' || stringContent.trim() === 'undefined') {
-                        return;
-                    }
-                
-                    aiResponseText += stringContent;
-                    await updateDoc(aiMessageRef, { text: aiResponseText });
-                };
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (signal.aborted) {
-                       reader.cancel();
-                       throw new DOMException('Aborted by user', 'AbortError');
-                    }
-                    if (done) break;
+                    const aiMessageData: Omit<ChatMessage, 'id' | 'createdAt'> = {
+                        text: aiResponseText,
+                        role: 'ai',
+                        isAnalysisResponse: true,
+                    };
 
-                    buffer += decoder.decode(value, { stream: true });
-                    let boundary = buffer.indexOf('\n');
-                    while (boundary !== -1) {
-                        const line = buffer.substring(0, boundary);
-                        buffer = buffer.substring(boundary + 1);
-                        if (line.trim()) {
-                            await processChunk(line);
+                    if (analysisResultFile && analysisResultFile.url && analysisResultFile.name) {
+                        aiMessageData.analysisResult = analysisResultFile;
+                    }
+
+                    await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
+                        ...aiMessageData,
+                        createdAt: serverTimestamp() as Timestamp,
+                    });
+                } else {
+                    if (!response.body) throw new Error("Response body is not available for streaming.");
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let aiResponseText = '';
+                    const aiMessageRef = doc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`));
+                    setStreamingId(aiMessageRef.id);
+                    await setDoc(aiMessageRef, { 
+                        text: '', 
+                        role: 'ai', 
+                        createdAt: serverTimestamp() as Timestamp,
+                        isAnalysisResponse: isAnalysisMode 
+                    });
+                    
+                    let buffer = '';
+
+                    const processChunk = async (chunk: string) => {
+                        let content;
+                        try {
+                            const parsed = JSON.parse(chunk);
+                            content = parsed.output || parsed.text || parsed.response;
+                        } catch (e) {
+                            content = chunk;
                         }
-                        boundary = buffer.indexOf('\n');
-                    }
-                }
+                        
+                        if (content === null || content === undefined || typeof content === 'object') {
+                            return; // Ignore these invalid types
+                        }
+                        
+                        const stringContent = String(content);
+                        if (stringContent.trim() === 'null' || stringContent.trim() === 'undefined') {
+                            return;
+                        }
+                    
+                        aiResponseText += stringContent;
+                        await updateDoc(aiMessageRef, { text: aiResponseText });
+                    };
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (signal.aborted) {
+                           reader.cancel();
+                           throw new DOMException('Aborted by user', 'AbortError');
+                        }
+                        if (done) break;
 
-                if (buffer.trim()) {
-                    await processChunk(buffer);
-                }
-                
-                // If after all chunks, the response is still empty, show a fallback.
-                if (!aiResponseText.trim()) {
-                    const fallbackText = "Sorry, I couldn't get a response.";
-                    await updateDoc(aiMessageRef, { text: fallbackText });
-                    aiResponseText = fallbackText;
-                }
-
-                const finalAiText = aiResponseText;
-                let audioUrl: string | undefined = undefined;
-                if (userSentAudio && finalAiText && finalAiText.trim().length > 0 && finalAiText !== "Sorry, I couldn't get a response.") {
-                    try {
-                        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                        const ttsResponse = await ai.models.generateContent({ model: "gemini-2.5-flash-preview-tts", contents: [{ parts: [{ text: finalAiText }] }], config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } } });
-                        const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-                        if (base64Audio) {
-                            const bstr = atob(base64Audio);
-                            let n = bstr.length;
-                            const u8arr = new Uint8Array(n);
-                            while(n--) u8arr[n] = bstr.charCodeAt(n);
-                            const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
-                            const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
-                            const formData = new FormData();
-                            formData.append('file', audioFile);
-                            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-                            const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
-                            const uploadResponse = await fetch(url, { method: 'POST', body: formData, signal });
-                            if (uploadResponse.ok) {
-                                const uploadData = await uploadResponse.json();
-                                audioUrl = uploadData.secure_url;
-                            } else {
-                                console.error("AI audio upload to Cloudinary failed", await uploadResponse.text());
+                        buffer += decoder.decode(value, { stream: true });
+                        let boundary = buffer.indexOf('\n');
+                        while (boundary !== -1) {
+                            const line = buffer.substring(0, boundary);
+                            buffer = buffer.substring(boundary + 1);
+                            if (line.trim()) {
+                                await processChunk(line);
                             }
+                            boundary = buffer.indexOf('\n');
                         }
-                    } catch (ttsError) { console.error("TTS generation or upload failed:", ttsError); }
-                }
-                if (audioUrl) await updateDoc(aiMessageRef, { audioUrl });
+                    }
 
-                if (shouldGenerateTitle && !isAnalysisMode) {
-                    fetch('https://umarworks3.app.n8n.cloud/webhook/titlegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, history: [{ role: 'user', text: message }, { role: 'ai', text: finalAiText }] }) })
-                    .then(res => res.ok ? res.json() : null)
-                    .then(titleResult => {
-                        if (!titleResult) return;
-                        let newTitle: string | null = null;
-                        const data = Array.isArray(titleResult) ? titleResult[0] : titleResult;
-                        if (typeof data === 'string') newTitle = data.trim();
-                        else if (typeof data === 'object' && data !== null) newTitle = data.title || data.output || data.text || data.response || null;
-                        if (newTitle) {
-                            let cleanedTitle = String(newTitle).replace(/^"|"$/g, '').substring(0, 50).trim().replace(/undefined\s*$/, '').trim();
-                            if (cleanedTitle) updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { title: cleanedTitle });
-                        }
-                    }).catch(e => console.error("Failed to generate/update session title:", e));
+                    if (buffer.trim()) {
+                        await processChunk(buffer);
+                    }
+                    
+                    if (!aiResponseText.trim()) {
+                        const fallbackText = "Sorry, I couldn't get a response.";
+                        await updateDoc(aiMessageRef, { text: fallbackText });
+                        aiResponseText = fallbackText;
+                    }
+
+                    const finalAiText = aiResponseText;
+                    let audioUrl: string | undefined = undefined;
+                    if (userSentAudio && finalAiText && finalAiText.trim().length > 0 && finalAiText !== "Sorry, I couldn't get a response.") {
+                        try {
+                            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                            const ttsResponse = await ai.models.generateContent({ model: "gemini-2.5-flash-preview-tts", contents: [{ parts: [{ text: finalAiText }] }], config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } } });
+                            const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                            if (base64Audio) {
+                                const bstr = atob(base64Audio);
+                                let n = bstr.length;
+                                const u8arr = new Uint8Array(n);
+                                while(n--) u8arr[n] = bstr.charCodeAt(n);
+                                const audioBlob = pcmToWav(u8arr, 24000, 1, 16);
+                                const audioFile = new File([audioBlob], `ai-speech-${Date.now()}.wav`, { type: 'audio/wav' });
+                                const formData = new FormData();
+                                formData.append('file', audioFile);
+                                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                                const uploadResponse = await fetch(url, { method: 'POST', body: formData, signal });
+                                if (uploadResponse.ok) {
+                                    const uploadData = await uploadResponse.json();
+                                    audioUrl = uploadData.secure_url;
+                                } else {
+                                    console.error("AI audio upload to Cloudinary failed", await uploadResponse.text());
+                                }
+                            }
+                        } catch (ttsError) { console.error("TTS generation or upload failed:", ttsError); }
+                    }
+                    if (audioUrl) await updateDoc(aiMessageRef, { audioUrl });
+
+                    if (shouldGenerateTitle && !isAnalysisMode) {
+                        fetch('https://umarworks3.app.n8n.cloud/webhook/titlegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, history: [{ role: 'user', text: message }, { role: 'ai', text: finalAiText }] }) })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(titleResult => {
+                            if (!titleResult) return;
+                            let newTitle: string | null = null;
+                            const data = Array.isArray(titleResult) ? titleResult[0] : titleResult;
+                            if (typeof data === 'string') newTitle = data.trim();
+                            else if (typeof data === 'object' && data !== null) newTitle = data.title || data.output || data.text || data.response || null;
+                            if (newTitle) {
+                                let cleanedTitle = String(newTitle).replace(/^"|"$/g, '').substring(0, 50).trim().replace(/undefined\s*$/, '').trim();
+                                if (cleanedTitle) updateDoc(doc(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}`), { title: cleanedTitle });
+                            }
+                        }).catch(e => console.error("Failed to generate/update session title:", e));
+                    }
                 }
             }
         } catch (error) {
