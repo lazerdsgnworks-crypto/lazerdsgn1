@@ -1,16 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+// ESM fix for __dirname
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/lazerdsgn1/', // <-- Your GitHub Pages repo name
   plugins: [react()],
   resolve: {
     alias: {
-      // FIX: `__dirname` is not available in ES modules by default.
-      // Replaced it with a path resolution from the current working directory,
-      // which is the project root when running Vite.
-      "@": path.resolve("./src"),
+      "@": path.resolve(__dirname, "./src"), // <-- dirname used correctly
     },
   },
 })
