@@ -4,6 +4,11 @@
 
 
 
+
+
+
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -520,6 +525,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [isCreatePostModalOpen, setCreatePostModalOpen] = useState(false);
     const [isRepostModalOpen, setRepostModalOpen] = useState(false);
     const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
+    const [showScrollTop, setShowScrollTop] = useState(false);
     
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -541,6 +547,18 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         const timer = setTimeout(() => pageRef.current?.classList.add('visible'), 10);
         return () => clearTimeout(timer);
     }, []);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setShowScrollTop(window.scrollY > 300);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     useEffect(() => {
         if (!user) {
@@ -799,7 +817,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         try {
             const querySnapshot = await getDocs(q);
             // FIX: Reordered properties to place the spread operator after explicit properties. This resolves a TypeScript type inference issue.
-            const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+            // FIX: Cast doc.data() to any to avoid spread error
+            const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as UserProfile));
             setSearchResults(results);
         } catch (error) {
             console.error("Error searching users:", error);
@@ -816,7 +835,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             <div className="max-w-7xl mx-auto px-0 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-12 gap-8">
                     <main className="col-span-12 lg:col-span-8 xl:col-span-7 border-r border-primary">
-                        <div className="sticky top-[68px] z-20 bg-primary/80 backdrop-blur-md -mx-4 sm:mx-0 px-4 sm:px-0 py-3 border-b border-primary">
+                        {/* Sticky Header with explicit bg-primary to cover scrolled content */}
+                        <div className="sticky top-[68px] z-20 bg-primary -mx-4 sm:mx-0 px-4 sm:px-0 py-3 border-b border-primary">
                             <h1 className="text-xl font-bold text-primary px-4">Community Feed</h1>
                         </div>
                         
@@ -862,6 +882,16 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                     </aside>
                 </div>
             </div>
+            
+            {showScrollTop && (
+                <button
+                    onClick={scrollToTop}
+                    className="fixed bottom-6 right-6 p-3 bg-secondary border border-primary rounded-full shadow-lg z-30 hover:bg-hover transition-all duration-300 text-primary"
+                    aria-label="Scroll to top"
+                >
+                    <svg className="w-6 h-6"><use href="#icon-arrow-up"></use></svg>
+                </button>
+            )}
 
             <button
                 onClick={() => setCreatePostModalOpen(true)}

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User, CommunityPost, Comment, Reply, Author, UserProfile, RepostedPost, Poll } from '../../types.ts';
 import { db } from '../../services/firebase.ts';
@@ -429,7 +430,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
         const repostTimeAgo = reposted.createdAt ? formatTimeAgoShort(reposted.createdAt.toDate()) : '...';
         const hasMedia = reposted.mediaUrls?.length > 0 || reposted.audioUrl || reposted.poll;
         return (
-            <div className="mt-2 border border-secondary rounded-xl p-3 cursor-pointer hover:bg-hover transition-colors" onClick={() => { /* maybe navigate to original post in future */ }}>
+            <div className="mt-2 border border-primary rounded-xl p-3 cursor-pointer hover:bg-hover transition-colors" onClick={() => { /* maybe navigate to original post in future */ }}>
                 <div className="flex items-center space-x-2 mb-2">
                     <button onClick={(e) => { e.stopPropagation(); onViewProfile(reposted.author.id); }} className="flex-shrink-0">
                         <Avatar email={reposted.author.email} photoURL={reposted.author.photoURL} size="sm" />
@@ -475,7 +476,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     const hasMedia = post.mediaUrls?.length > 0 || post.audioUrl || post.poll;
 
     return (
-        <div className="bg-secondary sm:rounded-xl p-4 overflow-hidden border-b border-primary sm:border-b-0">
+        <div className="bg-transparent border-b border-primary sm:border sm:border-primary sm:rounded-xl p-4 overflow-hidden">
             <div className="flex space-x-4">
                 <div className="flex-shrink-0">
                     <button onClick={() => onViewProfile(post.author.id)}>
