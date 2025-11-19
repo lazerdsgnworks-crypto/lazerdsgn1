@@ -1,6 +1,10 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Page, User } from '../types';
+import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import { ADMIN_UIDS } from '../constants';
+import Modal from '../components/Modal';
 
 interface HomePageProps {
     user: User;
@@ -51,9 +55,33 @@ const testimonials = [
     { name: "Maria Rodriguez", title: "Founder, Small Retail", avatar: null, avatarInitial: "M", text: "The execution of our campaign assets exceeded expectations. Every touchpoint felt integrated and premium, improving overall brand perception." },
 ];
 
+const getTimeAgo = (date: Date | null) => {
+    if (!date) return '';
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "y ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "mo ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m ago";
+    return Math.floor(seconds) + "s ago";
+};
 
 const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, openLoginModal }) => {
     const pageRef = useRef<HTMLDivElement>(null);
+    const [badgeConfig, setBadgeConfig] = useState<{ timestamp: Date | null, text: string }>({ timestamp: new Date(), text: 'New Design System' });
+    const [isEditBadgeModalOpen, setIsEditBadgeModalOpen] = useState(false);
+    const [editText, setEditText] = useState('');
+    const [shouldUpdateTimestamp, setShouldUpdateTimestamp] = useState(false);
+    const [isSavingBadge, setIsSavingBadge] = useState(false);
+    const [timeAgo, setTimeAgo] = useState('');
+
+    const isAdmin = user && ADMIN_UIDS.includes(user.uid);
 
     useEffect(() => {
         // Trigger fade-in animation
@@ -62,57 +90,124 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
         }, 10);
         return () => clearTimeout(timer);
     }, []);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(doc(db, 'config', 'homepage'), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const ts = data.timestamp ? data.timestamp.toDate() : new Date();
+                setBadgeConfig({ 
+                    timestamp: ts,
+                    text: data.text || 'New Design System' 
+                });
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        // Update "time ago" every minute
+        const updateTime = () => {
+            setTimeAgo(getTimeAgo(badgeConfig.timestamp));
+        };
+        updateTime();
+        const interval = setInterval(updateTime, 60000);
+        return () => clearInterval(interval);
+    }, [badgeConfig.timestamp]);
+
+    const handleEditBadgeClick = () => {
+        setEditText(badgeConfig.text);
+        setShouldUpdateTimestamp(false);
+        setIsEditBadgeModalOpen(true);
+    };
+
+    const handleSaveBadgeConfig = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSavingBadge(true);
+        try {
+            const payload: any = {
+                text: editText
+            };
+            if (shouldUpdateTimestamp) {
+                payload.timestamp = Timestamp.now();
+            }
+            
+            // Using merge: true to preserve timestamp if we aren't updating it, 
+            // but here we might want to be explicit.
+            await setDoc(doc(db, 'config', 'homepage'), payload, { merge: true });
+            
+            setIsEditBadgeModalOpen(false);
+        } catch (error) {
+            console.error("Failed to save badge config:", error);
+            alert("Failed to update badge.");
+        } finally {
+            setIsSavingBadge(false);
+        }
+    };
     
     return (
         <div ref={pageRef} className="page-transition bg-black min-h-screen w-full text-white selection:bg-blue-500/30 selection:text-white font-sans">
             
             {/* --- HERO SECTION --- */}
-            <section className="relative pt-40 pb-20 md:pt-52 md:pb-32 flex flex-col items-center text-center px-4 max-w-7xl mx-auto">
+            <section className="relative pt-32 pb-20 md:pt-52 md:pb-32 flex flex-col items-center text-center px-4 max-w-7xl mx-auto">
                 {/* Pill Badge */}
-                <div className="mb-10 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1a1a1a] border border-[#333] transition-all hover:border-[#444] cursor-default animate-fadeIn">
-                    <span className="text-sm font-medium text-neutral-400">6d ago: <span className="text-white">New Design System</span></span>
+                <div className="mb-8 md:mb-10 relative group">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1a1a] border border-[#333] transition-all hover:border-[#444] cursor-default animate-fadeIn">
+                        <span className="text-sm font-medium text-neutral-400">{timeAgo}: <span className="text-white">{badgeConfig.text}</span></span>
+                    </div>
+                    {isAdmin && (
+                        <button 
+                            onClick={handleEditBadgeClick}
+                            className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 text-neutral-500 hover:text-white hover:bg-white/10 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                            title="Edit Badge"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                <path d="M21.731 2.269a2.625 2.625 0 1 1 3.71 3.71l-9.373 9.373-3.71.928.928-3.71 9.373-9.373ZM11.25 13.5V18h4.5l9.75-9.75-4.5-4.5-9.75 9.75Z" transform="translate(-7 -1)"/> 
+                            </svg>
+                        </button>
+                    )}
                 </div>
 
                 {/* Headline */}
-                <h1 className="text-6xl md:text-8xl lg:text-9xl font-extrabold tracking-tighter text-white mb-8 leading-[1.05] animate-fadeIn" style={{ animationDelay: '0.1s' }}>
-                    Build better<br /> sites, faster
+                <h1 className="text-[40px] md:text-[54px] font-semibold tracking-tighter text-white mb-6 md:mb-8 leading-[1.1] animate-fadeIn" style={{ animationDelay: '0.1s', fontFamily: 'Poppins, sans-serif' }}>
+                    Design that Slays<br /> Every Time!
                 </h1>
 
                 {/* Subheadline */}
-                <p className="text-lg md:text-xl text-neutral-400 max-w-2xl mx-auto mb-12 leading-relaxed animate-fadeIn" style={{ animationDelay: '0.2s' }}>
-                    LazerDsgn is the design tool for websites. Design freely, publish fast, and scale with CMS, SEO, analytics, and more.
+                <p className="text-sm sm:text-base md:text-xl text-neutral-400 max-w-2xl mx-auto mb-10 md:mb-12 leading-relaxed animate-fadeIn" style={{ animationDelay: '0.2s' }}>
+                    We build bold, aesthetic-driven brands for creators, startups, and businesses that want to actually stand out. From scroll-stopping visuals to clean, future-ready identities.
                 </p>
 
-                {/* Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 animate-fadeIn w-full sm:w-auto justify-center" style={{ animationDelay: '0.3s' }}>
+                {/* Buttons - Updated to match requested style */}
+                <div className="flex flex-row gap-3 sm:gap-4 animate-fadeIn w-full justify-center px-4 sm:w-auto" style={{ animationDelay: '0.3s' }}>
                     {user ? (
                         <>
                              <button 
-                                onClick={() => navigateTo(Page.Chat)} 
-                                className="px-8 py-3.5 rounded-full bg-white text-black font-bold text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] min-w-[160px]"
+                                onClick={() => navigateTo(Page.Community)} 
+                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-white text-black font-medium text-[15px] sm:text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)]"
                             >
-                                Start Creating
+                                Join Community
                             </button>
                             <button 
-                                onClick={() => navigateTo(Page.Community)} 
-                                className="px-8 py-3.5 rounded-full bg-[#1a1a1a] text-white border border-[#333] font-bold text-base hover:bg-[#252525] transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 min-w-[160px]"
+                                onClick={() => navigateTo(Page.Chat)} 
+                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-[#111] text-white border border-[#222] font-medium text-[15px] sm:text-base hover:bg-[#222] transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto"
                             >
-                                <span>Start with AI</span>
+                                Let's Chat
                             </button>
                         </>
                     ) : (
                         <>
                             <button 
-                                onClick={openSignupModal} 
-                                className="px-8 py-3.5 rounded-full bg-white text-black font-bold text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] min-w-[160px]"
+                                onClick={openLoginModal} 
+                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-white text-black font-medium text-[15px] sm:text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)]"
                             >
-                                Start for free
+                                Enter Studio
                             </button>
                             <button 
-                                onClick={openLoginModal} 
-                                className="px-8 py-3.5 rounded-full bg-[#1a1a1a] text-white border border-[#333] font-bold text-base hover:bg-[#252525] transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 min-w-[160px]"
+                                onClick={openSignupModal} 
+                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-[#111] text-white border border-[#222] font-medium text-[15px] sm:text-base hover:bg-[#222] transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto"
                             >
-                                <span>Start with AI</span>
+                                Start Creating
                             </button>
                         </>
                     )}
@@ -121,13 +216,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
 
             {/* --- PROJECTS SECTION --- */}
             <section id="projects" className="py-20 md:py-32 border-t border-neutral-900">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 flex justify-between items-end">
-                    <div>
-                        <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-white mb-4">
-                            Selected Works
-                        </h2>
-                        <p className="text-neutral-500">Curated high-impact visual identities.</p>
-                    </div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 flex justify-end items-end">
                     <button onClick={() => navigateTo(Page.Portfolio)} className="hidden md:block text-sm font-bold text-white border-b border-white/20 pb-1 hover:border-white transition-colors">View All Projects</button>
                 </div>
                 
@@ -138,7 +227,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                                 <img src={project.url} alt={project.title} className="absolute inset-0 w-full h-full object-cover opacity-80 transition-all duration-500 group-hover:opacity-100 group-hover:scale-110" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-90"></div>
                                 <div className="absolute bottom-0 left-0 p-6 w-full">
-                                    <h3 className="text-xl font-bold text-white mb-1">{project.title}</h3>
+                                    <h3 className="text-xl font-semibold text-white mb-1">{project.title}</h3>
                                     <p className="text-sm text-neutral-400 font-medium">{project.category}</p>
                                 </div>
                             </div>
@@ -148,11 +237,11 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
             </section>
             
             {/* --- ABOUT SECTION --- */}
-            <section id="about" className="py-24 bg-[#050505] border-t border-neutral-900">
+            <section id="about" className="py-16 bg-[#050505] border-t border-neutral-900">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid md:grid-cols-2 gap-16 items-center">
                     <div className="order-2 md:order-1">
                         <span className="inline-block py-1 px-3 rounded-full bg-white/10 text-white text-xs font-bold uppercase tracking-widest mb-6">Our Mission</span>
-                        <h3 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-white mb-6">We build brands that resonate.</h3>
+                        <h3 className="text-3xl md:text-5xl font-semibold tracking-tighter text-white mb-6">We build brands that resonate.</h3>
                         <p className="text-neutral-400 text-lg leading-relaxed mb-8">
                             Our mission is simple: to help brands connect with their audiences through exceptional design. We believe that great design is not just about aesthetics; it's about creating meaningful experiences that drive results.
                         </p>
@@ -171,11 +260,11 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
             </section>
 
             {/* --- TESTIMONIALS SECTION --- */}
-            <section id="testimonials" className="py-24 border-t border-neutral-900 bg-black relative">
+            <section id="testimonials" className="py-16 border-t border-neutral-900 bg-black relative">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-16">
                          <span className="text-neutral-500 font-semibold tracking-wide uppercase text-xs">Testimonials</span>
-                        <h2 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-white mt-3">
+                        <h2 className="text-3xl md:text-5xl font-semibold tracking-tighter text-white mt-3">
                             Loved by creators.
                         </h2>
                     </div>
@@ -192,7 +281,7 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                                                         : <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center text-sm font-bold text-white border border-neutral-700">{t.avatarInitial}</div>
                                                     }
                                                     <div className="ml-3 text-left">
-                                                        <p className="font-bold text-sm text-white">{t.name}</p>
+                                                        <p className="font-semibold text-sm text-white">{t.name}</p>
                                                         <p className="text-xs text-neutral-500">{t.title}</p>
                                                     </div>
                                                 </div>
@@ -205,6 +294,54 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                     </div>
                 </div>
             </section>
+
+            {/* Edit Badge Modal */}
+            <Modal isOpen={isEditBadgeModalOpen} onClose={() => setIsEditBadgeModalOpen(false)}>
+                <div className="p-1">
+                    <h2 className="text-2xl font-bold text-primary mb-4">Edit Homepage Badge</h2>
+                    <form onSubmit={handleSaveBadgeConfig} className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-secondary mb-2">Content Text (e.g., "New Design System")</label>
+                            <input 
+                                type="text" 
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                className="w-full px-4 py-2 bg-muted border border-secondary rounded-lg text-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+                        
+                        <div className="flex items-center space-x-3">
+                             <input 
+                                type="checkbox" 
+                                id="update-timestamp"
+                                checked={shouldUpdateTimestamp}
+                                onChange={(e) => setShouldUpdateTimestamp(e.target.checked)}
+                                className="w-5 h-5 rounded border-secondary text-primary bg-muted focus:ring-primary"
+                            />
+                            <label htmlFor="update-timestamp" className="text-sm text-primary cursor-pointer select-none">
+                                Reset Timer to Now (Sets time to "0s ago")
+                            </label>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-primary/10">
+                            <button 
+                                type="button"
+                                onClick={() => setIsEditBadgeModalOpen(false)}
+                                className="px-4 py-2 rounded-lg border border-secondary text-secondary hover:bg-hover transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit"
+                                disabled={isSavingBadge}
+                                className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-neutral-200 transition-colors disabled:opacity-50"
+                            >
+                                {isSavingBadge ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </Modal>
         </div>
     );
 };

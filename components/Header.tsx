@@ -14,6 +14,21 @@ interface HeaderProps {
     onOpenChangePasswordModal: () => void;
 }
 
+interface MobileNavLinkProps {
+    onClick: (e: React.MouseEvent) => void;
+    children: React.ReactNode;
+}
+
+const MobileNavLink: React.FC<MobileNavLinkProps> = ({ onClick, children }) => (
+    <a 
+        href="#" 
+        onClick={onClick}
+        className="block text-2xl font-medium text-neutral-400 hover:text-white transition-colors"
+    >
+        {children}
+    </a>
+);
+
 const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout, onLogin, onViewProfile, currentPage, onOpenChangePasswordModal }) => {
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -43,6 +58,16 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    // Prevent scrolling when mobile menu is open
+    useEffect(() => {
+        if (isMobileMenuOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [isMobileMenuOpen]);
+
 
     const handleNav = (page: Page, e: React.MouseEvent) => {
         e.preventDefault();
@@ -50,28 +75,20 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
         setMobileMenuOpen(false);
     };
 
-    const handleProfileNav = (e: React.MouseEvent) => {
-        e.preventDefault();
-        onViewProfile();
-        setMobileMenuOpen(false);
-    }
-    
     const handleMobileMenuToggle = () => {
-        setMobileMenuOpen(true);
+        setMobileMenuOpen(!isMobileMenuOpen);
     };
     
-    // Dynamic styles based on page
     const navContainerClass = isHomePage 
-        ? `fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/80 backdrop-blur-md border-b border-white/10 py-4' : 'bg-transparent py-6'}`
+        ? `fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-black/80 backdrop-blur-md border-b border-white/10 py-3' : 'bg-transparent py-5'}`
         : `static-navbar-container ${isScrolled ? 'scrolled' : ''}`;
         
     const navInnerClass = isHomePage
         ? `w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8`
         : 'static-navbar';
 
-    const textColorClass = isHomePage ? 'text-white' : 'text-primary';
-    const secondaryTextColorClass = isHomePage ? 'text-neutral-400' : 'text-secondary';
     const hoverTextColorClass = isHomePage ? 'hover:text-white' : 'hover:text-primary';
+    const secondaryTextColorClass = isHomePage ? 'text-neutral-400' : 'text-secondary';
     const logoColorClass = isHomePage ? 'text-white' : 'text-primary';
 
     const AuthLinks: React.FC<{isMobile: boolean}> = ({ isMobile }) => {
@@ -81,50 +98,66 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
             
         if (user) {
             if (isMobile) {
-                return (
-                    <button onClick={() => { onLogout(); setMobileMenuOpen(false); }} className={baseClassName}>
-                        Logout
-                    </button>
-                );
+                return null; // Handled separately in mobile menu
             }
 
             return (
                 <div className="relative" ref={profileMenuRef}>
-                    <button onClick={() => setProfileMenuOpen(prev => !prev)} className={`flex items-center space-x-2 group p-1.5 -m-1.5 rounded-lg transition-colors ${isHomePage ? 'hover:bg-white/10' : 'hover:bg-hover'}`}>
+                    <button onClick={() => setProfileMenuOpen(prev => !prev)} className={`flex items-center space-x-2 group p-1.5 -m-1.5 rounded-full transition-all duration-300 border border-transparent ${isProfileMenuOpen ? 'bg-white/10 border-white/10' : ''} ${isHomePage ? 'hover:bg-white/10' : 'hover:bg-hover'}`}>
                         <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
                         <span className={`hidden sm:inline text-sm font-medium transition-colors ${isHomePage ? 'text-neutral-300 group-hover:text-white' : 'text-secondary group-hover:text-primary'}`}>
                             {userProfile?.username ?? 'Profile'}
                         </span>
-                        <svg className={`w-4 h-4 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''} ${isHomePage ? 'text-neutral-400' : 'text-muted'}`}>
+                        <svg className={`w-4 h-4 transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''} ${isHomePage ? 'text-neutral-400' : 'text-muted'}`}>
                             <use href="#icon-chevron-down"></use>
                         </svg>
                     </button>
-                    {isProfileMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-secondary rounded-xl shadow-lg py-1 z-20 border border-primary">
+                    
+                    {/* Enhanced Dropdown Menu */}
+                    <div 
+                        className={`absolute right-0 mt-3 w-64 origin-top-right rounded-2xl bg-[#0f0f0f]/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.5)] ring-1 ring-white/5 focus:outline-none overflow-hidden z-50 transform transition-all duration-200 ease-out ${isProfileMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}
+                    >
+                        <div className="px-4 py-4 border-b border-white/5">
+                            <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Signed in as</p>
+                            <p className="text-sm font-bold text-white truncate">{user.email}</p>
+                        </div>
+                        
+                        <div className="p-1.5 space-y-0.5">
                             <button
                                 onClick={() => { onViewProfile(); setProfileMenuOpen(false); }}
-                                className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover flex items-center space-x-3"
+                                className="group flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium text-neutral-300 rounded-xl hover:bg-white/10 hover:text-white transition-all"
                             >
-                                <svg className="w-4 h-4 text-muted"><use href="#icon-user-default"></use></svg>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 group-hover:bg-white/10 border border-white/5 transition-colors">
+                                     <svg className="w-4 h-4 text-neutral-400 group-hover:text-white"><use href="#icon-user-default"></use></svg>
+                                </div>
                                 <span>My Profile</span>
                             </button>
+                            
                             <button
                                 onClick={() => { onOpenChangePasswordModal(); setProfileMenuOpen(false); }}
-                                className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover flex items-center space-x-3"
+                                className="group flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium text-neutral-300 rounded-xl hover:bg-white/10 hover:text-white transition-all"
                             >
-                                <svg className="w-4 h-4 text-muted"><use href="#icon-key"></use></svg>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 group-hover:bg-white/10 border border-white/5 transition-colors">
+                                    <svg className="w-4 h-4 text-neutral-400 group-hover:text-white"><use href="#icon-key"></use></svg>
+                                </div>
                                 <span>Change Password</span>
                             </button>
-                            <div className="my-1 border-t border-primary/10"></div>
+                        </div>
+                        
+                        <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-0.5"></div>
+                        
+                        <div className="p-1.5">
                             <button
                                 onClick={() => { onLogout(); setProfileMenuOpen(false); }}
-                                className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-hover flex items-center space-x-3"
+                                className="group flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-400 rounded-xl hover:bg-red-500/10 hover:text-red-300 transition-all"
                             >
-                                <svg className="w-4 h-4"><use href="#icon-logout"></use></svg>
-                                <span>Logout</span>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/5 group-hover:bg-red-500/10 border border-red-500/10 transition-colors">
+                                    <svg className="w-4 h-4 text-red-400"><use href="#icon-logout"></use></svg>
+                                </div>
+                                <span>Log out</span>
                             </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             );
         }
@@ -145,18 +178,17 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                     <div className="flex justify-between items-center w-full">
                         {/* Left: Logo */}
                         <div className="flex-1 flex justify-start items-center">
-                            <div className="text-xl font-extrabold tracking-tighter flex items-center gap-2 cursor-pointer" onClick={(e) => handleNav(Page.Home, e)}>
-                                <svg viewBox="0 0 24 24" fill="currentColor" className={`w-6 h-6 ${logoColorClass}`}>
+                            <div className="text-xl font-extrabold tracking-tighter flex items-center gap-2 cursor-pointer z-[101]" onClick={(e) => { handleNav(Page.Home, e); setMobileMenuOpen(false); }}>
+                                <svg viewBox="0 0 24 24" fill="currentColor" className={`w-6 h-6 ${isMobileMenuOpen ? 'text-white' : logoColorClass} transition-colors duration-300`}>
                                      <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.95 1.48-2.95 1.47-2.95-1.47L12 11zm0 3.9l-10 5 10 5 10-5-10-5z"/>
                                 </svg>
-                                <span className={logoColorClass}>LazerDsgn.</span>
+                                <span className={`${isMobileMenuOpen ? 'text-white' : logoColorClass} transition-colors duration-300`}>LazerDsgn.</span>
                             </div>
                         </div>
 
                         {/* Center: Nav Links (Desktop) */}
                         <nav className={`hidden md:flex flex-1 justify-center space-x-8 text-sm font-medium items-center ${secondaryTextColorClass}`}>
-                            {/* Only show navigational links if NOT on home page, or keep them consistent? 
-                                Reference image shows minimal header. Let's keep links but subtle. */}
+                            <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Home, e)}>Home</a>
                             <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
                             <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Community, e)}>Community</a>
                             <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
@@ -167,9 +199,9 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                             <AuthLinks isMobile={false} />
                         </div>
 
-                        {/* Mobile Toggle */}
-                        <div className="flex items-center md:hidden">
-                            <button onClick={handleMobileMenuToggle} className={`p-2 ${isHomePage ? 'text-white' : 'text-primary'}`}>
+                        {/* Mobile Toggle (Only visible when menu is closed, menu has its own close button) */}
+                        <div className={`flex items-center md:hidden z-[101] ${isMobileMenuOpen ? 'hidden' : 'block'}`}>
+                            <button onClick={handleMobileMenuToggle} className={`p-2 ${isHomePage ? 'text-white' : 'text-primary'} transition-colors duration-300`}>
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M3 12H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                     <path d="M3 6H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -181,36 +213,45 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                 </div>
             </header>
 
-            {/* Mobile Menu */}
-            <div className={`fixed inset-0 bg-secondary z-[100] flex flex-col transform transition-transform duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="flex justify-between items-center p-6 flex-shrink-0 border-b border-primary">
-                    <div className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-primary">
+            {/* Mobile Menu - Fade Animation & Dark Theme */}
+            <div className={`fixed inset-0 bg-black z-[100] flex flex-col transition-opacity duration-300 ease-in-out md:hidden ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                
+                {/* Menu Header: Logo & Cross Icon */}
+                <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-900/30">
+                    <div className="flex items-center gap-2 text-white font-extrabold text-xl tracking-tighter">
+                         <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                              <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.95 1.48-2.95 1.47-2.95-1.47L12 11zm0 3.9l-10 5 10 5 10-5-10-5z"/>
                         </svg>
-                        <a href="#" className="text-primary" onClick={(e) => handleNav(Page.Home, e)}>LazerDsgn.</a>
+                        <span>LazerDsgn.</span>
                     </div>
-                    <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-primary hover:bg-hover rounded-full">
-                        <svg className="w-6 h-6"><use href="#icon-x-close"></use></svg>
+                    <button onClick={() => setMobileMenuOpen(false)} className="text-white p-2 hover:text-neutral-300 transition-colors">
+                        <svg className="w-8 h-8"><use href="#icon-x-close"></use></svg>
                     </button>
                 </div>
-                <nav className="flex-grow flex flex-col space-y-6 p-8 text-xl font-medium text-secondary">
-                    <a href="#" className="hover:text-primary transition-colors" onClick={(e) => handleNav(Page.Home, e)}>Home</a>
-                    <a href="#" className="hover:text-primary transition-colors" onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
-                    <a href="#" className="hover:text-primary transition-colors" onClick={(e) => handleNav(Page.Community, e)}>Community</a>
-                    <a href="#" className="hover:text-primary transition-colors" onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
-                    {user && (
-                        <div className="pt-6 border-t border-primary/10 mt-6">
-                            <a href="#" className="flex items-center space-x-3 group" onClick={(e) => handleProfileNav(e)}>
-                                <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="md" />
-                                <span className="font-medium text-secondary group-hover:text-primary">{userProfile?.username ?? 'Profile'}</span>
-                            </a>
-                        </div>
-                    )}
+
+                {/* Menu Links */}
+                <nav className="flex flex-col px-8 mt-6 space-y-4">
+                     <MobileNavLink onClick={(e) => handleNav(Page.Home, e)}>Home</MobileNavLink>
+                     <MobileNavLink onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</MobileNavLink>
+                     <MobileNavLink onClick={(e) => handleNav(Page.Chat, e)}>Chat</MobileNavLink>
+                     <MobileNavLink onClick={(e) => handleNav(Page.Community, e)}>Community</MobileNavLink>
+                     {user && <MobileNavLink onClick={(e) => handleNav(Page.Profile, e)}>Dashboard</MobileNavLink>}
+
+                     {/* Logout Icon / Login Button */}
+                     {user ? (
+                         <div className="pt-4">
+                             <button onClick={() => { onLogout(); setMobileMenuOpen(false); }} className="text-neutral-500 hover:text-red-500 transition-colors p-2 -ml-2" title="Logout">
+                                 <svg className="w-7 h-7"><use href="#icon-logout"></use></svg>
+                             </button>
+                         </div>
+                     ) : (
+                         <div className="pt-6">
+                            <button onClick={() => { onLogin(); setMobileMenuOpen(false); }} className="text-xl font-semibold text-white hover:text-neutral-300 text-left">
+                                Log In
+                            </button>
+                         </div>
+                     )}
                 </nav>
-                 <div className="p-8 border-t border-primary">
-                    <AuthLinks isMobile={true} />
-                </div>
             </div>
         </>
     );

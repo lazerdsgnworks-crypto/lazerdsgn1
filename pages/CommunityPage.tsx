@@ -1,14 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -512,9 +501,13 @@ interface CommunityPageProps {
     userProfile: UserProfile | null;
     onDeletePost: (post: CommunityPost) => void;
     onViewProfile: (userId: string) => void;
+    followingIds: Set<string>;
+    onToggleFollow: (userId: string) => void;
 }
 
-const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDeletePost, onViewProfile }) => {
+type FeedTab = 'all' | 'following';
+
+const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDeletePost, onViewProfile, followingIds, onToggleFollow }) => {
     const pageRef = useRef<HTMLDivElement>(null);
     const [posts, setPosts] = useState<CommunityPost[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -526,6 +519,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [isRepostModalOpen, setRepostModalOpen] = useState(false);
     const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
+    const [activeTab, setActiveTab] = useState<FeedTab>('all');
     
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -570,7 +564,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
         setError(null);
         const postsQuery = query(collection(db, 'community-posts'), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(postsQuery, (snapshot: QuerySnapshot<DocumentData>) => {
-            setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommunityPost)));
+            setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as CommunityPost)));
             setIsLoading(false);
         }, (err) => {
             console.error("Error fetching posts:", err);
@@ -829,15 +823,38 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const handleImageClick = (url: string) => {
         setPreviewImageUrl(url);
     };
+    
+    // Filter posts based on active tab
+    const displayedPosts = useMemo(() => {
+        if (activeTab === 'following') {
+            return posts.filter(post => followingIds.has(post.author.id));
+        }
+        return posts;
+    }, [posts, activeTab, followingIds]);
 
     return (
         <div ref={pageRef} className="page-transition bg-primary">
             <div className="max-w-7xl mx-auto px-0 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-12 gap-8">
                     <main className="col-span-12 lg:col-span-8 xl:col-span-7 border-r border-primary">
-                        {/* Sticky Header with explicit bg-primary to cover scrolled content */}
-                        <div className="sticky top-[68px] z-20 bg-primary -mx-4 sm:mx-0 px-4 sm:px-0 py-3 border-b border-primary">
-                            <h1 className="text-xl font-bold text-primary px-4">Community Feed</h1>
+                        {/* Sticky Header with Tabs */}
+                        <div className="sticky top-[68px] z-20 bg-primary/95 backdrop-blur-md -mx-4 sm:mx-0 border-b border-primary transition-colors duration-300">
+                            <div className="flex px-4">
+                                <button 
+                                    onClick={() => setActiveTab('all')}
+                                    className={`flex-1 py-4 text-sm font-bold text-center relative transition-colors ${activeTab === 'all' ? 'text-primary' : 'text-secondary hover:text-primary hover:bg-hover'}`}
+                                >
+                                    Community Feed
+                                    {activeTab === 'all' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-blue-500 rounded-full"></div>}
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('following')}
+                                    className={`flex-1 py-4 text-sm font-bold text-center relative transition-colors ${activeTab === 'following' ? 'text-primary' : 'text-secondary hover:text-primary hover:bg-hover'}`}
+                                >
+                                    Following
+                                    {activeTab === 'following' && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-blue-500 rounded-full"></div>}
+                                </button>
+                            </div>
                         </div>
                         
                         <div className="sm:space-y-4 p-0 sm:p-4">
@@ -845,13 +862,13 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                 Array.from({ length: 5 }).map((_, i) => <PostSkeleton key={i} />)
                             ) : error ? (
                                  <div className="text-center py-10 text-red-500">{error}</div>
-                            ) : posts.length === 0 ? (
+                            ) : displayedPosts.length === 0 ? (
                                 <div className="text-center py-20 text-muted">
                                     <h3 className="text-lg font-semibold">It's quiet in here...</h3>
-                                    <p>Be the first to start a conversation!</p>
+                                    <p>{activeTab === 'following' ? "You aren't following anyone yet or they haven't posted." : "Be the first to start a conversation!"}</p>
                                 </div>
                             ) : (
-                                posts.map(post => (
+                                displayedPosts.map(post => (
                                     <PostItem
                                         key={post.id}
                                         post={post}
@@ -865,6 +882,8 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                         onViewProfile={onViewProfile}
                                         onImageClick={handleImageClick}
                                         onRepost={handleOpenRepostModal}
+                                        followingIds={followingIds}
+                                        onToggleFollow={onToggleFollow}
                                     />
                                 ))
                             )}

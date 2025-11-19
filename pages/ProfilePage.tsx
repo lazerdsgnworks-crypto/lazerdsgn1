@@ -1,9 +1,11 @@
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile, RepostedPost } from '../types.ts';
 import { db } from '../services/firebase.ts';
 // FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
-import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp, getDoc, increment } from 'firebase/firestore';
 import PostItem from '../components/community/PostItem.tsx';
 import Avatar from '../components/Avatar.tsx';
 import ImagePreviewModal from '../components/community/ImagePreviewModal.tsx';
@@ -21,6 +23,8 @@ interface ProfilePageProps {
     onLogout: () => void;
     onViewProfile: (userId: string) => void;
     onOpenChangePasswordModal: () => void;
+    followingIds: Set<string>;
+    onToggleFollow: (userId: string) => void;
 }
 
 type ProfileTab = 'all' | 'threads' | 'ai' | 'saved' | 'reposts';
@@ -44,18 +48,17 @@ const PostSkeleton: React.FC = () => (
 
 
 const ProfileHeaderSkeleton: React.FC = () => (
-    <div className="flex flex-row items-start gap-4 sm:gap-6 p-4 md:p-0 animate-pulse">
-        <div className="flex-1 space-y-4 w-full pt-2">
-            <div className="space-y-2">
-                <div className="h-6 sm:h-7 bg-muted rounded w-1/2"></div>
-                <div className="h-4 bg-muted rounded w-1/3"></div>
-            </div>
-            <div className="space-y-2">
-                <div className="h-4 bg-muted rounded w-full"></div>
-                <div className="h-4 bg-muted rounded w-3/4"></div>
-            </div>
+    <div className="flex flex-col items-center p-6 animate-pulse space-y-6">
+        <div className="w-32 h-32 sm:w-40 sm:h-40 bg-muted rounded-full"></div>
+        <div className="space-y-3 w-full max-w-xs flex flex-col items-center">
+            <div className="h-6 bg-muted rounded w-1/2"></div>
+            <div className="h-4 bg-muted rounded w-3/4"></div>
         </div>
-        <div className="w-24 h-24 sm:w-32 sm:h-32 bg-muted rounded-full flex-shrink-0"></div>
+        <div className="flex gap-8 w-full justify-center">
+             <div className="h-10 w-16 bg-muted rounded"></div>
+             <div className="h-10 w-16 bg-muted rounded"></div>
+             <div className="h-10 w-16 bg-muted rounded"></div>
+        </div>
     </div>
 );
 
@@ -124,7 +127,7 @@ const EditProfileModal: React.FC<{
     );
 };
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal, followingIds, onToggleFollow }) => {
     const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
     const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -134,6 +137,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const [isUploadingPfp, setIsUploadingPfp] = useState(false);
     const [activeTab, setActiveTab] = useState<ProfileTab>('all');
     const [error, setError] = useState<string | null>(null);
+    const [userRating, setUserRating] = useState<number>(0); // 0: None, 1: Up, -1: Down
+    const [isRatingProcessing, setIsRatingProcessing] = useState(false);
     
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     const [loggedInUserSavedPostIds, setLoggedInUserSavedPostIds] = useState<Set<string>>(new Set());
@@ -152,6 +157,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const pfpInputRef = useRef<HTMLInputElement>(null);
     const isOwnProfile = !viewedProfileId || viewedProfileId === loggedInUser?.uid;
     const profileIdToFetch = viewedProfileId || loggedInUser?.uid;
+    const isFollowing = profileIdToFetch && followingIds.has(profileIdToFetch);
 
     const NavLink: React.FC<{
         tab: ProfileTab, 
@@ -193,6 +199,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
         const unsubscribe = onSnapshot(profileDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as UserProfile;
+                // Prevent negative numbers in UI
+                if ((data.followersCount || 0) < 0) data.followersCount = 0;
+                if ((data.followingCount || 0) < 0) data.followingCount = 0;
+                if ((data.ratingsCount || 0) < 0) data.ratingsCount = 0;
+                
                 setProfile(data);
             } else if (isOwnProfile && loggedInUser) {
                  const defaultProfile: Omit<UserProfile, 'id'> = {
@@ -200,6 +211,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                     bio: 'A passionate designer and creator.',
                     email: loggedInUser.email!,
                     photoURL: loggedInUser.photoURL || null,
+                    followersCount: 0,
+                    followingCount: 0,
+                    ratingsCount: 0,
                 };
                 // Set local state for immediate UI update
                 setProfile(defaultProfile as UserProfile);
@@ -227,6 +241,30 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
         return () => unsubscribe();
     }, [profileIdToFetch, isOwnProfile, loggedInUser]);
 
+    // Effect to fetch current user's rating for this profile
+    useEffect(() => {
+        if (!loggedInUser || !profileIdToFetch) {
+            setUserRating(0);
+            return;
+        }
+        // CHANGED: We store the "given rating" in the logged-in user's profile to ensure they have permission to read/write it.
+        const ratingRef = doc(db, 'users', loggedInUser.uid, 'givenRatings', profileIdToFetch);
+        
+        const unsubscribe = onSnapshot(ratingRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setUserRating(docSnap.data().value || 0);
+            } else {
+                setUserRating(0);
+            }
+        }, (err) => {
+            console.warn("Error fetching rating (likely permission issue):", err.message);
+            // Fail gracefully
+            setUserRating(0);
+        });
+        
+        return () => unsubscribe();
+    }, [loggedInUser, profileIdToFetch]);
+
 
     // Effect to fetch user's own posts
     useEffect(() => {
@@ -244,7 +282,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
         );
 
         const unsubscribePosts = onSnapshot(userPostsQuery, (snapshot: QuerySnapshot<DocumentData>) => {
-            const fetchedPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommunityPost));
+            const fetchedPosts = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as CommunityPost));
             setUserPosts(fetchedPosts);
             setIsLoadingPosts(false);
         }, (err) => {
@@ -303,7 +341,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
 
                 const postsQuery = query(collection(db, 'community-posts'), where(documentId(), 'in', savedIds));
                 const postsSnapshot = await getDocs(postsQuery);
-                const fetchedPosts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<CommunityPost, 'id'>) } as CommunityPost));
+                const fetchedPosts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as CommunityPost));
                 const orderedPosts = savedIds.map(id => fetchedPosts.find(p => p.id === id)).filter(Boolean) as CommunityPost[];
                 
                 setSavedPosts(orderedPosts);
@@ -531,6 +569,55 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             alert("Failed to update profile. Please try again.");
         }
     };
+
+    const handleRateUser = async (voteType: 1 | -1) => {
+        if (!loggedInUser || !profileIdToFetch || isRatingProcessing) return;
+        setIsRatingProcessing(true);
+
+        const userRef = doc(db, 'users', profileIdToFetch);
+        // Storing rating in logged-in user's profile to ensure write permission
+        const ratingRef = doc(db, 'users', loggedInUser.uid, 'givenRatings', profileIdToFetch);
+
+        try {
+            // 1. Fetch current rating state to determine logic
+            const ratingSnap = await getDoc(ratingRef);
+            const currentRating = ratingSnap.exists() ? ratingSnap.data().value : 0;
+            
+            if (currentRating === voteType) {
+                // Toggle off: Remove rating
+                await deleteDoc(ratingRef);
+                
+                // Best-effort update of public count (catch permission errors gracefully)
+                try {
+                    await updateDoc(userRef, { ratingsCount: increment(-voteType) });
+                } catch (e) {
+                    console.warn("Could not update public ratings count (permission denied).");
+                }
+            } else {
+                // New vote or Flip
+                await setDoc(ratingRef, { value: voteType, timestamp: serverTimestamp() });
+                
+                // Calculate increment needed
+                // If new: +voteType
+                // If flip (-1 -> 1): +2
+                // If flip (1 -> -1): -2
+                const change = currentRating === 0 ? voteType : (voteType - currentRating);
+                
+                // Best-effort update of public count
+                try {
+                     await updateDoc(userRef, { ratingsCount: increment(change) });
+                } catch (e) {
+                    console.warn("Could not update public ratings count (permission denied).");
+                }
+            }
+        } catch (error) {
+            console.error("Error processing rating:", error);
+            // Only alert if the personal write failed, which is critical
+            alert("Unable to save your rating. Please try again.");
+        } finally {
+            setIsRatingProcessing(false);
+        }
+    };
     
     // Determine which posts to display based on the active tab
     const displayedPosts = (() => {
@@ -549,10 +636,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     const ProfileSidebar = () => (
         <div className="space-y-1">
             <h2 className="text-sm font-semibold text-muted px-3">Feed</h2>
-            <NavLink tab="all" label="All Posts" icon="page" activeTab={activeTab} setActiveTab={setActiveTab} />
-            <NavLink tab="threads" label="Threads" icon="comment" activeTab={activeTab} setActiveTab={setActiveTab} />
-            <NavLink tab="ai" label="AI Queries" icon="sparkle" activeTab={activeTab} setActiveTab={setActiveTab} />
-            <NavLink tab="reposts" label="Reposts" icon="repost" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="all" label="All Posts" icon="layout-grid" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="threads" label="Threads" icon="message-circle" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="ai" label="AI Queries" icon="cpu" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <NavLink tab="reposts" label="Reposts" icon="repeat" activeTab={activeTab} setActiveTab={setActiveTab} />
             
             {isOwnProfile && (
                 <>
@@ -563,21 +650,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 </>
             )}
             
-            {profile && (
+            {isOwnProfile && profile && (
                  <div className="pt-4">
-                    <h2 className="text-sm font-semibold text-muted px-3 mb-2">{isOwnProfile ? 'My Project' : 'Project Status'}</h2>
+                    <h2 className="text-sm font-semibold text-muted px-3 mb-2">My Project</h2>
                     <button 
                         onClick={() => setProjectStatusModalOpen(true)}
-                        className="w-full text-left p-4 rounded-xl bg-muted hover:bg-hover transition-colors group"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-hover bg-transparent transition-colors group flex items-center justify-between"
                     >
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="font-bold text-primary">{profile.projectStatus || 'Not Started'}</p>
-                                <p className="text-xs text-secondary mt-1">Click to view timeline</p>
-                            </div>
-                            <div className="p-2 bg-secondary rounded-full border border-primary group-hover:border-secondary-accent group-hover:text-secondary-accent transition-colors">
-                                <svg className="w-5 h-5"><use href="#icon-arrow-right"></use></svg>
-                            </div>
+                        <div>
+                            <p className="font-bold text-primary text-sm">{profile.projectStatus || 'Not Started'}</p>
+                            <p className="text-xs text-secondary mt-0.5">View timeline</p>
+                        </div>
+                        <div className="text-secondary group-hover:text-secondary-accent transition-colors">
+                            <svg className="w-4 h-4"><use href="#icon-arrow-right"></use></svg>
                         </div>
                     </button>
                  </div>
@@ -590,21 +675,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                         onClick={() => { setEditProfileModalOpen(true); setMobileSidebarOpen(false); }}
                         className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
                     >
-                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-rename"></use></svg>
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-settings"></use></svg>
                         <span>Edit Profile</span>
                     </button>
                     <button
                         onClick={() => { onOpenChangePasswordModal(); setMobileSidebarOpen(false); }}
                         className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-secondary hover:bg-hover hover:text-primary"
                     >
-                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-key"></use></svg>
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-lock"></use></svg>
                         <span>Change Password</span>
                     </button>
                     <button
                         onClick={() => { onLogout(); setMobileSidebarOpen(false); }}
                         className="w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md text-red-500 hover:bg-red-500/10"
                     >
-                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-logout"></use></svg>
+                        <svg className="w-5 h-5 flex-shrink-0"><use href="#icon-log-out"></use></svg>
                         <span>Logout</span>
                     </button>
                 </div>
@@ -624,7 +709,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
                 <div className="grid grid-cols-12 gap-8">
                     {/* --- Sidebar --- */}
                     <aside className="hidden md:block col-span-3">
@@ -635,77 +720,131 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                     
                     {/* --- Main Content --- */}
                     <main className="col-span-12 md:col-span-9">
-                        <button className="md:hidden flex items-center space-x-2 text-sm font-medium text-secondary mb-4 p-2 -ml-2 rounded-md hover:bg-hover" onClick={() => setMobileSidebarOpen(true)}>
-                             <svg className="w-5 h-5"><use href="#icon-sidebar-toggle"></use></svg>
-                             <span>Profile Menu</span>
-                        </button>
                          {isLoadingProfile ? (
                             <ProfileHeaderSkeleton />
                         ) : error ? (
                             <div className="p-4 m-4 text-sm text-red-700 bg-red-100 rounded-lg"><strong>Error:</strong> {error}</div>
                         ) : profile ? (
-                            <div className="glass-surface rounded-2xl p-4 md:p-6 mb-8">
-                                <div className="flex flex-row items-start gap-4 sm:gap-6">
-                                    <div className="flex-1 w-full">
-                                        <div className="flex flex-col sm:flex-row justify-between items-start">
-                                            <div className="flex-1 w-full text-left">
-                                                <div className="flex items-center gap-2">
-                                                    <h1 className="text-2xl sm:text-3xl font-bold text-primary">{profile.username}</h1>
-                                                    {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && (
-                                                        <svg className="w-6 h-6 text-blue-500 flex-shrink-0"><use href="#icon-verified"></use></svg>
-                                                    )}
-                                                    {isOwnProfile && (
-                                                        <button
-                                                            onClick={() => setEditProfileModalOpen(true)}
-                                                            className="p-2 -m-2 rounded-full hover:bg-hover sm:hidden"
-                                                            aria-label="Edit Profile"
-                                                        >
-                                                            <svg className="w-5 h-5 text-secondary"><use href="#icon-rename"></use></svg>
-                                                        </button>
-                                                    )}
+                            <div className="relative w-full mx-auto mb-8">
+                                {/* Background Ambient Glow */}
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-64 bg-blue-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+                                {/* Card Container - Floating, clean */}
+                                <div className="relative z-10 flex flex-col items-center p-6">
+                                    
+                                    {/* Mobile Menu Icon (Top Left) */}
+                                    <div className="absolute top-0 left-0 md:hidden">
+                                        <button 
+                                            onClick={() => setMobileSidebarOpen(true)}
+                                            className="text-white/70 hover:text-white transition-colors p-2"
+                                        >
+                                            <svg className="w-6 h-6"><use href="#icon-sidebar-toggle"></use></svg>
+                                        </button>
+                                    </div>
+
+                                    {/* Settings/Edit Icon (Top Right - Mobile) */}
+                                    {isOwnProfile && (
+                                        <div className="absolute top-0 right-0 md:hidden">
+                                            <button 
+                                                onClick={() => setEditProfileModalOpen(true)}
+                                                className="text-white/70 hover:text-white transition-colors p-2"
+                                            >
+                                                <svg className="w-6 h-6"><use href="#icon-settings"></use></svg>
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Avatar - Bigger, Borderless */}
+                                    <div className="mb-6 relative group mt-4">
+                                        <div className="rounded-full shadow-2xl relative">
+                                            <Avatar email={profile.email} photoURL={profile.photoURL} size="3xl" />
+                                            
+                                            {/* Verified Badge as Overlay on Avatar */}
+                                            {profileIdToFetch && ADMIN_UIDS.includes(profileIdToFetch) && (
+                                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 rounded-full p-1.5 border-4 border-black text-white shadow-lg z-10 flex items-center justify-center">
+                                                    <svg className="w-4 h-4 fill-current"><use href="#icon-sparkle-solid"></use></svg>
                                                 </div>
-                                                <p className="text-sm text-muted">{profile.email}</p>
-                                            </div>
+                                            )}
                                         </div>
-                                        <div className="mt-4 w-full text-left">
-                                            <div className="max-h-24 overflow-y-auto">
-                                                <p className="text-base text-secondary max-w-prose whitespace-pre-wrap">{profile.bio}</p>
-                                            </div>
+                                        {isOwnProfile && (
+                                            <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-[1px]">
+                                                <svg className="w-8 h-8 drop-shadow-lg"><use href="#icon-image"></use></svg>
+                                            </button>
+                                        )}
+                                        <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
+                                    </div>
+
+                                    {/* Text Info */}
+                                    <div className="text-center space-y-2 mb-6 max-w-md">
+                                        <h1 className="text-2xl font-medium text-white flex items-center justify-center gap-2 tracking-tight">
+                                            {profile.username}
+                                        </h1>
+                                        {/* Bio - Increased Size */}
+                                        <p className="text-sm text-neutral-300 font-medium leading-relaxed max-w-sm mx-auto">{profile.bio || "No bio yet."}</p>
+                                    </div>
+
+                                    {/* Stats Row - Increased Size */}
+                                    <div className="flex items-center justify-center gap-8 mb-8 w-full">
+                                        <div className="flex items-center gap-2">
+                                            <strong className="text-white text-xl">{profile.followersCount || 0}</strong>
+                                            <span className="text-sm text-neutral-400">Followers</span>
                                         </div>
-                                         {isOwnProfile && (
-                                            <div className="mt-6 hidden sm:flex flex-wrap items-center gap-3">
-                                                <button
-                                                    onClick={() => setEditProfileModalOpen(true)}
-                                                    className="btn btn-primary !py-2 !px-4 text-sm inline-flex items-center"
-                                                >
-                                                    <svg className="w-4 h-4 mr-2"><use href="#icon-rename"></use></svg>
-                                                    Edit Profile
-                                                </button>
-                                                <button
-                                                    onClick={onOpenChangePasswordModal}
-                                                    className="btn btn-secondary !py-2 !px-4 text-sm"
-                                                >
-                                                    Change Password
-                                                </button>
-                                                <button
-                                                    onClick={onLogout}
-                                                    className="btn btn-secondary !py-2 !px-4 text-sm"
-                                                >
-                                                    Logout
-                                                </button>
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            {/* DYNAMIC RATING COUNT */}
+                                            <strong className="text-white text-xl">{Math.max(0, profile.ratingsCount || 0)}</strong>
+                                            <span className="text-sm text-neutral-400">Ratings</span>
+                                        </div>
+                                        {isOwnProfile && profile.projectStatus && (
+                                            <button 
+                                                onClick={() => setProjectStatusModalOpen(true)} 
+                                                className="relative overflow-hidden rounded-full border border-white/30 px-3 py-1 text-[10px] font-semibold text-white uppercase tracking-wider hover:bg-white/10 transition-colors group"
+                                            >
+                                                 {/* Shimmer Effect */}
+                                                 <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                                                 {profile.projectStatus}
+                                            </button>
                                         )}
                                     </div>
-                                    <div className="relative group flex-shrink-0">
-                                        <Avatar email={profile.email} photoURL={profile.photoURL} size="xxl" />
-                                        {isOwnProfile && (
+
+                                    {/* Action Button & Rating */}
+                                    <div className="flex items-center gap-3">
+                                        {isOwnProfile ? (
+                                            <button 
+                                                onClick={() => setEditProfileModalOpen(true)}
+                                                className="w-full max-w-xs py-2.5 px-6 rounded-full bg-white/10 hover:bg-white/15 border border-white/5 text-white font-medium text-xs transition-all duration-300 backdrop-blur-md shadow-lg hover:shadow-blue-500/5"
+                                            >
+                                                Edit Profile
+                                            </button>
+                                        ) : (
                                             <>
-                                                <button onClick={() => pfpInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity" disabled={isUploadingPfp}>
-                                                    {isUploadingPfp 
-                                                        ? <svg className="w-8 h-8 animate-spin"><use href="#icon-spinner"></use></svg> 
-                                                        : <svg className="w-8 h-8"><use href="#icon-image"></use></svg>}
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (profileIdToFetch) onToggleFollow(profileIdToFetch);
+                                                    }}
+                                                    className={`w-32 py-2.5 px-4 rounded-full font-medium text-xs transition-all duration-300 shadow-lg flex items-center justify-center ${isFollowing ? 'bg-secondary border border-secondary hover:border-primary text-primary' : 'bg-primary-accent text-on-primary-accent hover:bg-accent-hover'}`}
+                                                >
+                                                    {isFollowing ? "Following" : "Follow"}
                                                 </button>
-                                                <input type="file" ref={pfpInputRef} onChange={handleProfilePictureChange} accept="image/*" hidden />
+                                                
+                                                <div className="flex gap-1 bg-white/5 rounded-full p-1 backdrop-blur-sm">
+                                                    <button 
+                                                        onClick={() => handleRateUser(1)} 
+                                                        disabled={isRatingProcessing}
+                                                        className={`p-2 rounded-full transition-colors shadow-lg ${userRating === 1 ? 'bg-blue-500 text-white' : 'bg-transparent text-white/50 hover:bg-white/10 hover:text-white'}`} 
+                                                        title="Upvote"
+                                                    >
+                                                        <svg className="w-4 h-4"><use href="#icon-arrow-up"></use></svg>
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleRateUser(-1)} 
+                                                        disabled={isRatingProcessing}
+                                                        className={`p-2 rounded-full transition-colors shadow-lg ${userRating === -1 ? 'bg-red-500 text-white' : 'bg-transparent text-white/50 hover:bg-white/10 hover:text-white'}`} 
+                                                        title="Downvote"
+                                                    >
+                                                        <svg className="w-4 h-4 rotate-180"><use href="#icon-arrow-up"></use></svg>
+                                                    </button>
+                                                </div>
                                             </>
                                         )}
                                     </div>
@@ -733,10 +872,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                                                 onViewProfile={onViewProfile}
                                                 onImageClick={handleImageClick}
                                                 onRepost={handleOpenRepostModal}
+                                                followingIds={followingIds}
+                                                onToggleFollow={onToggleFollow}
                                             />
                                         ))
                                     ) : (
-                                        <div className="text-center py-12 text-muted">
+                                        <div className="text-center py-12 text-muted bg-secondary/30 rounded-2xl border border-white/5">
                                             <p className="font-semibold text-lg">No posts yet</p>
                                             <p className="text-sm">This section is currently empty.</p>
                                         </div>

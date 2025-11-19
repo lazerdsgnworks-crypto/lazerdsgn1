@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Comment, Reply, Author, UserProfile } from '../../types.ts';
 import { db } from '../../services/firebase.ts';
-// FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, orderBy, onSnapshot, where, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import Avatar from '../Avatar.tsx';
 import { ADMIN_UIDS } from '../../constants.ts';
@@ -24,7 +24,6 @@ const formatTimeAgoShort = (date: Date): string => {
   return `${days}d`;
 };
 
-// --- Comment-related Components (scoped to this file) ---
 const CommentForm: React.FC<{ user: User; userProfile: UserProfile | null; onSubmit: (text: string) => void; placeholder: string; autoFocus?: boolean }> = ({ user, userProfile, onSubmit, placeholder, autoFocus }) => {
     const [text, setText] = useState('');
     const handleSubmit = (e: React.FormEvent) => {
@@ -65,17 +64,21 @@ interface CommentItemProps extends ProfileNavigable {
     onAddReply: (text: string, comment: Comment) => void;
     onDeleteReply: (replyId: string) => void;
     author: Author | null;
+    followingIds?: Set<string>;
+    onToggleFollow?: (userId: string) => void;
 }
 
-const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, onDelete, onAddReply, onDeleteReply, author, onViewProfile }) => {
+const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, onDelete, onAddReply, onDeleteReply, author, onViewProfile, followingIds, onToggleFollow }) => {
     const [replies, setReplies] = useState<Reply[]>([]);
     const [showReplyForm, setShowReplyForm] = useState(false);
     const [showReplies, setShowReplies] = useState(false);
     const timeAgo = comment.createdAt ? formatTimeAgoShort(comment.createdAt.toDate()) : '...';
     const isAiComment = comment.author.id === 'ai-assistant';
+    const isFollowing = followingIds?.has(comment.author.id);
+    const isOwnComment = user?.uid === comment.author.id;
 
     useEffect(() => {
-        if (!user || isAiComment) { // AI comments don't have replies from the DB
+        if (!user || isAiComment) {
             setReplies([]);
             return;
         }
@@ -86,7 +89,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
             orderBy('createdAt', 'asc')
         );
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reply));
+            const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as Reply));
             setReplies(fetchedReplies);
         });
         return unsubscribe;
@@ -117,15 +120,34 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                             ) : (
                                 <button onClick={() => onViewProfile(comment.author.id)} className="font-bold text-sm text-primary hover:underline">{comment.author.username}</button>
                             )}
+                            
+                            {comment.author.id && ADMIN_UIDS.includes(comment.author.id) && !isAiComment && (
+                                <div className="bg-blue-500 rounded-full p-0.5 flex-shrink-0 flex items-center justify-center w-3.5 h-3.5">
+                                    <svg className="w-2 h-2 text-white fill-current"><use href="#icon-sparkle-solid"></use></svg>
+                                </div>
+                            )}
+
+                             {!isOwnComment && !isAiComment && onToggleFollow && (
+                                <button 
+                                    onClick={() => onToggleFollow(comment.author.id)}
+                                    className={`p-1 rounded-full transition-colors ${isFollowing ? 'text-primary' : 'text-secondary hover:text-primary hover:bg-hover'}`}
+                                    title={isFollowing ? 'Unfollow' : 'Follow'}
+                                >
+                                    {isFollowing ? (
+                                        <svg className="w-3.5 h-3.5"><use href="#icon-user-check"></use></svg>
+                                    ) : (
+                                        <svg className="w-3.5 h-3.5"><use href="#icon-user-plus"></use></svg>
+                                    )}
+                                </button>
+                            )}
+
                             <p className="text-xs text-secondary">{timeAgo}</p>
                         </div>
-                        {/* FIX: Disable delete button for AI comments */}
                         {(user && (user.uid === comment.author.id || ADMIN_UIDS.includes(user.uid)) && !isAiComment) && (
                             <button onClick={() => onDelete(comment)} className="text-muted hover:text-red-500 text-xs p-1">Delete</button>
                         )}
                     </div>
                     {comment.text && <div className="text-sm text-primary mt-1"><Response>{comment.text}</Response></div>}
-                    {/* FIX: Add AudioPlayer for comments with audio */}
                     {comment.audioUrl && (
                         <div className="mt-2">
                             <AudioPlayer src={comment.audioUrl} variant="community" />
@@ -134,7 +156,6 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                 </div>
 
                 <div className="flex items-center space-x-3 text-xs text-secondary mt-1">
-                    {/* FIX: Disable reply button for AI comments */}
                     {!isAiComment && <button onClick={() => setShowReplyForm(!showReplyForm)} className="font-semibold hover:underline">Reply</button>}
                     {comment.replyCount > 0 && (
                         <button onClick={() => setShowReplies(!showReplies)} className="font-semibold hover:underline">
@@ -155,13 +176,18 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, user, userProfile, o
                                 <div className="flex-1 min-w-0 bg-transparent">
                                     <div className="flex items-center space-x-2">
                                         <button onClick={() => onViewProfile(reply.author.id)} className="font-bold text-sm text-primary hover:underline">{reply.author.username}</button>
+                                        {reply.author.id && ADMIN_UIDS.includes(reply.author.id) && (
+                                            <div className="bg-blue-500 rounded-full p-0.5 flex-shrink-0 flex items-center justify-center w-3.5 h-3.5">
+                                                <svg className="w-2 h-2 text-white fill-current"><use href="#icon-sparkle-solid"></use></svg>
+                                            </div>
+                                        )}
                                         <p className="text-xs text-secondary">{reply.createdAt ? formatTimeAgoShort(reply.createdAt.toDate()) : '...'}</p>
                                     </div>
-                                    <div className="text-sm text-primary mt-1"><Response>{reply.text}</Response></div>
-                                    {(user && (user.uid === reply.author.id || ADMIN_UIDS.includes(user.uid))) && (
-                                        <button onClick={() => onDeleteReply(reply.id)} className="text-xs text-muted hover:text-red-500 mt-1">Delete</button>
-                                    )}
+                                    <div className="text-sm text-primary mt-0.5"><Response>{reply.text}</Response></div>
                                 </div>
+                                {(user && (user.uid === reply.author.id || ADMIN_UIDS.includes(user.uid))) && (
+                                    <button onClick={() => onDeleteReply(reply.id)} className="text-muted hover:text-red-500 text-xs self-start">Delete</button>
+                                )}
                             </div>
                         ))}
                     </div>

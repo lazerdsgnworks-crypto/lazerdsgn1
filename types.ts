@@ -1,3 +1,4 @@
+
 import type { User as FirebaseUser } from 'firebase/auth';
 // FIX: Changed import type to regular import to fix module resolution issue for Timestamp.
 import { Timestamp } from 'firebase/firestore';
@@ -21,6 +22,9 @@ export interface UserProfile {
   projectStatus?: 'Pending' | 'In Process' | 'Finalizing' | 'Success';
   projectStatusUpdatedAt?: Timestamp;
   gender?: 'male' | 'female' | 'other' | 'not-specified';
+  followersCount?: number;
+  followingCount?: number;
+  ratingsCount?: number;
 }
 
 export interface ChatMessage {

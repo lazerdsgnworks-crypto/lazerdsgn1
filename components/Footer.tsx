@@ -1,13 +1,12 @@
+
 import React from 'react';
 import { Page } from '../types';
 
 interface FooterProps {
     navigateTo: (page: Page) => void;
-    theme: 'light' | 'dark';
-    toggleTheme: () => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
+const Footer: React.FC<FooterProps> = ({ navigateTo }) => {
     const handleNav = (page: Page, e: React.MouseEvent) => {
         e.preventDefault();
         navigateTo(page);
@@ -61,14 +60,6 @@ const Footer: React.FC<FooterProps> = ({ navigateTo, theme, toggleTheme }) => {
                                 <svg className="h-5 w-5"><use href="#icon-behance"></use></svg>
                             </a>
                          </div>
-                        <h4 className="font-semibold text-primary mb-4">Theme</h4>
-                        <div className="flex items-center space-x-2">
-                            <svg className="w-5 h-5 text-muted"><use href="#icon-sun"></use></svg>
-                            <button onClick={toggleTheme} className="theme-toggle-switch relative rounded-full p-1 flex items-center cursor-pointer">
-                                <div className="theme-toggle-circle absolute rounded-full shadow-md transition-transform duration-300"></div>
-                            </button>
-                            <svg className="w-5 h-5 text-muted"><use href="#icon-moon"></use></svg>
-                        </div>
                     </div>
                 </div>
                 <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-muted">

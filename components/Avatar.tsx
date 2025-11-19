@@ -1,12 +1,14 @@
+
 import React from 'react';
 
-const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl'}> = ({ email, photoURL, size = 'md' }) => {
+const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | '3xl'}> = ({ email, photoURL, size = 'md' }) => {
     const sizeClasses = {
         sm: 'w-8 h-8',
         md: 'w-10 h-10',
         lg: 'w-12 h-12',
         xl: 'w-24 h-24',
         xxl: 'w-20 h-20 sm:w-28 sm:h-28',
+        '3xl': 'w-32 h-32 sm:w-40 sm:h-40',
     };
     
     const fontSizeClasses = {
@@ -15,6 +17,7 @@ const Avatar: React.FC<{ email: string, photoURL?: string | null, size?: 'sm' | 
         lg: 'text-2xl',
         xl: 'text-5xl',
         xxl: 'text-4xl sm:text-6xl',
+        '3xl': 'text-5xl sm:text-7xl',
     };
 
     if (photoURL) {

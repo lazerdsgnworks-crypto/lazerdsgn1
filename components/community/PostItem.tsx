@@ -249,9 +249,11 @@ interface PostItemProps extends ProfileNavigable {
     onToggleLike: (postId: string) => void;
     onImageClick: (url: string) => void;
     onRepost: (post: CommunityPost) => void;
+    followingIds?: Set<string>;
+    onToggleFollow?: (userId: string) => void;
 }
 
-const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost }) => {
+const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost, followingIds, onToggleFollow }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [showComments, setShowComments] = useState(post.isAiPost && !!post.aiReply && user?.uid === post.author.id);
     const [isMenuOpen, setMenuOpen] = useState(false);
@@ -260,6 +262,8 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
     const timeAgo = post.createdAt ? formatTimeAgoShort(post.createdAt.toDate()) : '...';
     
     const commentAuthor = user && userProfile ? { id: user.uid, email: user.email!, username: userProfile.username, photoURL: userProfile.photoURL || null } : null;
+    const isFollowing = followingIds?.has(post.author.id);
+    const isOwnPost = user?.uid === post.author.id;
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -283,7 +287,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
             orderBy('createdAt', 'desc')
         );
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment)));
+            setComments(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as Comment)));
         });
         return () => unsubscribe();
     }, [post.id, user, showComments]);
@@ -488,15 +492,35 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                     <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2 flex-wrap">
                             <button onClick={() => onViewProfile(post.author.id)} className="font-bold text-primary hover:underline truncate">{post.author.username}</button>
+                            {/* Verified Badge */}
                             {post.author.id && ADMIN_UIDS.includes(post.author.id) && (
-                                <svg className="w-5 h-5 text-blue-500 flex-shrink-0"><use href="#icon-verified"></use></svg>
+                                <div className="bg-blue-500 rounded-full p-0.5 flex-shrink-0 flex items-center justify-center w-4 h-4">
+                                    <svg className="w-2.5 h-2.5 text-white fill-current"><use href="#icon-sparkle-solid"></use></svg>
+                                </div>
                             )}
-                            <p className="text-sm text-muted">{timeAgo}</p>
+                            
+                            {/* AI Badge */}
                             {post.isAiPost && (
-                                <span className="ai-badge">
+                                <span className="ai-badge ml-1">
                                     <svg className="w-3 h-3 mr-1 text-secondary-accent"><use href="#icon-sparkle"></use></svg>
                                     Used AI
                                 </span>
+                            )}
+                            
+                            {/* Timestamp */}
+                            <p className="text-sm text-muted ml-1">{timeAgo}</p>
+
+                            {/* Follow Button */}
+                             {!isOwnPost && !post.isAiPost && onToggleFollow && !isFollowing && (
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleFollow(post.author.id);
+                                    }}
+                                    className="ml-2 bg-white text-black px-3 py-0.5 rounded-full text-xs font-bold hover:bg-neutral-200 transition-colors"
+                                >
+                                    Follow
+                                </button>
                             )}
                         </div>
 
@@ -608,6 +632,8 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                             onDeleteReply={handleDeleteReply}
                             author={commentAuthor}
                             onViewProfile={onViewProfile}
+                            followingIds={followingIds}
+                            onToggleFollow={onToggleFollow}
                         />
                     ))}
                 </div>

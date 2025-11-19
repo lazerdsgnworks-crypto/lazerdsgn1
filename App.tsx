@@ -1,13 +1,10 @@
 
-
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth, db } from './services/firebase.ts';
 import { Page, User, CommunityPost, UserProfile } from './types.ts';
 // FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
-import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, deleteDoc, collection, query, onSnapshot, getDoc, setDoc, updateDoc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
 
 
 import HomePage from './pages/HomePage.tsx';
@@ -20,7 +17,6 @@ import Footer from './components/Footer.tsx';
 import Modal from './components/Modal.tsx';
 import { ADMIN_UIDS } from './constants.ts';
 
-type Theme = 'light' | 'dark';
 type AuthState = 'idle' | 'loading' | 'success';
 type AuthFeedback = { type: 'error' | 'success' | 'idle', message: string };
 
@@ -421,14 +417,25 @@ const ensureUserProfileExists = async (user: FirebaseUser) => {
                 bio: 'A passionate designer and creator.',
                 photoURL: user.photoURL || null,
                 gender: 'not-specified',
+                followersCount: 0,
+                followingCount: 0,
+                ratingsCount: 0,
             };
             await setDoc(profileDocRef, newProfile);
         } else {
-            const profileData = docSnap.data() as UserProfile;
-            // Only update the photoURL from the auth provider if our profile doesn't have one set.
-            // This preserves custom profile pictures uploaded by the user.
+            const profileData = docSnap.data();
+            const updates: any = {};
+            
             if (user.photoURL && !profileData.photoURL) {
-                 await updateDoc(profileDocRef, { photoURL: user.photoURL });
+                 updates.photoURL = user.photoURL;
+            }
+            // Backfill missing counters if they don't exist to prevent permission errors on updates
+            if (typeof profileData.followersCount !== 'number') updates.followersCount = 0;
+            if (typeof profileData.followingCount !== 'number') updates.followingCount = 0;
+            if (typeof profileData.ratingsCount !== 'number') updates.ratingsCount = 0;
+
+            if (Object.keys(updates).length > 0) {
+                await updateDoc(profileDocRef, updates);
             }
         }
     } catch (e) {
@@ -443,7 +450,6 @@ const App: React.FC = () => {
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [viewedProfileId, setViewedProfileId] = useState<string | null>(null);
-    const [theme, setTheme] = useState<Theme>('light');
 
 
     const [isLoginModalOpen, setLoginModalOpen] = useState(false);
@@ -459,27 +465,21 @@ const App: React.FC = () => {
     const [changePasswordFeedback, setChangePasswordFeedback] = useState<AuthFeedback>({ type: 'idle', message: '' });
     const [authState, setAuthState] = useState<AuthState>('idle');
 
-    useEffect(() => {
-        const storedTheme = localStorage.getItem('theme') as Theme | null;
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialTheme = storedTheme || (prefersDark ? 'dark' : 'light');
-        setTheme(initialTheme);
-        document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-    }, []);
+    // --- Follow Feature State ---
+    const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
 
-     const toggleTheme = () => {
-        setTheme(prevTheme => {
-            const newTheme = prevTheme === 'light' ? 'dark' : 'light';
-            localStorage.setItem('theme', newTheme);
-            document.documentElement.classList.toggle('dark', newTheme === 'dark');
-            return newTheme;
-        });
-    };
+    useEffect(() => {
+        // Force dark mode by default
+        document.documentElement.classList.toggle('dark', true);
+    }, []);
 
     useEffect(() => {
         let unsubscribeProfile: Unsubscribe | null = null;
+        let unsubscribeFollowing: Unsubscribe | null = null;
+
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (unsubscribeProfile) unsubscribeProfile();
+            if (unsubscribeFollowing) unsubscribeFollowing();
             setUser(user);
 
             if (user) {
@@ -500,8 +500,16 @@ const App: React.FC = () => {
                         });
                     }
                 });
+                
+                // Subscribe to following list
+                const followingRef = collection(db, 'users', user.uid, 'following');
+                unsubscribeFollowing = onSnapshot(followingRef, (snapshot) => {
+                    const ids = new Set(snapshot.docs.map(doc => doc.id));
+                    setFollowingIds(ids);
+                });
             } else {
                 setUserProfile(null);
+                setFollowingIds(new Set());
             }
             setLoading(false);
         });
@@ -509,6 +517,7 @@ const App: React.FC = () => {
         return () => {
             unsubscribeAuth();
             if (unsubscribeProfile) unsubscribeProfile();
+            if (unsubscribeFollowing) unsubscribeFollowing();
         };
     }, []);
 
@@ -529,6 +538,52 @@ const App: React.FC = () => {
         setViewedProfileId(userId);
         navigateTo(Page.Profile);
     }, [navigateTo]);
+    
+    // --- Follow Logic ---
+    const handleToggleFollow = useCallback(async (targetUserId: string) => {
+        if (!user) {
+            setLoginModalOpen(true);
+            return;
+        }
+        
+        // Optimistic update for followingIds is handled by the listener, but the counts need server update.
+        // We perform a batch write to update relationships and counters.
+        
+        const batch = writeBatch(db);
+        
+        const currentUserFollowingRef = doc(db, 'users', user.uid, 'following', targetUserId);
+        const targetUserFollowersRef = doc(db, 'users', targetUserId, 'followers', user.uid);
+        const currentUserRef = doc(db, 'users', user.uid);
+        const targetUserRef = doc(db, 'users', targetUserId);
+        
+        try {
+            if (followingIds.has(targetUserId)) {
+                // Unfollow
+                batch.delete(currentUserFollowingRef);
+                batch.delete(targetUserFollowersRef);
+                batch.update(currentUserRef, { followingCount: increment(-1) });
+                batch.update(targetUserRef, { followersCount: increment(-1) });
+            } else {
+                // Follow
+                batch.set(currentUserFollowingRef, { followedAt: serverTimestamp() });
+                batch.set(targetUserFollowersRef, { followedAt: serverTimestamp() });
+                batch.update(currentUserRef, { followingCount: increment(1) });
+                batch.update(targetUserRef, { followersCount: increment(1) });
+            }
+            
+            await batch.commit();
+        } catch (error: any) {
+            console.error("Error toggling follow:", error);
+            if (error.code === 'permission-denied') {
+                // This might happen if the target user's profile was not created with the followersCount field.
+                // The updated Security Rules should handle this by treating missing fields as 0.
+                console.warn("Permission denied while toggling follow. Please check Firestore Rules.");
+                alert("Unable to follow this user due to a permissions error.");
+            } else {
+                alert("Could not update follow status. Please try again.");
+            }
+        }
+    }, [user, followingIds]);
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -636,6 +691,9 @@ const App: React.FC = () => {
                 bio: 'A passionate designer and creator.',
                 photoURL: photoURL,
                 gender: gender.value || 'not-specified',
+                followersCount: 0,
+                followingCount: 0,
+                ratingsCount: 0,
             };
             await setDoc(profileDocRef, newProfile);
 
@@ -738,7 +796,14 @@ const App: React.FC = () => {
             case Page.Chat:
                 return <ChatPage user={user} userProfile={userProfile} openDeleteModal={openDeleteModal} onViewProfile={() => handleViewProfile(null)} />;
             case Page.Community:
-                return <CommunityPage user={user} userProfile={userProfile} onDeletePost={handleDeletePost} onViewProfile={handleViewProfile} />;
+                return <CommunityPage 
+                    user={user} 
+                    userProfile={userProfile} 
+                    onDeletePost={handleDeletePost} 
+                    onViewProfile={handleViewProfile}
+                    followingIds={followingIds}
+                    onToggleFollow={handleToggleFollow}
+                />;
             case Page.Profile:
                 return <ProfilePage 
                     loggedInUser={user} 
@@ -748,6 +813,8 @@ const App: React.FC = () => {
                     onLogout={handleLogout} 
                     onViewProfile={handleViewProfile} 
                     onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
+                    followingIds={followingIds}
+                    onToggleFollow={handleToggleFollow}
                 />;
             case Page.Home:
             default:
@@ -779,7 +846,7 @@ const App: React.FC = () => {
                 onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
             />
             <main className={currentPage === Page.Home ? '' : 'pt-[68px]'}>{renderPage()}</main>
-            { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} theme={theme} toggleTheme={toggleTheme} /> }
+            { ![Page.Chat, Page.Community, Page.Profile].includes(currentPage) && <Footer navigateTo={navigateTo} /> }
             
             <Modal isOpen={isLoginModalOpen} onClose={() => { setLoginModalOpen(false); resetAuthModals(); }}>
                  <LoginForm 

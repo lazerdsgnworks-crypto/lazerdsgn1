@@ -3,6 +3,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -96,7 +98,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         const q = query(sessionsRef, orderBy('updatedAt', 'desc'));
 
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            const fetchedSessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatSession));
+            const fetchedSessions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as ChatSession));
             setSessions(fetchedSessions);
             setSessionsLoaded(true);
         }, (err) => {
@@ -122,7 +124,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         const q = query(messagesRef, orderBy('createdAt', 'asc'));
 
         const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-            const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+            const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) } as ChatMessage));
             setMessages(newMessages);
         }, (err) => {
             console.error("Firebase messages listener error:", err);
