@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,38 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LazerDsgn - Digital Design Studio</title>
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "firebase/app": "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js",
-    "pdf-lib/": "https://aistudiocdn.com/pdf-lib@^1.17.1/",
-    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.296/",
-    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.5.0/",
-    "vite": "https://aistudiocdn.com/vite@^7.1.12",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
-    "clsx": "https://aistudiocdn.com/clsx@^2.1.1",
-    "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^3.3.1",
-    "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.552.0",
-    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "remark-gfm": "https://aistudiocdn.com/remark-gfm@^4.0.1",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-    "prismjs/": "https://aistudiocdn.com/prismjs@^1.30.0/",
-    "prismjs": "https://aistudiocdn.com/prismjs@^1.30.0",
-    "remark-breaks": "https://aistudiocdn.com/remark-breaks@^4.0.0"
-  }
-}
-</script>
-    <script type="module" src="https://framer.com/m/AnimatedLiquidBackground-Prod-vIhm.js@ghH1aHLmGZ0iE7qXDFVk"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
@@ -47,34 +17,9 @@
             --scroll-speed-v3: 43s;
             --scroll-height: -50%;
 
-            /* Light Theme Colors */
-            --bg-primary: #f9fafb; /* gray-50 */
-            --bg-secondary: #ffffff; /* white */
-            --bg-muted: #f3f4f6; /* gray-100 */
-            --bg-hover: #e5e7eb; /* gray-200 */
-            --bg-primary-accent: #0f1419; /* near-black */
-            --bg-secondary-accent: #60a5fa; /* blue-400 */
-            --bg-accent-hover: #333333; /* dark-grey */
-            --text-primary: #0f1419;
-            --text-secondary: #4b5563; /* gray-600 */
-            --text-muted: #6b7280; /* gray-500 */
-            --text-on-primary-accent: #ffffff;
-            --border-primary: #e5e7eb; /* gray-200 */
-            --border-secondary: #d1d5db; /* gray-300 */
-            
-            /* UPDATED: Light Theme Syntax Highlighting (VSCode Light+) */
-            --code-keyword: #0000ff;
-            --code-string: #a31515;
-            --code-comment: #008000;
-            --code-number: #0986e5;
-            --code-function: #795e26;
-            --code-punctuation: #000000;
-        }
-
-        html.dark {
-            /* Dark Theme Colors - UPDATED for Near-Black aesthetic */
-            --bg-primary: #0D0D0D; /* Near Black */
-            --bg-secondary: #1C1C1C; /* Dark Charcoal for surfaces */
+            /* Dark Theme / Black Mode Enforced Globally */
+            --bg-primary: #000000; /* Complete Black */
+            --bg-secondary: #121212; /* Dark Charcoal for surfaces */
             --bg-muted: #282828; /* Inputs, muted elements */
             --bg-hover: #333333; /* Hover states */
             --bg-primary-accent: #FFFFFF; /* White accent for buttons */
@@ -87,7 +32,7 @@
             --border-primary: #2A2A2A;
             --border-secondary: #383838;
             
-            /* UPDATED: Dark Theme Syntax Highlighting (VSCode Dark+) */
+            /* Dark Theme Syntax Highlighting (VSCode Dark+) */
             --code-keyword: #569cd6;
             --code-string: #ce9178;
             --code-comment: #6a9955;
@@ -96,21 +41,9 @@
             --code-punctuation: #808080;
         }
 
-        /* Glassmorphism background */
-        html.dark body {
-            position: relative;
-            background-color: var(--bg-primary);
-        }
-        html.dark body::before {
-            content: '';
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: -1;
-            background-image: radial-gradient(circle at 10% 20%, rgba(100, 100, 200, 0.1) 0%, transparent-black 35%),
-                              radial-gradient(circle at 85% 75%, rgba(100, 200, 100, 0.08) 0%, transparent 40%);
-            background-color: var(--bg-primary);
+        /* Force Inter Font Globally, but allow overrides */
+        * {
+            font-family: 'Inter', sans-serif;
         }
 
         /* Glassmorphism Effect Class */
@@ -126,19 +59,21 @@
             border: 1px solid transparent;
         }
         
-        /* UPDATED: .create-post-glass for both themes */
+        /* Force footer background to blend with black body if needed, or keep glass */
+        #footer {
+             background-color: #000000; /* Complete black for footer */
+             border-top-color: var(--border-primary);
+        }
+        
+        /* UPDATED: .create-post-glass */
         .create-post-glass {
-            background-color: color-mix(in srgb, var(--bg-secondary) 95%, transparent); /* More opaque white for light mode */
+            background-color: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             border: 1px solid var(--border-primary);
         }
 
-        html.dark .create-post-glass {
-            background-color: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
-        }
-        
-        html.dark .user-message {
+        .user-message {
             background-color: color-mix(in srgb, var(--bg-primary-accent) 80%, transparent);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -164,17 +99,12 @@
             pointer-events: auto;
             padding: 0.5rem 2rem;
             border-radius: 9999px;
-            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
             backdrop-filter: blur(20px) saturate(180%);
             -webkit-backdrop-filter: blur(20px) saturate(180%);
-            border: 1px solid color-mix(in srgb, var(--border-primary) 50%, transparent);
+            border: 1px solid color-mix(in srgb, var(--border-primary) 70%, transparent);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease-in-out;
-        }
-
-        html.dark .floating-navbar {
-            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
-            border-color: color-mix(in srgb, var(--border-primary) 70%, transparent);
         }
         
         /* NEW: Static/Sticky Navbar (Other Pages) */
@@ -186,14 +116,10 @@
             border-bottom: 1px solid transparent;
         }
         .static-navbar-container.scrolled {
-            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
             backdrop-filter: blur(20px) saturate(180%);
             -webkit-backdrop-filter: blur(20px) saturate(180%);
             border-bottom-color: var(--border-primary);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-        html.dark .static-navbar-container.scrolled {
-            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
         }
         .static-navbar {
@@ -208,13 +134,10 @@
 
         /* ADDED: Glassmorphism for Chat Sidebar */
         #chat-sidebar:not(.collapsed) {
-            background-color: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+            background-color: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border-right: 1px solid var(--border-primary);
-        }
-        html.dark #chat-sidebar:not(.collapsed) {
-            background-color: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
         }
 
         /* --- Global Styles using CSS Variables --- */
@@ -557,11 +480,6 @@
             animation-delay: 0.4s;
         }
 
-        html
-        .theme-toggle-switch { background-color: var(--bg-muted); width: 44px; height: 24px; }
-        .theme-toggle-circle { background-color: white; width: 20px; height: 20px; top: 2px; left: 2px; }
-        html.dark .theme-toggle-circle { transform: translateX(20px); }
-
         /* ADDED: Glowing effect for active chat modes */
         .mode-active-glow {
             border-color: var(--bg-secondary-accent);
@@ -736,14 +654,11 @@
 
         /* ADDED: Centered, Glassmorphic FAB */
         .create-post-fab {
-            background-color: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
+            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border-primary);
             color: var(--text-primary);
-        }
-        html.dark .create-post-fab {
-            background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
         }
         .create-post-fab:hover {
             background-color: var(--bg-hover);
@@ -764,17 +679,61 @@
             border-radius: 1.5rem;
             font-size: 0.9rem;
             font-weight: 500;
-            background-color: color-mix(in srgb, #f59e0b 15%, transparent); /* amber-500 at 15% opacity */
-            color: #d97706; /* amber-600 */
-            border: 1px solid color-mix(in srgb, #f59e0b 25%, transparent);
-        }
-        html.dark .stop-message {
             background-color: color-mix(in srgb, #f59e0b 20%, transparent);
-            color: #fbbf24; /* amber-400 */
-            border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+            color: #fbbf24;
+            border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+        }
+
+        /* NEW: Keyframes for Image/Video Generation Animations */
+        @keyframes scan-vertical {
+            0% { top: -10%; opacity: 0; }
+            15% { opacity: 1; }
+            85% { opacity: 1; }
+            100% { top: 110%; opacity: 0; }
+        }
+        .animate-scan {
+            animation: scan-vertical 2.5s linear infinite;
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(255,255,255,0)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 8px rgba(255,255,255,0.3)); }
+        }
+        .animate-pulse-glow {
+            animation: pulse-glow 2s ease-in-out infinite;
         }
     </style>
-  <script type="module" crossorigin src="/lazerdsgn1/assets/index-9bNG60Gp.js"></script>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "firebase/app": "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js",
+    "pdf-lib/": "https://aistudiocdn.com/pdf-lib@^1.17.1/",
+    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.296/",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.5.0/",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "clsx": "https://aistudiocdn.com/clsx@^2.1.1",
+    "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^3.3.1",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.552.0",
+    "framer": "data:text/javascript,export const addPropertyControls=()=>{};export const ControlType={};export const RenderTarget={};export const useIsStaticRenderer=()=>false;",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "remark-gfm": "https://aistudiocdn.com/remark-gfm@^4.0.1",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "prismjs/": "https://aistudiocdn.com/prismjs@^1.30.0/",
+    "prismjs": "https://aistudiocdn.com/prismjs@^1.30.0",
+    "remark-breaks": "https://aistudiocdn.com/remark-breaks@^4.0.0"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/lazerdsgn1/assets/index-CtI_1M4O.js"></script>
 </head>
 <body>
     <div id="root"></div>
@@ -808,6 +767,10 @@
         <symbol id="icon-flag" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></symbol>
         <symbol id="icon-sparkle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="m12 2.25 1.838 7.913L21.75 12l-7.912 1.838L12 21.75l-1.838-7.912L2.25 12l7.912-1.837L12 2.25Z" />
+        </symbol>
+        <!-- NEW: Solid Sparkle Icon for Verified Badge -->
+        <symbol id="icon-sparkle-solid" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" />
         </symbol>
         <symbol id="icon-plus" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></symbol>
         <symbol id="icon-paperclip" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></symbol>
@@ -856,6 +819,20 @@
         <!-- NEW: Thumbs Up/Down Icons for Feedback -->
         <symbol id="icon-thumbs-up" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M7 11v 4.586c0 1.293 1.015 2.414 2.308 2.414h4.416a2.5 2.5 0 0 0 2.417-2.035l1.625-7.312a.5.5 0 0 0-.488-.553H11V5.5C11 4.672 10.328 4 9.5 4S8 4.672 8 5.5v5.5H7z M7 11H5.5C4.672 11 4 11.672 4 12.5v5C4 18.328 4.672 19 5.5 19H7v-8z"/></symbol>
         <symbol id="icon-thumbs-down" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M7 13v-4.586c0-1.293 1.015-2.414 2.308-2.414h4.416a2.5 2.5 0 0 1 2.417 2.035l1.625 7.312a.5.5 0 0 1-.488.553H11v3.5c0 .828-.672 1.5-1.5 1.5S8 18.828 8 18v-5H7z M7 13H5.5C4.672 13 4 12.328 4 11.5v-5C4 5.672 4.672 5 5.5 5H7v8z"/></symbol>
+        <!-- NEW: Follow Icons -->
+        <symbol id="icon-user-plus" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25v1.758a2.25 2.25 0 01-2.25 2.25h-4.5a2.25 2.25 0 01-2.25-2.25v-1.758z" /></symbol>
+        <symbol id="icon-user-minus" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25v1.758a2.25 2.25 0 01-2.25 2.25h-4.5a2.25 2.25 0 01-2.25-2.25v-1.758z" /></symbol>
+        <symbol id="icon-user-check" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25v1.758a2.25 2.25 0 01-2.25 2.25h-4.5a2.25 2.25 0 01-2.25-2.25v-1.758z" /></symbol>
+        <symbol id="icon-users" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></symbol>
+
+        <!-- NEW ICONS FOR PROFILE SIDEBAR -->
+        <symbol id="icon-layout-grid" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></symbol>
+        <symbol id="icon-message-circle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></symbol>
+        <symbol id="icon-cpu" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></symbol>
+        <symbol id="icon-repeat" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></symbol>
+        <symbol id="icon-settings" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></symbol>
+        <symbol id="icon-lock" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></symbol>
+        <symbol id="icon-log-out" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></symbol>
     </svg>
 </body>
 </html>
