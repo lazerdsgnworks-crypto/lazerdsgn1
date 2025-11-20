@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CommunityPost, UserProfile, RepostedPost } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -454,36 +456,53 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             const data = await response.json();
             const photoURL = data.secure_url.replace('/upload/', '/upload/w_200,h_200,c_fill,g_auto,q_auto,f_auto/');
             
-            const batch = writeBatch(db);
             const userId = loggedInUser.uid;
-
             const profileRef = doc(db, 'users', userId);
-            batch.update(profileRef, { photoURL });
-            
+
+            // 1. Update Profile (Always do this first and separately to ensure at least this succeeds)
+            await updateDoc(profileRef, { photoURL });
+
+            // 2. Fan-out updates to posts and comments (Best effort, batched)
+            // We create a new batch for these
+            const batch = writeBatch(db);
+            let operationCount = 0;
+            const MAX_BATCH_SIZE = 450; // Safety buffer below 500
+
             const postsQuery = query(collection(db, 'community-posts'), where('author.id', '==', userId));
             const postsSnapshot = await getDocs(postsQuery);
             postsSnapshot.forEach(postDoc => {
-                batch.update(postDoc.ref, { "author.photoURL": photoURL });
+                if (operationCount < MAX_BATCH_SIZE) {
+                    batch.update(postDoc.ref, { "author.photoURL": photoURL });
+                    operationCount++;
+                }
             });
 
-            const repostsQuery = query(collection(db, 'community-posts'), where('repostedPost.author.id', '==', userId));
-            const repostsSnapshot = await getDocs(repostsQuery);
-            repostsSnapshot.forEach(postDoc => {
-                batch.update(postDoc.ref, { "repostedPost.author.photoURL": photoURL });
-            });
+            // NOTE: We do NOT update reposts here. A repost document belongs to the reposter, 
+            // not the original author. The original author does not have permission to update 
+            // the reposter's document. This prevents the "Missing or insufficient permissions" error.
 
             const commentsQuery = query(collection(db, 'usercomments'), where('author.id', '==', userId));
             const commentsSnapshot = await getDocs(commentsQuery);
             commentsSnapshot.forEach(commentDoc => {
-                batch.update(commentDoc.ref, { "author.photoURL": photoURL });
+                 if (operationCount < MAX_BATCH_SIZE) {
+                    batch.update(commentDoc.ref, { "author.photoURL": photoURL });
+                    operationCount++;
+                }
             });
             
-            await batch.commit();
+            if (operationCount > 0) {
+                await batch.commit();
+            }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to update profile picture:", error);
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            alert(`Failed to update profile picture: ${errorMessage}`);
+            
+            if (error.code === 'permission-denied') {
+                 alert("Profile picture updated, but couldn't update past posts due to permissions.");
+            } else {
+                 alert(`Failed to update profile picture: ${errorMessage}`);
+            }
         } finally {
             setIsUploadingPfp(false);
             if (pfpInputRef.current) pfpInputRef.current.value = "";

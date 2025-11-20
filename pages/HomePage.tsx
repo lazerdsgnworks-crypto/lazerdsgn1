@@ -14,11 +14,7 @@ interface HomePageProps {
 }
 
 const projectImages = [
-    {
-        url: "https://images.unsplash.com/photo-1572044162444-24c95621ec34?q=80&w=800",
-        title: "Zenith",
-        category: "Branding"
-    },
+  
     {
         url: "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?q=80&w=800",
         title: "CodeConnect",

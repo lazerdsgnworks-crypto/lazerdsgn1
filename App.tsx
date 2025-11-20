@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth, db } from './services/firebase.ts';
@@ -504,7 +503,7 @@ const App: React.FC = () => {
                 // Subscribe to following list
                 const followingRef = collection(db, 'users', user.uid, 'following');
                 unsubscribeFollowing = onSnapshot(followingRef, (snapshot) => {
-                    const ids = new Set(snapshot.docs.map(doc => doc.id));
+                    const ids = new Set<string>(snapshot.docs.map(doc => doc.id));
                     setFollowingIds(ids);
                 });
             } else {
