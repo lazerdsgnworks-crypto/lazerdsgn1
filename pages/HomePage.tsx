@@ -77,6 +77,10 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
     const [isSavingBadge, setIsSavingBadge] = useState(false);
     const [timeAgo, setTimeAgo] = useState('');
 
+    // Scroll Logic State
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [isPaused, setIsPaused] = useState(false);
+
     const isAdmin = user && ADMIN_UIDS.includes(user.uid);
 
     useEffect(() => {
@@ -110,6 +114,34 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
         const interval = setInterval(updateTime, 60000);
         return () => clearInterval(interval);
     }, [badgeConfig.timestamp]);
+
+    // Infinite Horizontal Auto-Scroll Logic
+    useEffect(() => {
+        const scrollContainer = scrollRef.current;
+        if (!scrollContainer) return;
+
+        let animationFrameId: number;
+
+        const scroll = () => {
+            const halfWidth = scrollContainer.scrollWidth / 2;
+
+            // Infinite scroll reset: if we've scrolled past the first set (halfway), loop back.
+            // Checks boundaries on every frame to support seamless manual scrolling.
+            // Using subtraction instead of setting to 0 preserves pixel-level scroll precision.
+            if (scrollContainer.scrollLeft >= halfWidth) {
+                scrollContainer.scrollLeft -= halfWidth;
+            }
+
+            if (!isPaused) {
+                scrollContainer.scrollLeft += 0.8; // Adjust speed here (lower is slower)
+            }
+            animationFrameId = requestAnimationFrame(scroll);
+        };
+
+        animationFrameId = requestAnimationFrame(scroll);
+
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [isPaused]);
 
     const handleEditBadgeClick = () => {
         setEditText(badgeConfig.text);
@@ -216,10 +248,25 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                     <button onClick={() => navigateTo(Page.Portfolio)} className="hidden md:block text-sm font-bold text-white border-b border-white/20 pb-1 hover:border-white transition-colors">View All Projects</button>
                 </div>
                 
-                <div className="w-full overflow-hidden">
-                    <div className="slider-track">
+                <div className="w-full overflow-hidden relative group/scroll">
+                    {/* Using JS scroll instead of CSS animation to allow manual intervention */}
+                    <div 
+                        ref={scrollRef}
+                        className="flex overflow-x-auto scrollbar-hide w-full cursor-grab active:cursor-grabbing space-x-4 pb-4"
+                        onMouseEnter={() => setIsPaused(true)}
+                        onMouseLeave={() => setIsPaused(false)}
+                        onTouchStart={() => setIsPaused(true)}
+                        onTouchEnd={() => {
+                            // Slight delay to allow momentum to finish or user to read
+                            setTimeout(() => setIsPaused(false), 1500);
+                        }}
+                    >
                         {[...projectImages, ...projectImages].map((project, index) => (
-                            <div onClick={() => navigateTo(Page.Portfolio)} key={index} className="cursor-pointer slider-item group relative aspect-[3/4] overflow-hidden rounded-2xl bg-neutral-900 border border-neutral-800 transition-transform duration-500 hover:-translate-y-2">
+                            <div 
+                                onClick={() => navigateTo(Page.Portfolio)} 
+                                key={index} 
+                                className="flex-shrink-0 w-[280px] sm:w-[320px] group relative aspect-[3/4] overflow-hidden rounded-2xl bg-neutral-900 border border-neutral-800 transition-transform duration-300 hover:scale-[0.98]"
+                            >
                                 <img src={project.url} alt={project.title} className="absolute inset-0 w-full h-full object-cover opacity-80 transition-all duration-500 group-hover:opacity-100 group-hover:scale-110" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-90"></div>
                                 <div className="absolute bottom-0 left-0 p-6 w-full">
@@ -238,16 +285,51 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                     <div className="order-2 md:order-1">
                         <span className="inline-block py-1 px-3 rounded-full bg-white/10 text-white text-xs font-bold uppercase tracking-widest mb-6">Our Mission</span>
                         <h3 className="text-3xl md:text-5xl font-semibold tracking-tighter text-white mb-6">We build brands that resonate.</h3>
-                        <p className="text-neutral-400 text-lg leading-relaxed mb-8">
-                            Our mission is simple: to help brands connect with their audiences through exceptional design. We believe that great design is not just about aesthetics; it's about creating meaningful experiences that drive results.
-                        </p>
+                        
+                        <div className="space-y-4 text-neutral-400 text-sm md:text-[15px] leading-relaxed mb-6">
+                            <p>
+                                Lazerdsgn is a modern design studio built for brands that want clarity, identity, and impact — not just visuals. In a world full of noise and copy-paste design, we focus on precision, originality, and results. Every project is built with purpose, whether it’s branding, UI/UX, social media design, or full digital systems.
+                            </p>
+                            <p>
+                                The studio is led by Umar Arif, a designer with 5+ years of professional experience and 1,000+ completed projects across startups, creators, and growing businesses worldwide. His approach blends strategy, creativity, and clean aesthetics to create designs that not only look premium but connect with real audiences.
+                            </p>
+                            <p>
+                                At Lazerdsgn, design is more than decoration — it’s communication. We research your brand, understand your goals, and craft visuals that strengthen your identity and help you stand out in competitive spaces. From logos to full brand systems, every detail is intentional.
+                            </p>
+                            <p>
+                                Built for the new generation of founders and creators, Lazerdsgn also integrates modern tools and community-driven creativity to help brands evolve faster.
+                            </p>
+                            <p>
+                                If you want design that speaks clearly, performs confidently, and feels unmistakably yours — you’re in the right place.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8 mb-8">
+                            <div>
+                                <div className="text-3xl font-bold text-white">1000+</div>
+                                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mt-1">Projects</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold text-white">100+</div>
+                                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mt-1">Influencers</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold text-white">50+</div>
+                                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mt-1">Brands</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold text-white">100%</div>
+                                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mt-1">Satisfaction rate</div>
+                            </div>
+                        </div>
+
                         <button onClick={() => navigateTo(Page.Chat)} className="inline-flex items-center font-bold text-white hover:text-neutral-300 transition-colors">
                             Let's Talk Design
                             <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
                         </button>
                     </div>
                     <div 
-                        className="order-1 md:order-2 rounded-3xl overflow-hidden aspect-[4/5] relative group"
+                        className="order-1 md:order-2 rounded-3xl overflow-hidden h-full relative group min-h-[400px]"
                     >
                          <img src="https://i.ibb.co/v4q4PtnQ/IMG-1247.jpg" alt="Designer" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                          <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-3xl pointer-events-none"></div>

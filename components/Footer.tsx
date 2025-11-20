@@ -23,10 +23,8 @@ const Footer: React.FC<FooterProps> = ({ navigateTo }) => {
                         </p>
                         <div className="flex items-center border border-secondary rounded-xl overflow-hidden p-1 bg-secondary max-w-xs">
                             <input type="email" placeholder="Enter your email" className="w-full px-3 py-2 text-sm border-none focus:ring-0 focus:outline-none placeholder-muted bg-transparent text-primary" />
-                            <button className="bg-primary-accent text-on-primary-accent p-2 rounded-lg hover:bg-accent-hover transition">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
+                            <button className="bg-primary-accent text-on-primary-accent p-2 rounded-lg hover:bg-accent-hover transition flex items-center justify-center" aria-label="Subscribe">
+                                <svg className="h-5 w-5"><use href="#icon-arrow-right"></use></svg>
                             </button>
                         </div>
                     </div>
@@ -44,7 +42,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo }) => {
                         <address className="space-y-2 text-sm not-italic text-secondary">
                             <p>101 Design Hub</p>
                             <p>Creative City, CC 90210</p>
-                            <p>Email: <a href="mailto:lazerdsgnworks@gmail.com" className="hover:text-primary transition">lazerdsgnworks@gmail.com</a></p>
+                            <p>Email: <a href="mailto:lazerdsgnworks@gmail.com" className="hover:text-primary transition break-all">lazerdsgnworks@gmail.com</a></p>
                         </address>
                     </div>
                     <div className="md:text-left">

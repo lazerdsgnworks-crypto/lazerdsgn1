@@ -16,21 +16,13 @@ const projects = [
     category: "Web Development",
     imageUrl: "https://images.unsplash.com/photo-1605379399642-870262d3d051?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
   },
-  {
-    title: "Nomad Coffee",
-    category: "Packaging Design",
-    imageUrl: "https://images.unsplash.com/photo-1586154955353-6284149b9173?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
-  },
+  
   {
     title: "Fintech Solutions",
     category: "Digital Marketing",
     imageUrl: "https://images.unsplash.com/photo-1554224155-1696413565d3?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
   },
-  {
-    title: "Stellar eCommerce",
-    category: "Brand Strategy",
-    imageUrl: "https://images.unsplash.com/photo-1556740738-b6a63e2775d2?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
-  },
+  
   {
     title: "Creative Hub",
     category: "Web App Design",
@@ -46,21 +38,8 @@ const projects = [
     category: "UI/UX Design",
     imageUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800",
   },
-  {
-    title: "Helios",
-    category: "Mobile App Design",
-    imageUrl: "https://images.unsplash.com/photo-1620336234430-573516503c1b?q=80&w=800",
-  },
-  {
-    title: "Momentum",
-    category: "Fitness App Branding",
-    imageUrl: "https://images.unsplash.com/photo-1549476464-37392f717546?q=80&w=800",
-  },
-  {
-    title: "Echo",
-    category: "Podcast Platform",
-    imageUrl: "https://images.unsplash.com/photo-1590602842205-e6a175a7a13c?q=80&w=800",
-  },
+  
+  
   {
     title: "Rhythm",
     category: "Music Streaming Service",
@@ -71,26 +50,13 @@ const projects = [
     category: "Travel App",
     imageUrl: "https://images.unsplash.com/photo-1522199755839-a2bacb67c546?q=80&w=800",
   },
-  {
-    title: "Evergreen",
-    category: "Sustainable Products",
-    imageUrl: "https://images.unsplash.com/photo-1604147706283-d7119b5b822c?q=80&w=800",
-  },
+ 
   {
     title: "Mindscape",
     category: "AI Wellness App",
     imageUrl: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800"
-  },
-  {
-    title: "Terra",
-    category: "Eco-friendly Marketplace",
-    imageUrl: "https://images.unsplash.com/photo-1623126742387-4d436113c18b?q=80&w=800"
-  },
-  {
-    title: "Volt",
-    category: "EV Charging Network",
-    imageUrl: "https://images.unsplash.com/photo-1614026480209-58b420c85311?q=80&w=800"
   }
+  
 ];
 
 const PortfolioPage: React.FC = () => {
