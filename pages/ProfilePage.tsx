@@ -1,10 +1,6 @@
 
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CommunityPost, UserProfile, RepostedPost } from '../types.ts';
+import { User, CommunityPost, UserProfile, RepostedPost, Page } from '../types.ts';
 import { db } from '../services/firebase.ts';
 // FIX: Corrected the import for 'firebase/firestore' to ensure all required v9 SDK functions are available.
 import { collection, query, where, onSnapshot, orderBy, QuerySnapshot, DocumentData, doc, setDoc, deleteDoc, getDocs, documentId, serverTimestamp, updateDoc, writeBatch, runTransaction, Timestamp, getDoc, increment } from 'firebase/firestore';
@@ -27,6 +23,8 @@ interface ProfilePageProps {
     onOpenChangePasswordModal: () => void;
     followingIds: Set<string>;
     onToggleFollow: (userId: string) => void;
+    previousPage: Page | null;
+    onNavigate: (page: Page) => void;
 }
 
 type ProfileTab = 'all' | 'threads' | 'ai' | 'saved' | 'reposts';
@@ -129,7 +127,7 @@ const EditProfileModal: React.FC<{
     );
 };
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal, followingIds, onToggleFollow }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserProfile, viewedProfileId, onDeletePost, onLogout, onViewProfile, onOpenChangePasswordModal, followingIds, onToggleFollow, previousPage, onNavigate }) => {
     const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
     const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -235,7 +233,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
             setIsLoadingProfile(false);
         }, (err) => {
             console.error("Error fetching profile:", err);
-            setError(err.code === 'permission-denied' ? "Could not load this profile due to a permission error." : "An unexpected error occurred while fetching the profile.");
+            setError(err.code === 'permission-denied' ? "Could not load this profile due to a permission error. Saved posts are private." : "An unexpected error occurred while fetching the profile.");
             setProfile(null);
             setIsLoadingProfile(false);
         });
@@ -716,6 +714,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
         </div>
     );
 
+    const handleBack = () => {
+        if (previousPage) onNavigate(previousPage);
+    };
+
+    const getBackButtonLabel = () => {
+        if (previousPage === Page.Home) return "Back to Home";
+        if (previousPage === Page.Community) return "Back to community page";
+        return null;
+    };
+
+    const backLabel = getBackButtonLabel();
+
     return (
         <div ref={pageRef} className="page-transition bg-primary min-h-screen">
             <div className={`fixed inset-0 bg-black/60 z-50 transition-opacity duration-300 md:hidden ${isMobileSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setMobileSidebarOpen(false)}>
@@ -760,6 +770,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
                                             <svg className="w-6 h-6"><use href="#icon-sidebar-toggle"></use></svg>
                                         </button>
                                     </div>
+
+                                    {/* Back Button */}
+                                    {backLabel && (
+                                        <button 
+                                            onClick={handleBack}
+                                            className="absolute top-0 left-12 md:left-0 p-2 flex items-center gap-1.5 text-sm font-medium text-secondary hover:text-primary transition-colors group"
+                                        >
+                                            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1 rotate-180"><use href="#icon-arrow-right"></use></svg>
+                                            <span>{backLabel}</span>
+                                        </button>
+                                    )}
 
                                     {/* Settings/Edit Icon (Top Right - Mobile) */}
                                     {isOwnProfile && (

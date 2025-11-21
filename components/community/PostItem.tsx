@@ -255,7 +255,7 @@ interface PostItemProps extends ProfileNavigable {
 
 const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost, followingIds, onToggleFollow }) => {
     const [comments, setComments] = useState<Comment[]>([]);
-    const [showComments, setShowComments] = useState(post.isAiPost && !!post.aiReply && user?.uid === post.author.id);
+    const [showComments, setShowComments] = useState(false);
     const [isMenuOpen, setMenuOpen] = useState(false);
     
     const menuRef = useRef<HTMLDivElement>(null);

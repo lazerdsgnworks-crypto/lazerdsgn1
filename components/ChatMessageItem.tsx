@@ -1,4 +1,10 @@
 
+
+
+
+
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ChatMessage, UserProfile } from '../types.ts';
 import Avatar from './Avatar.tsx';
@@ -106,6 +112,55 @@ const AnalysisResultBox: React.FC<{ result: Required<ChatMessage>['analysisResul
                 <svg className="w-5 h-5 text-primary"><use href="#icon-download"></use></svg>
             </div>
             <p className="text-sm font-semibold text-primary">{downloadText}</p>
+        </a>
+    );
+};
+
+const DownloadCard: React.FC<{ url: string; fileName: string; type: 'pdf' | 'word' | 'generic' }> = ({ url, fileName, type }) => {
+    let iconId = '#icon-file-text'; // Default for PDF/Generic
+    let iconBg = 'bg-red-500/10';
+    let iconColor = 'text-red-500';
+    let borderColor = 'border-red-500/20';
+    let label = 'PDF FILE';
+
+    if (type === 'word') {
+        iconId = '#icon-file-word';
+        iconBg = 'bg-blue-500/10';
+        iconColor = 'text-blue-500';
+        borderColor = 'border-blue-500/20';
+        label = 'WORD FILE';
+    } else if (type === 'pdf') {
+        iconId = '#icon-file-text';
+        iconBg = 'bg-red-500/10';
+        iconColor = 'text-red-500';
+        borderColor = 'border-red-500/20';
+        label = 'PDF FILE';
+    } else {
+        iconId = '#icon-download';
+        iconBg = 'bg-neutral-500/10';
+        iconColor = 'text-neutral-400';
+        borderColor = 'border-neutral-800';
+        label = 'FILE DOWNLOAD';
+    }
+
+    return (
+        <a
+            href={url}
+            download={fileName} // Note: 'download' attribute works best for same-origin or properly configured CORS
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`group flex items-center gap-4 p-4 mb-3 rounded-xl bg-secondary border ${borderColor} transition-all duration-300 hover:bg-hover hover:scale-[1.01] w-full max-w-md no-underline`}
+        >
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${iconBg} ${iconColor} flex-shrink-0`}>
+                <svg className="w-6 h-6"><use href={iconId}></use></svg>
+            </div>
+            <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-primary truncate" title={fileName}>{fileName}</h4>
+                <p className="text-xs text-secondary font-medium mt-0.5 uppercase tracking-wide">{label}</p>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-primary-accent text-on-primary-accent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 shadow-lg">
+                <svg className="w-5 h-5"><use href="#icon-download"></use></svg>
+            </div>
         </a>
     );
 };
@@ -370,6 +425,15 @@ const ChatMessageItem: React.FC<{
                     {message.audioUrl && (
                         <div className="mb-2"><AudioPlayer src={message.audioUrl} /></div>
                     )}
+                    
+                    {/* New Download Cards */}
+                    {message.analysisPdf && (
+                        <DownloadCard url={message.analysisPdf.url} fileName={message.analysisPdf.name} type="pdf" />
+                    )}
+                    {message.analysisWord && (
+                        <DownloadCard url={message.analysisWord.url} fileName={message.analysisWord.name} type="word" />
+                    )}
+                    
                     {message.analysisResult && <AnalysisResultBox result={message.analysisResult} />}
                     
                     {(shouldAnimate && aiText) ? (

@@ -7,6 +7,12 @@
 
 
 
+
+
+
+
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -45,6 +51,17 @@ interface ChatPageProps {
     openDeleteModal: (title: string, onConfirm: () => void) => void;
     onViewProfile: () => void;
 }
+
+const getFileNameFromUrl = (url: string, defaultName: string) => {
+    try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        const name = pathname.substring(pathname.lastIndexOf('/') + 1);
+        return name && name.length < 50 ? decodeURIComponent(name) : defaultName;
+    } catch {
+        return defaultName;
+    }
+};
 
 const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal, onViewProfile }) => {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -324,7 +341,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const contentType = response.headers.get("content-type");
                 if (isAnalysisMode && contentType && contentType.includes("application/json")) {
                     const result = await response.json();
-                    const aiResponseText = result.text || result.output || result.response || "Here is your analysis result.";
+                    // Default to empty string if text/output/response is missing or null
+                    const aiResponseText = result.text || result.output || result.response || ""; 
                     const analysisResultFile = result.file;
 
                     const aiMessageData: Omit<ChatMessage, 'id' | 'createdAt'> = {
@@ -332,6 +350,21 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         role: 'ai',
                         isAnalysisResponse: true,
                     };
+
+                    // Extract PDF and Word explicitly as requested
+                    if (result.pdf) {
+                        aiMessageData.analysisPdf = {
+                            url: result.pdf,
+                            name: "PDF File"
+                        };
+                    }
+
+                    if (result.word) {
+                        aiMessageData.analysisWord = {
+                            url: result.word,
+                            name: "Word File"
+                        };
+                    }
 
                     if (analysisResultFile && analysisResultFile.url && analysisResultFile.name) {
                         aiMessageData.analysisResult = analysisResultFile;
@@ -1086,7 +1119,13 @@ const ChatInput: React.FC<{
                             ref={textareaRef}
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
+                            onKeyDown={e => { 
+                                if (e.key === 'Enter' && !e.shiftKey) { 
+                                    if (window.innerWidth < 768) return;
+                                    e.preventDefault(); 
+                                    handleSubmit(e); 
+                                } 
+                            }}
                             placeholder="Ask me anything..."
                             className="flex-1 bg-transparent text-primary placeholder-muted focus:outline-none focus:ring-0 resize-none self-center py-2 px-3 text-base"
                             rows={1}

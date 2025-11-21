@@ -45,6 +45,14 @@ export interface ChatMessage {
     name: string;
     type: string;
   };
+  analysisPdf?: {
+    url: string;
+    name: string;
+  };
+  analysisWord?: {
+    url: string;
+    name: string;
+  };
   isStopMessage?: boolean;
   isAnalysisResponse?: boolean;
 }

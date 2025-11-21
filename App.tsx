@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, Unsubscribe, User as FirebaseUser, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth, db } from './services/firebase.ts';
@@ -445,6 +446,7 @@ const ensureUserProfileExists = async (user: FirebaseUser) => {
 
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.Home);
+    const [previousPage, setPreviousPage] = useState<Page | null>(null);
     const [user, setUser] = useState<User>(null);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -525,13 +527,19 @@ const App: React.FC = () => {
             setLoginModalOpen(true);
             return;
         }
+        
+        // Track previous page for back navigation
+        if (currentPage !== page) {
+             setPreviousPage(currentPage);
+        }
+
         // When navigating away from a viewed profile, reset it
         if (page !== Page.Profile) {
             setViewedProfileId(null);
         }
         setCurrentPage(page);
         window.scrollTo(0, 0);
-    }, [user]);
+    }, [user, currentPage]);
     
     const handleViewProfile = useCallback((userId: string | null) => {
         setViewedProfileId(userId);
@@ -814,6 +822,8 @@ const App: React.FC = () => {
                     onOpenChangePasswordModal={() => setChangePasswordModalOpen(true)}
                     followingIds={followingIds}
                     onToggleFollow={handleToggleFollow}
+                    previousPage={previousPage}
+                    onNavigate={navigateTo}
                 />;
             case Page.Home:
             default:
