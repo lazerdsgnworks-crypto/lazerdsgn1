@@ -5,6 +5,8 @@
 
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -1064,7 +1066,13 @@ const ChatInput: React.FC<{
                                 <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition">
                                     <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
                                 </button>
-                                <input type="file" ref={analysisInputRef} onChange={handleAnalysisFileChange} hidden />
+                                <input 
+                                    type="file" 
+                                    ref={analysisInputRef} 
+                                    onChange={handleAnalysisFileChange} 
+                                    accept="image/*,application/pdf,.pdf,text/plain,.txt,.doc,.docx,.xls,.xlsx,.csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                    hidden 
+                                />
                             </div>
                         ) : (
                              <div className="self-end">

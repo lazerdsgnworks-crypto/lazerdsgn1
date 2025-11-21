@@ -12,7 +12,6 @@ const CHAR_ANIMATION_SPEED_MS = 10;
 const codeTableRegex = /(```[\s\S]*?```)|((?:^\|.*\|\r?\n)+(?:^\|.*-.*\|\r?\n)(?:^\|.*\|\r?\n?)+)/gm;
 
 // --- MODIFIED AnimatedTextPart Component ---
-// This component now animates text parts and renders code/tables instantly.
 const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }> = ({ text, isAnalysisResponse }) => {
     const [displayedText, setDisplayedText] = useState('');
     const animationFrameRef = useRef<number | null>(null);
@@ -20,13 +19,10 @@ const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }>
     const indexRef = useRef(0);
     const startTimeRef = useRef<number | null>(null);
 
-    // This hook correctly keeps the ref updated with the *latest*
-    // full text from the stream.
     useEffect(() => {
         textRef.current = text; 
     }, [text]);
 
-    // This hook runs the animation.
     useEffect(() => {
         indexRef.current = 0;
         setDisplayedText('');
@@ -39,11 +35,9 @@ const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }>
             const elapsed = timestamp - startTimeRef.current;
             const charsToShow = Math.floor(elapsed / CHAR_ANIMATION_SPEED_MS);
 
-            // Use the ref (textRef.current) to get the *latest* full text
             if (indexRef.current < charsToShow && indexRef.current < textRef.current.length) {
                 indexRef.current = Math.min(charsToShow, textRef.current.length);
                 
-                // --- NEW LOGIC to build the displayed string ---
                 const fullText = textRef.current;
                 const animatedLength = indexRef.current;
                 
@@ -53,16 +47,13 @@ const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }>
 
                 for (const part of parts) {
                     const partLength = part.length;
-                    // Check if the part is code or a table
                     const isCodeOrTable = part.startsWith('```') || (part.trim().startsWith('|') && /\|.*-.*\|/.test(part));
 
                     if (isCodeOrTable) {
-                        // If animation has reached this block, display all of it instantly
                         if (animatedLength > lengthSoFar) {
                             newDisplayedText += part;
                         }
                     } else {
-                        // This is a text part. Animate it.
                         const charsToTake = Math.min(partLength, animatedLength - lengthSoFar);
                         if (charsToTake > 0) {
                             newDisplayedText += part.substring(0, charsToTake);
@@ -71,16 +62,13 @@ const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }>
 
                     lengthSoFar += partLength;
                     
-                    // If the animation hasn't reached the end of this part, stop building.
                     if (animatedLength < lengthSoFar) {
                         break;
                     }
                 }
                 setDisplayedText(newDisplayedText);
-                // --- END NEW LOGIC ---
             }
 
-            // Continue animating as long as we haven't reached the end
             if (indexRef.current < textRef.current.length) {
                 animationFrameRef.current = requestAnimationFrame(animate);
             }
@@ -93,15 +81,12 @@ const AnimatedTextPart: React.FC<{ text: string; isAnalysisResponse?: boolean }>
                 cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, []); // <-- This empty array is still correct and necessary
+    }, []);
 
-    // This single <Response> component receives the intelligently-built string,
-    // ensuring lists and other markdown elements render correctly.
     return <Response isAnalysisResponse={isAnalysisResponse}>{displayedText}</Response>;
 };
 
 const AnalysisResultBox: React.FC<{ result: Required<ChatMessage>['analysisResult'] }> = ({ result }) => {
-    // Determine a user-friendly file type from the name
     const downloadText = useMemo(() => {
         const name = result.name.toLowerCase();
         if (name.endsWith('.pdf')) return 'Download Pdf';
@@ -125,8 +110,47 @@ const AnalysisResultBox: React.FC<{ result: Required<ChatMessage>['analysisResul
     );
 };
 
+const getFileIconId = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (['doc', 'docx'].includes(ext || '')) return '#icon-file-word';
+    if (['xls', 'xlsx', 'csv'].includes(ext || '')) return '#icon-file-sheet';
+    if (['pdf'].includes(ext || '')) return '#icon-file-text';
+    return '#icon-paperclip';
+};
 
-// --- Main ChatMessageItem Component (Icons Updated Below) ---
+// NEW: Enhanced File Preview Card (Outside Bubble Style)
+const FilePreviewCard: React.FC<{ fileName: string }> = ({ fileName }) => {
+    const iconId = getFileIconId(fileName);
+    const ext = fileName.split('.').pop()?.toLowerCase() || 'file';
+    
+    let iconBg = 'bg-neutral-800';
+    let iconColor = 'text-neutral-400';
+    
+    if (['doc', 'docx'].includes(ext)) {
+        iconBg = 'bg-blue-500/20';
+        iconColor = 'text-blue-400';
+    } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        iconBg = 'bg-green-500/20';
+        iconColor = 'text-green-400';
+    } else if (['pdf'].includes(ext)) {
+        iconBg = 'bg-red-500/20';
+        iconColor = 'text-red-400';
+    }
+
+    return (
+        <div className="group flex items-center p-3 pr-6 rounded-2xl bg-secondary border border-primary max-w-xs cursor-default transition-transform hover:scale-[1.02]">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${iconBg} ${iconColor} transition-colors`}>
+                <svg className="w-6 h-6"><use href={iconId}></use></svg>
+            </div>
+            <div className="ml-3 min-w-0 flex flex-col justify-center text-left">
+                <span className="text-sm font-semibold text-primary truncate w-full leading-tight" title={fileName}>{fileName}</span>
+                <span className="text-[10px] font-medium text-secondary tracking-wide uppercase mt-0.5">{ext.toUpperCase()} File</span>
+            </div>
+        </div>
+    );
+};
+
+// --- Main ChatMessageItem Component ---
 const ChatMessageItem: React.FC<{
     message: ChatMessage;
     isLoading?: boolean;
@@ -149,7 +173,6 @@ const ChatMessageItem: React.FC<{
     onImageClick,
 }) => {
     const isUser = message.role === 'user';
-    const [showTranscription, setShowTranscription] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     
     // State for like/dislike buttons
@@ -166,24 +189,17 @@ const ChatMessageItem: React.FC<{
         });
     };
 
-    // Handlers for like/dislike. You can add feedback logic here.
     const handleLike = () => {
         setIsLiked(prev => !prev);
         if (isDisliked) setIsDisliked(false);
-        // TODO: Add logic to send feedback
         console.log("Feedback: Like");
     };
 
     const handleDislike = () => {
         setIsDisliked(prev => !prev);
         if (isLiked) setIsLiked(false);
-        // TODO: Add logic to send feedback
         console.log("Feedback: Dislike");
     };
-
-    /* ---------------------------------------------------------------------- */
-    /* Loading states                                                         */
-    /* ---------------------------------------------------------------------- */
 
     if (isLoading) {
         if (isAnalyzing)
@@ -209,14 +225,12 @@ const ChatMessageItem: React.FC<{
                                 <svg className="w-4 h-4 animate-spin text-blue-400"><use href="#icon-spinner"></use></svg>
                              </p>
                         </div>
-                        {/* Film strip edge effect */}
                          <div className="absolute top-0 bottom-0 left-0 w-2 border-r border-blue-500/10 flex flex-col gap-1 py-1">
                             {Array.from({length: 8}).map((_, i) => <div key={i} className="w-1 h-3 bg-blue-500/20 rounded-r-sm mx-auto"></div>)}
                          </div>
                          <div className="absolute top-0 bottom-0 right-0 w-2 border-l border-blue-500/10 flex flex-col gap-1 py-1">
                             {Array.from({length: 8}).map((_, i) => <div key={i} className="w-1 h-3 bg-blue-500/20 rounded-l-sm mx-auto"></div>)}
                          </div>
-                         {/* Moving light effect */}
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/5 to-transparent -skew-x-12 translate-x-[-100%] animate-[shimmer_2s_infinite]"></div>
                     </div>
                 </div>
@@ -245,7 +259,6 @@ const ChatMessageItem: React.FC<{
                 </div>
             );
 
-        // Standard "thinking" dots (before streaming begins)
         return (
             <div className="flex items-start justify-start animate-geminiFadeIn">
                 <div className="chat-message-bubble bg-secondary">
@@ -259,44 +272,43 @@ const ChatMessageItem: React.FC<{
         );
     }
 
-    /* ---------------------------------------------------------------------- */
-    /* Actual Message Rendering                                               */
-    /* ---------------------------------------------------------------------- */
-
     const alignment = isUser ? "justify-end" : "justify-start";
 
-    /* -------------------------- User Message ------------------------------- */
-
     if (isUser) {
-        const hasContent = message.text || (message.imageUrls && message.imageUrls.length > 0) || (message.imageUrl && !message.imageUrls) || (message.analysisFile && !message.imageUrl);
+        const hasText = !!message.text;
+        const hasImages = message.imageUrls && message.imageUrls.length > 0;
+        const hasLegacyImage = message.imageUrl && !message.imageUrls;
+        // If we have analysisFile but NO preview image (like for docs/sheets), render the card
+        const hasFileCard = message.analysisFile && !message.imageUrl;
+
+        const hasBubbleContent = hasText || hasImages || hasLegacyImage;
 
         return (
             <div className={`flex items-end gap-3 ${alignment} animate-geminiFadeIn`}>
-                <div className="group flex flex-col max-w-[85%] items-end">
-                    {hasContent && (
+                <div className="group flex flex-col max-w-[85%] items-end gap-2">
+                    
+                    {/* Render File Preview Outside Bubble */}
+                    {hasFileCard && (
+                        <FilePreviewCard fileName={message.analysisFile!.name} />
+                    )}
+
+                    {/* Render Bubble Content */}
+                    {hasBubbleContent && (
                         <div className="relative">
                             <div className="chat-message-bubble user-message overflow-hidden">
-                                {message.imageUrls && message.imageUrls.length > 0 && (
+                                {hasImages && (
                                     <div className="grid grid-cols-2 gap-2 mb-2">
-                                        {message.imageUrls.map((url, i) => (
+                                        {message.imageUrls!.map((url, i) => (
                                             <img key={i} src={url} alt={`upload ${i}`} className="rounded-lg object-cover cursor-pointer" onClick={() => onImageClick?.(url)} />
                                         ))}
                                     </div>
                                 )}
-                                {message.imageUrl && !message.imageUrls && (
+                                {hasLegacyImage && (
                                     <img src={message.imageUrl} alt="analysis file preview" className="rounded-lg mb-2 object-cover cursor-pointer" onClick={() => onImageClick?.(message.imageUrl!)} />
                                 )}
-                                {message.text && <Response>{message.text}</Response>}
-                                {message.analysisFile && !message.imageUrl && (
-                                    <div className="mt-2 p-2 bg-black/20 rounded-lg flex items-center gap-2 text-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
-                                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                                        </svg>
-                                        <span className="truncate">{message.analysisFile.name}</span>
-                                    </div>
-                                )}
+                                {hasText && <Response>{message.text}</Response>}
                             </div>
-                            {message.text && (
+                            {hasText && (
                                 <button onClick={handleCopy} className="absolute -left-10 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-hover text-muted opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Copy text">
                                     {isCopied ? (
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-green-500">
@@ -310,9 +322,8 @@ const ChatMessageItem: React.FC<{
                         </div>
                     )}
 
-                    {/* Audio Player rendered outside the white message bubble */}
                     {message.audioUrl && (
-                        <div className={hasContent ? "mt-2" : ""}>
+                        <div className={hasBubbleContent ? "mt-2" : ""}>
                             <AudioPlayer src={message.audioUrl} />
                         </div>
                     )}
@@ -321,14 +332,11 @@ const ChatMessageItem: React.FC<{
         );
     }
 
-    /* ----------------------------- AI Message ------------------------------ */
-
     const aiText = message.text || "";
     const hasAnimated = animatedMessageIds.current.has(message.id);
     const shouldAnimate = isStreaming;
 
     useEffect(() => {
-        // Once the stream is done, mark this message as "animated"
         if (!isStreaming && !hasAnimated && aiText) {
             animatedMessageIds.current.add(message.id);
         }
@@ -373,10 +381,7 @@ const ChatMessageItem: React.FC<{
                 </div>
                     {message.text && !message.isStopMessage && (
                         
-                        // --- AI BUTTON GROUP UPDATED ---
                         <div className="mt-2 flex items-center gap-2">
-                            
-                            {/* 1. AI "Copy" Button */}
                             <button 
                                 onClick={handleCopy} 
                                 className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-all duration-200"
@@ -390,7 +395,6 @@ const ChatMessageItem: React.FC<{
                                 )}
                             </button>
 
-                            {/* 2. "Like" Button */}
                             <button 
                                 onClick={handleLike} 
                                 className={`p-1.5 rounded-lg transition-all duration-200 ${isLiked ? 'text-blue-500 bg-blue-500/10' : 'text-muted hover:text-primary hover:bg-hover'}`} 
@@ -404,7 +408,6 @@ const ChatMessageItem: React.FC<{
                                 )}
                             </button>
 
-                            {/* 3. "Dislike" Button */}
                             <button 
                                 onClick={handleDislike} 
                                 className={`p-1.5 rounded-lg transition-all duration-200 ${isDisliked ? 'text-red-500 bg-red-500/10' : 'text-muted hover:text-primary hover:bg-hover'}`} 

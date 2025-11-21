@@ -47,7 +47,7 @@ const testimonials = [
     { name: "Saman Malik", title: "Brand Director", avatar: "https://placehold.co/40x40/333333/ffffff?text=S", text: "LazerDsgn guided our brand through a complex re-design process, providing ongoing expertise and ensuring our final look was pitch perfect." },
     { name: "Ahmed Khan", title: "Marketing Lead", avatar: null, avatarInitial: "A", text: "The new visual system LazerDsgn delivered instantly elevated our presence in a crowded market. Their process is smooth and highly collaborative." },
     { name: "Hassan Ali", title: "Digital Strategist", avatar: "https://placehold.co/40x40/333333/ffffff?text=H", text: "Our website conversions doubled after the UI/UX overhaul. LazerDsgn's focus on user experience married with beautiful design is unmatched." },
-    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://placehold.co/40x40/333333/ffffff?text=Z", text: "The robust design consultation and fast delivery from LazerDsgn have streamlined our production workflow, making our internal marketing significantly more efficient." },
+    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png", text: "The robust design consultation and fast delivery from LazerDsgn have streamlined our production workflow, making our internal marketing significantly more efficient." },
     { name: "Maria Rodriguez", title: "Founder, Small Retail", avatar: null, avatarInitial: "M", text: "The execution of our campaign assets exceeded expectations. Every touchpoint felt integrated and premium, improving overall brand perception." },
 ];
 
