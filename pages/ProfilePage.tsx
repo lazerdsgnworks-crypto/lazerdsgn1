@@ -719,8 +719,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ loggedInUser, loggedInUserPro
     };
 
     const getBackButtonLabel = () => {
-        if (previousPage === Page.Home) return "Back to Home";
-        if (previousPage === Page.Community) return "Back to community page";
+        if (previousPage === Page.Home) return "Home";
+        if (previousPage === Page.Community) return "Community";
+        if (previousPage === Page.Portfolio) return "Portfolio";
         return null;
     };
 
