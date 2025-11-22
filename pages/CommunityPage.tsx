@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, CommunityPost, Author, UserProfile, RepostedPost, Poll } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -47,8 +48,10 @@ const CreatePostForm: React.FC<{
     const [text, setText] = useState('');
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [audioFile, setAudioFile] = useState<File | null>(null);
+    const [videoFile, setVideoFile] = useState<File | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const [videoPreview, setVideoPreview] = useState<string | null>(null);
     const [status, setStatus] = useState<'idle' | 'compressing' | 'uploading' | 'submitting'>('idle');
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [enhancedText, setEnhancedText] = useState<string | null>(null);
@@ -86,6 +89,12 @@ const CreatePostForm: React.FC<{
         setImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
     };
 
+    const removeVideo = () => {
+        if (videoPreview) URL.revokeObjectURL(videoPreview);
+        setVideoFile(null);
+        setVideoPreview(null);
+    };
+
     const removeAudio = () => {
         if (isRecording && mediaRecorderRef.current?.state === 'recording') {
             mediaRecorderRef.current.stop();
@@ -108,11 +117,20 @@ const CreatePostForm: React.FC<{
         const firstFile = newFiles[0];
     
         if (firstFile.type.startsWith('video/')) {
-            alert("Video cannot be combined with other media. Please create a separate post for videos.");
+            if (imageFiles.length > 0) {
+                alert("Cannot combine video with images. Please remove images first.");
+                return;
+            }
+            setVideoFile(firstFile);
+            setVideoPreview(URL.createObjectURL(firstFile));
             return;
         } 
         
         if (firstFile.type.startsWith('image/')) {
+            if (videoFile) {
+                alert("Cannot combine images with video. Please remove video first.");
+                return;
+            }
             if (!newFiles.every(f => f.type.startsWith('image/'))) { alert("You can only select images with this button."); return; }
             
             const filesToAdd = newFiles.slice(0, 4 - imageFiles.length);
@@ -135,7 +153,7 @@ const CreatePostForm: React.FC<{
                 setStatus('idle');
             }
         } else {
-            alert("Unsupported file type. Please select images.");
+            alert("Unsupported file type. Please select images or a video.");
             return;
         }
     };
@@ -187,7 +205,7 @@ const CreatePostForm: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const validPollOptions = pollOptions.map(o => o.trim()).filter(Boolean);
-        const hasContent = text.trim() || imageFiles.length > 0 || audioFile || (showPollCreator && validPollOptions.length >= 2);
+        const hasContent = text.trim() || imageFiles.length > 0 || videoFile || audioFile || (showPollCreator && validPollOptions.length >= 2);
         
         if (!user || !hasContent || status !== 'idle') return;
         
@@ -208,7 +226,19 @@ const CreatePostForm: React.FC<{
                     return data.secure_url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
                 }));
                 finalImageUrls = uploadedUrls;
+            } else if (videoFile) {
+                setStatus('uploading');
+                const formData = new FormData();
+                formData.append('file', videoFile);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                const response = await fetch(url, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error((await response.json()).error.message);
+                const data = await response.json();
+                // For video, we pass it as a single item array to match the mediaUrls structure for now
+                finalImageUrls = [data.secure_url]; 
             }
+
             if (audioFile) {
                 setStatus('uploading');
                 const formData = new FormData();
@@ -226,6 +256,7 @@ const CreatePostForm: React.FC<{
             
             setText('');
             removeImage(0); // This will clear all images
+            removeVideo();
             setImageFiles([]);
             setImagePreviews([]);
             removeAudio();
@@ -321,7 +352,7 @@ const CreatePostForm: React.FC<{
         submitting: isAiQuery ? 'Asking...' : 'Posting...',
     };
     
-    const isPostable = text.trim() || imageFiles.length > 0 || audioFile || (showPollCreator && pollOptions.filter(o => o.trim()).length >= 2);
+    const isPostable = text.trim() || imageFiles.length > 0 || videoFile || audioFile || (showPollCreator && pollOptions.filter(o => o.trim()).length >= 2);
     const hasContentToEnhance = text.trim() || imageFiles.length > 0;
 
     return (
@@ -387,6 +418,15 @@ const CreatePostForm: React.FC<{
                             </div>
                         )}
 
+                        {videoPreview && (
+                            <div className="mt-4 relative max-w-sm">
+                                <video src={videoPreview} controls className="rounded-xl w-full max-h-64 bg-black" />
+                                <button type="button" onClick={removeVideo} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black/80 transition-colors z-10">
+                                    <svg className="w-4 h-4"><use href="#icon-x-close"></use></svg>
+                                </button>
+                            </div>
+                        )}
+
                         {showPollCreator && (
                             <div className="mt-3 space-y-2">
                                 {pollOptions.map((option, index) => (
@@ -414,7 +454,7 @@ const CreatePostForm: React.FC<{
 
                         <div className="flex justify-between items-center mt-3 pt-3 border-t border-primary">
                             <div className="flex items-center space-x-0">
-                                <button type="button" onClick={() => mediaInputRef.current?.click()} className="p-2 text-secondary hover:text-blue-500 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle' || imageFiles.length >= 4} title="Add media">
+                                <button type="button" onClick={() => mediaInputRef.current?.click()} className="p-2 text-secondary hover:text-blue-500 hover:bg-blue-500/10 rounded-full transition-colors disabled:opacity-50" disabled={status !== 'idle' || imageFiles.length >= 4 || !!videoFile} title="Add media">
                                     <svg className="w-5 h-5"><use href="#icon-paperclip"></use></svg>
                                 </button>
                                 <button type="button" onClick={handleMicClick} className={`p-2 rounded-full transition-colors disabled:opacity-50 ${isRecording ? 'mic-recording' : 'text-secondary hover:text-red-500 hover:bg-red-500/10'}`} disabled={status !== 'idle'} title={isRecording ? 'Stop recording' : 'Record audio'}>
@@ -443,7 +483,7 @@ const CreatePostForm: React.FC<{
                                 </label>
                             </div>
                             <div className="flex items-center space-x-4">
-                                <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*" multiple hidden disabled={status !== 'idle'} />
+                                <input type="file" ref={mediaInputRef} onChange={handleMediaChange} accept="image/*,video/*" multiple hidden disabled={status !== 'idle'} />
                                 <button type="submit" disabled={status !== 'idle' || !isPostable} className="btn btn-primary !py-1.5 !px-5 !text-sm">
                                     {buttonText[status]}
                                 </button>
@@ -520,11 +560,11 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
     const [postToRepost, setPostToRepost] = useState<CommunityPost | null>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [activeTab, setActiveTab] = useState<FeedTab>('all');
+    const [newlyCreatedPostId, setNewlyCreatedPostId] = useState<string | null>(null);
     
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-    const [isSearchSidebarOpen, setSearchSidebarOpen] = useState(false);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
     
     const uniqueAuthors = useMemo(() => {
@@ -612,13 +652,27 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             isAiPost: isAiQuery,
         };
 
+        // Check for video (passed inside imageUrls for simplicity in this structure, but we will check extensions or rely on caller logic to set mediaType)
+        // In handleSubmit, we set mediaUrls for video too. We should infer mediaType properly.
+        
+        // Logic: If imageUrls has content, check if it's video or image.
+        // Since `CreatePostForm` enforces exclusivity, if we have a videoUrl passed in `imageUrls`, it's video.
+        // We can detect extension or rely on how `CreatePostForm` passed it.
+        // For now, assume `CreatePostForm` sends video url in `imageUrls` array if it's a video upload.
+        // We need to know if it's a video. Cloudinary video URLs often don't end in .mp4 if transformations are applied, but they contain /video/upload.
+        // Better: CreatePostForm should probably pass mediaType explicitly or we detect it.
+        // Let's detect based on URL pattern or just assume if it came from video upload input (which we don't see here directly).
+        // Workaround: Check if URL contains '/video/upload/'.
+        
         if (imageUrls && imageUrls.length > 0) {
+            const isVideo = imageUrls[0].includes('/video/upload/');
             postData.mediaUrls = imageUrls;
-            postData.mediaType = 'image';
+            postData.mediaType = isVideo ? 'video' : 'image';
         }
+        
         if (audioUrl) {
             postData.audioUrl = audioUrl;
-            postData.mediaType = postData.mediaType === 'image' ? 'mixed' : 'audio';
+            postData.mediaType = postData.mediaType ? 'mixed' : 'audio';
         }
 
         if (pollOptions && pollOptions.length >= 2) {
@@ -670,7 +724,12 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
             }
 
             // Create the post document, now with the AI reply if applicable.
-            await addDoc(collection(db, 'community-posts'), postData);
+            const docRef = await addDoc(collection(db, 'community-posts'), postData);
+            
+            // If it's an AI post, we want it to auto-open for the creator immediately.
+            if (isAiQuery) {
+                setNewlyCreatedPostId(docRef.id);
+            }
 
             setCreatePostModalOpen(false);
         } catch (error) {
@@ -884,6 +943,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ user, userProfile, onDele
                                         onRepost={handleOpenRepostModal}
                                         followingIds={followingIds}
                                         onToggleFollow={onToggleFollow}
+                                        initiallyOpen={post.id === newlyCreatedPostId}
                                     />
                                 ))
                             )}

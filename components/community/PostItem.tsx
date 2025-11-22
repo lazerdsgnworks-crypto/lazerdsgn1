@@ -251,11 +251,12 @@ interface PostItemProps extends ProfileNavigable {
     onRepost: (post: CommunityPost) => void;
     followingIds?: Set<string>;
     onToggleFollow?: (userId: string) => void;
+    initiallyOpen?: boolean;
 }
 
-const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost, followingIds, onToggleFollow }) => {
+const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, savedPostIds, onToggleSave, likedPostIds, onToggleLike, onViewProfile, onImageClick, onRepost, followingIds, onToggleFollow, initiallyOpen }) => {
     const [comments, setComments] = useState<Comment[]>([]);
-    const [showComments, setShowComments] = useState(false);
+    const [showComments, setShowComments] = useState(initiallyOpen || false);
     const [isMenuOpen, setMenuOpen] = useState(false);
     
     const menuRef = useRef<HTMLDivElement>(null);
@@ -454,13 +455,9 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                     {reposted.mediaUrls && reposted.mediaUrls.length > 0 && (
                         <div className="mt-2">
                             {reposted.mediaType === 'video' ? (
-                                <div className="rounded-lg overflow-hidden max-h-64 flex items-center justify-center bg-muted">
-                                    <video src={reposted.mediaUrls[0]} controls muted className="max-h-full max-w-full object-contain" />
-                                </div>
+                                <video src={reposted.mediaUrls[0]} controls muted className="rounded-xl max-h-[256px] w-auto max-w-full shadow-sm" />
                             ) : (
-                                <div className="rounded-lg overflow-hidden max-h-64 flex items-center justify-center bg-muted">
-                                    <img src={reposted.mediaUrls[0]} alt="reposted media" className="max-h-full max-w-full object-contain cursor-pointer" onClick={(e) => {e.stopPropagation(); onImageClick(reposted.mediaUrls![0]);}}/>
-                                </div>
+                                <img src={reposted.mediaUrls[0]} alt="reposted media" className="rounded-xl max-h-[256px] w-auto max-w-full object-contain shadow-sm cursor-pointer" onClick={(e) => {e.stopPropagation(); onImageClick(reposted.mediaUrls![0]);}}/>
                             )}
                         </div>
                     )}
@@ -559,23 +556,29 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         {post.mediaUrls && post.mediaUrls.length > 0 && (
                             <div className="mt-3">
                                 {post.mediaType === 'video' ? (
-                                    <div className="rounded-xl shadow-sm overflow-hidden bg-black">
-                                        <video src={post.mediaUrls[0]} controls playsInline className="w-full h-auto" />
-                                    </div>
+                                    <video 
+                                        src={post.mediaUrls[0]} 
+                                        controls 
+                                        playsInline 
+                                        className="rounded-xl max-h-[350px] w-auto max-w-full shadow-sm" 
+                                    />
                                 ) : post.mediaUrls.length === 1 ? (
-                                     <div className="rounded-xl overflow-hidden cursor-pointer relative bg-muted" onClick={() => onImageClick(post.mediaUrls[0])}>
-                                        <img src={post.mediaUrls[0]} alt="Post media 1" className="w-full h-auto max-h-[512px] object-cover" />
-                                    </div>
+                                     <img 
+                                        src={post.mediaUrls[0]} 
+                                        alt="Post media 1" 
+                                        className="rounded-xl max-h-[350px] w-auto max-w-full object-contain shadow-sm cursor-pointer" 
+                                        onClick={() => onImageClick(post.mediaUrls![0])}
+                                     />
                                 ) : (
-                                    <div className="flex overflow-x-auto space-x-2 scrollbar-hide h-80">
+                                    <div className="flex overflow-x-auto space-x-2 scrollbar-hide max-h-[350px]">
                                         {post.mediaUrls.map((url, index) => (
-                                            <div key={index} className="flex-shrink-0 h-full w-auto rounded-xl overflow-hidden cursor-pointer" onClick={() => onImageClick(url)}>
-                                                <img 
-                                                    src={url} 
-                                                    alt={`Post media ${index + 1}`} 
-                                                    className="h-full w-auto object-cover" 
-                                                />
-                                            </div>
+                                            <img 
+                                                key={index}
+                                                src={url} 
+                                                alt={`Post media ${index + 1}`} 
+                                                className="h-full max-h-[350px] w-auto rounded-xl object-cover cursor-pointer" 
+                                                onClick={() => onImageClick(url)} 
+                                            />
                                         ))}
                                     </div>
                                 )}
