@@ -1,7 +1,11 @@
-import React from 'react';
+
+import React, { useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeHighlight from 'rehype-highlight';
 
 interface ResponseProps {
     className?: string;
@@ -9,46 +13,17 @@ interface ResponseProps {
     isAnalysisResponse?: boolean;
 }
 
-// Re-using the existing syntax highlighter for style consistency
-function highlightSyntax(code: string): string {
-    const keywords = [
-        'const','let','var','function','return','if','else','for','while','import','from','export','default',
-        'async','await','class','new','try','catch','finally','throw','switch','case','break','continue',
-        'debugger','delete','in','instanceof','typeof','void','true','false','null','undefined','def','print',
-        'is','not','and','or','lambda','with','as','yield','assert','pass','raise'
-    ];
-
-    const tokenRegex = new RegExp([
-        `(\\/\\/.*|\\/\\*[\\s\\S]*?\\*\\/|#.*)`,               // Comments
-        `("([^"\\\\]|\\\\.)*"|'([^'\\\\]|\\\\.)*'|\\\`([^\\\`\\\\]|\\\\.)*\\\`)`, // Strings
-        `(\\b(?:${keywords.join('|')})\\b)`,               // Keywords
-        `(\\b\\d+(?:\\D\\d+)?\\b)`,                         // Numbers
-        `([a-zA-Z_]\\w*)(?=\\s*\\()`,                       // Function calls
-        `([().,;[\\]{}<>=+\\-*\\/%&|!^?:])`                // Punctuation
-    ].join('|'), 'g');
-
-    return code
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(tokenRegex, (match, g1_comment, g2_string, g3_keyword, g4_number, g5_function, g6_punctuation) => {
-            if (g1_comment) return `<span class="code-comment">${g1_comment}</span>`;
-            if (g2_string) return `<span class="code-string">${g2_string}</span>`;
-            if (g3_keyword) return `<span class="code-keyword">${g3_keyword}</span>`;
-            if (g4_number) return `<span class="code-number">${g4_number}</span>`;
-            if (g5_function) return `<span class="code-function">${g5_function}</span>`;
-            if (g6_punctuation) return `<span class="code-punctuation">${g6_punctuation}</span>`;
-            return match;
-        });
-}
-
 const Response: React.FC<ResponseProps> = ({ className, children, isAnalysisResponse }) => {
     
     const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
-        // Find the closest code block to the button that was clicked
-        const codeElement = (e.target as HTMLElement).closest('.response-wrapper')?.querySelector('code');
-        if (codeElement && codeElement.innerText) {
-            navigator.clipboard.writeText(codeElement.innerText).then(() => {
+        // Locate the code element relative to the button
+        const wrapper = (e.target as HTMLElement).closest('.response-wrapper');
+        // In the new structure created by rehype-highlight, code is inside pre.
+        // We can try to get textContent of the code block.
+        const codeElement = wrapper?.querySelector('code');
+        
+        if (codeElement && codeElement.textContent) {
+            navigator.clipboard.writeText(codeElement.textContent).then(() => {
                 const button = (e.target as HTMLElement).closest('button');
                 if (button) {
                     const originalContent = button.innerHTML;
@@ -67,24 +42,21 @@ const Response: React.FC<ResponseProps> = ({ className, children, isAnalysisResp
     return (
         <div className={className}>
             <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
+                remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                rehypePlugins={[rehypeKatex, rehypeHighlight]}
                 components={{
+                    // Override 'code' to handle inline vs block code
                     code({ node, className, children, ...props }: { node?: any; className?: string; children: React.ReactNode; [key: string]: any }) {
-                        const codeText = String(children).replace(/\n$/, '');
-
-                        // Heuristic to treat short, single-line blocks as inline
-                        const treatAsInline = !String(children).includes('\n');
-                        const hasNewlines = codeText.includes('\n');
-                        const INLINE_THRESHOLD = 60;
-                        const finalTreatAsInline = treatAsInline || (!hasNewlines && codeText.length < INLINE_THRESHOLD);
-
-                        if (finalTreatAsInline) {
+                        // react-markdown passes an 'inline' boolean prop to the code component
+                        const { inline } = props;
+                        
+                        if (inline) {
                             return (
                                 <code 
-                                    className="bg-neutral-800 text-neutral-300 font-mono text-xs px-1.5 py-0.5 rounded-md" 
+                                    className="bg-neutral-800 text-neutral-300 font-mono text-xs px-1.5 py-0.5 rounded-md inline-code" 
                                     {...props}
                                 >
-                                    {codeText}
+                                    {children}
                                 </code>
                             )
                         }
@@ -98,39 +70,34 @@ const Response: React.FC<ResponseProps> = ({ className, children, isAnalysisResp
                                 <div className="response-header">
                                     <span className="response-title">{lang}</span>
                                     
-                                    {/* --- ICONS UPDATED TO MATERIAL/GEMINI STYLE (FILLED) --- */}
                                     <div className="response-actions">
-                                        <button className="copy-btn" onClick={handleCopy}>
-                                            {/* Google Material "content_copy" Icon */}
+                                        <button className="copy-btn" onClick={handleCopy} title="Copy Code">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                                                 <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                                             </svg>
                                         </button>
-                                        
-                                        <button className="like-btn" onClick={() => { /* Handle like */ }}>
-                                            {/* Google Material "thumb_up" Icon */}
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                                <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
-                                            </svg>
-                                        </button>
-
-                                        <button className="dislike-btn" onClick={() => { /* Handle dislike */ }}>
-                                            {/* Google Material "thumb_down" Icon */}
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                                <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/>
-                                            </svg>
-                                        </button>
                                     </div>
-                                    {/* --- END ICON UPDATE --- */}
-
                                 </div>
                                 <div className="overflow-x-auto">
-                                    <pre>
-                                        <code dangerouslySetInnerHTML={{ __html: highlightSyntax(codeText) }} />
+                                    {/* 
+                                      rehype-highlight usually wraps content in pre > code. 
+                                      Since we are overriding 'code', 'children' here contains the highlighted spans. 
+                                      We wrap it in 'pre' manually to maintain block structure.
+                                    */}
+                                    <pre {...props}>
+                                        <code className={className}>
+                                            {children}
+                                        </code>
                                     </pre>
                                 </div>
                             </div>
                         );
+                    },
+                    
+                    // Override 'pre' to just render its children (which is the 'code' block above)
+                    // This prevents double wrapping since we handle the wrapper in 'code'
+                    pre({ children }) {
+                        return <>{children}</>;
                     },
                     
                     table({ children }: { children?: React.ReactNode }) {

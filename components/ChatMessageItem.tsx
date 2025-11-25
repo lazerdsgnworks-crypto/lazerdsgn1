@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ChatMessage, UserProfile } from '../types.ts';
 import Avatar from './Avatar.tsx';
@@ -146,7 +140,7 @@ const DownloadCard: React.FC<{ url: string; fileName: string; type: 'pdf' | 'wor
     return (
         <a
             href={url}
-            download={fileName} // Note: 'download' attribute works best for same-origin or properly configured CORS
+            download={fileName} 
             target="_blank"
             rel="noopener noreferrer"
             className={`group flex items-center gap-4 p-4 mb-3 rounded-xl bg-secondary border ${borderColor} transition-all duration-300 hover:bg-hover hover:scale-[1.01] w-full max-w-md no-underline`}
@@ -173,7 +167,7 @@ const getFileIconId = (filename: string) => {
     return '#icon-paperclip';
 };
 
-// NEW: Enhanced File Preview Card (Outside Bubble Style)
+// --- EXISTING: Enhanced File Preview Card (Outside Bubble Style) ---
 const FilePreviewCard: React.FC<{ fileName: string }> = ({ fileName }) => {
     const iconId = getFileIconId(fileName);
     const ext = fileName.split('.').pop()?.toLowerCase() || 'file';
@@ -203,6 +197,62 @@ const FilePreviewCard: React.FC<{ fileName: string }> = ({ fileName }) => {
             </div>
         </div>
     );
+};
+
+// --- NEW: Image Preview Card (Matches FilePreviewCard Design) ---
+const ImagePreviewCard: React.FC<{ url: string; fileName?: string; onClick?: () => void }> = ({ url, fileName = 'Image', onClick }) => {
+    return (
+        <div 
+            onClick={onClick}
+            className="group flex items-center p-3 pr-6 rounded-2xl bg-secondary border border-primary max-w-xs cursor-pointer transition-transform hover:scale-[1.02]"
+        >
+            {/* Thumbnail Container */}
+            <div className="flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700/50 relative">
+                <img src={url} alt={fileName} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+            </div>
+            {/* Text Info */}
+            <div className="ml-3 min-w-0 flex flex-col justify-center text-left">
+                <span className="text-sm font-semibold text-primary truncate w-full leading-tight" title={fileName}>
+                    {fileName}
+                </span>
+                <span className="text-[10px] font-medium text-secondary tracking-wide uppercase mt-0.5">
+                    Image File
+                </span>
+            </div>
+        </div>
+    );
+};
+
+// --- NEW: Video Preview Card ---
+const VideoPreviewCard: React.FC<{ url: string; fileName?: string; onClick?: () => void }> = ({ url, fileName = 'Video', onClick }) => {
+    return (
+        <div 
+            className="group flex items-center p-3 pr-6 rounded-2xl bg-secondary border border-primary max-w-xs cursor-default transition-transform hover:scale-[1.02]"
+        >
+            <div className="flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700/50 relative flex items-center justify-center">
+                 <svg className="w-5 h-5 text-white"><use href="#icon-video"></use></svg>
+            </div>
+            <div className="ml-3 min-w-0 flex flex-col justify-center text-left">
+                <span className="text-sm font-semibold text-primary truncate w-full leading-tight" title={fileName}>
+                    {fileName}
+                </span>
+                <span className="text-[10px] font-medium text-secondary tracking-wide uppercase mt-0.5">
+                    Video File
+                </span>
+            </div>
+        </div>
+    );
+};
+
+// Helper to extract a display name from a URL
+const getFileNameFromUrl = (url: string) => {
+    try {
+        const name = url.split('/').pop()?.split('?')[0];
+        return decodeURIComponent(name || 'File');
+    } catch {
+        return 'File';
+    }
 };
 
 // --- Main ChatMessageItem Component ---
@@ -269,7 +319,7 @@ const ChatMessageItem: React.FC<{
         if (isGeneratingVideo)
             return (
                 <div className="flex items-start justify-start animate-geminiFadeIn">
-                     <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+                      <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.15)]">
                         <div className="w-72 h-40 flex flex-col items-center justify-center relative z-10 bg-black/20 backdrop-blur-sm">
                              <div className="relative">
                                 <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 animate-pulse rounded-full"></div>
@@ -335,45 +385,60 @@ const ChatMessageItem: React.FC<{
         const hasLegacyImage = message.imageUrl && !message.imageUrls;
         // If we have analysisFile but NO preview image (like for docs/sheets), render the card
         const hasFileCard = message.analysisFile && !message.imageUrl;
+        const hasVideo = !!message.videoUrl;
 
-        const hasBubbleContent = hasText || hasImages || hasLegacyImage;
+        // HasBubbleContent logic updated: we now show images OUTSIDE, so bubble only needs text
+        const hasBubbleContent = hasText; 
 
         return (
             <div className={`flex items-end gap-3 ${alignment} animate-geminiFadeIn`}>
                 <div className="group flex flex-col max-w-[85%] items-end gap-2">
                     
-                    {/* Render File Preview Outside Bubble */}
+                    {/* 1. Render Image Previews (Card Style) */}
+                    {hasImages && message.imageUrls!.map((url, i) => (
+                        <ImagePreviewCard 
+                            key={i} 
+                            url={url} 
+                            fileName={getFileNameFromUrl(url)} 
+                            onClick={() => onImageClick?.(url)} 
+                        />
+                    ))}
+                    {hasLegacyImage && (
+                        <ImagePreviewCard 
+                            url={message.imageUrl!} 
+                            fileName={getFileNameFromUrl(message.imageUrl!)} 
+                            onClick={() => onImageClick?.(message.imageUrl!)} 
+                        />
+                    )}
+
+                    {/* 2. Render Video Preview (Card Style) */}
+                    {hasVideo && (
+                        <VideoPreviewCard
+                            url={message.videoUrl!}
+                            fileName={getFileNameFromUrl(message.videoUrl!)}
+                        />
+                    )}
+
+                    {/* 3. Render File Preview (Card Style) */}
                     {hasFileCard && (
                         <FilePreviewCard fileName={message.analysisFile!.name} />
                     )}
 
-                    {/* Render Bubble Content */}
+                    {/* 4. Render Text Bubble */}
                     {hasBubbleContent && (
                         <div className="relative">
                             <div className="chat-message-bubble user-message overflow-hidden">
-                                {hasImages && (
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        {message.imageUrls!.map((url, i) => (
-                                            <img key={i} src={url} alt={`upload ${i}`} className="rounded-lg object-cover cursor-pointer" onClick={() => onImageClick?.(url)} />
-                                        ))}
-                                    </div>
-                                )}
-                                {hasLegacyImage && (
-                                    <img src={message.imageUrl} alt="analysis file preview" className="rounded-lg mb-2 object-cover cursor-pointer" onClick={() => onImageClick?.(message.imageUrl!)} />
-                                )}
-                                {hasText && <Response>{message.text}</Response>}
+                                <Response>{message.text}</Response>
                             </div>
-                            {hasText && (
-                                <button onClick={handleCopy} className="absolute -left-10 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-hover text-muted opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Copy text">
-                                    {isCopied ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-green-500">
-                                            <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-                                        </svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    )}
-                                </button>
-                            )}
+                            <button onClick={handleCopy} className="absolute -left-10 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-hover text-muted opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Copy text">
+                                {isCopied ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-green-500">
+                                        <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                )}
+                            </button>
                         </div>
                     )}
 
@@ -402,7 +467,7 @@ const ChatMessageItem: React.FC<{
             <div className={`flex items-start ${alignment} animate-geminiFadeIn`}>
                 <div className="stop-message">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 16c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm3-8H9v4h6V10z"/>
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 16c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6-6 6zm3-8H9v4h6V10z"/>
                     </svg>
                     <span>{message.text}</span>
                 </div>

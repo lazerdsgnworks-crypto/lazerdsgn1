@@ -455,9 +455,9 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                     {reposted.mediaUrls && reposted.mediaUrls.length > 0 && (
                         <div className="mt-2">
                             {reposted.mediaType === 'video' ? (
-                                <video src={reposted.mediaUrls[0]} controls muted className="rounded-xl max-h-[256px] w-auto max-w-full shadow-sm" />
+                                <video src={reposted.mediaUrls[0]} controls muted className="rounded-xl max-h-[300px] w-auto max-w-full shadow-sm block" />
                             ) : (
-                                <img src={reposted.mediaUrls[0]} alt="reposted media" className="rounded-xl max-h-[256px] w-auto max-w-full object-contain shadow-sm cursor-pointer" onClick={(e) => {e.stopPropagation(); onImageClick(reposted.mediaUrls![0]);}}/>
+                                <img src={reposted.mediaUrls[0]} alt="reposted media" className="rounded-xl max-h-[300px] w-auto max-w-full shadow-sm cursor-pointer block" onClick={(e) => {e.stopPropagation(); onImageClick(reposted.mediaUrls![0]);}}/>
                             )}
                         </div>
                     )}
@@ -554,19 +554,19 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                         {post.repostedPost && <RepostPreview reposted={post.repostedPost} onViewProfile={onViewProfile} />}
 
                         {post.mediaUrls && post.mediaUrls.length > 0 && (
-                            <div className="mt-3">
+                            <div className="mt-3 inline-block relative rounded-xl overflow-hidden max-w-full">
                                 {post.mediaType === 'video' ? (
                                     <video 
                                         src={post.mediaUrls[0]} 
                                         controls 
                                         playsInline 
-                                        className="rounded-xl max-h-[350px] w-auto max-w-full shadow-sm" 
+                                        className="block max-w-full h-auto max-h-[350px] w-auto shadow-sm" 
                                     />
                                 ) : post.mediaUrls.length === 1 ? (
                                      <img 
                                         src={post.mediaUrls[0]} 
                                         alt="Post media 1" 
-                                        className="rounded-xl max-h-[350px] w-auto max-w-full object-contain shadow-sm cursor-pointer" 
+                                        className="block max-w-full h-auto max-h-[350px] w-auto shadow-sm cursor-pointer" 
                                         onClick={() => onImageClick(post.mediaUrls![0])}
                                      />
                                 ) : (
@@ -576,7 +576,7 @@ const PostItem: React.FC<PostItemProps> = ({ post, user, userProfile, onDelete, 
                                                 key={index}
                                                 src={url} 
                                                 alt={`Post media ${index + 1}`} 
-                                                className="h-full max-h-[350px] w-auto rounded-xl object-cover cursor-pointer" 
+                                                className="h-full max-h-[350px] w-auto rounded-xl object-cover cursor-pointer block" 
                                                 onClick={() => onImageClick(url)} 
                                             />
                                         ))}

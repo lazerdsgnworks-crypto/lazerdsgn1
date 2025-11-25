@@ -1,18 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, ChatSession, ChatMessage, UserProfile } from '../types.ts';
 import { db } from '../services/firebase.ts';
@@ -162,9 +148,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         }
     };
 
-    const handleSendMessage = async (message: string, imageFiles: File[], audioFile: File | null) => {
+    const handleSendMessage = async (message: string, attachments: File[], audioFile: File | null) => {
         if (!user || !currentSessionId || !userProfile) return;
-        if (!message.trim() && imageFiles.length === 0 && !analysisFile && !audioFile) return;
+        if (!message.trim() && attachments.length === 0 && !analysisFile && !audioFile) return;
 
         abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
@@ -191,6 +177,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
         const userSentAudio = !!audioFile;
 
         try {
+            // Handle Audio Upload
             if (audioFile) {
                 const formData = new FormData();
                 formData.append('file', audioFile);
@@ -201,17 +188,27 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const data = await response.json();
                 userMessage.audioUrl = data.secure_url;
             }
-            if (imageFiles.length > 0) {
-                userMessage.imageUrls = await Promise.all(imageFiles.map(async (file) => {
-                    const dataUrl = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = e => resolve(e.target!.result as string);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-                    return createThumbnail(dataUrl);
-                }));
-            }
+
+            // Compress images in attachments
+            const processedAttachments: File[] = await Promise.all(attachments.map(async (file) => {
+                if (file.type.startsWith('image/')) {
+                    try {
+                        // Compress to approx 250KB
+                        const compressedDataUrl = await compressImage(file, 250 * 1024);
+                        return dataURLtoFile(compressedDataUrl, file.name);
+                    } catch (e) {
+                        console.warn("Image compression failed", e);
+                        return file;
+                    }
+                }
+                return file;
+            }));
+
+            // Separate Images and Videos
+            const imageFiles = processedAttachments.filter(f => f.type.startsWith('image/'));
+            const videoFiles = processedAttachments.filter(f => f.type.startsWith('video/'));
+
+            // Handle Analysis File Preview
             if (analysisFile) {
                 userMessage.analysisFile = { name: analysisFile.name, type: analysisFile.type };
                 if (analysisFile.type.startsWith('image/')) {
@@ -231,6 +228,44 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 }
             }
 
+            // --- Upload General Images/Videos to Cloudinary for Chat Persistence ---
+            if (imageFiles.length > 0) {
+                try {
+                    const uploadedImageUrls = await Promise.all(imageFiles.map(async (file) => {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                        const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+                        const response = await fetch(url, { method: 'POST', body: formData, signal });
+                        if (!response.ok) throw new Error('Image upload failed');
+                        const data = await response.json();
+                        return data.secure_url;
+                    }));
+                    userMessage.imageUrls = uploadedImageUrls;
+                } catch (e) {
+                    console.error("Failed to upload chat images", e);
+                }
+            }
+
+            if (videoFiles.length > 0) {
+                 try {
+                     // We take the first video if multiple are selected, as userMessage.videoUrl is a string.
+                     const file = videoFiles[0];
+                     const formData = new FormData();
+                     formData.append('file', file);
+                     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+                     const response = await fetch(url, { method: 'POST', body: formData, signal });
+                     if (!response.ok) throw new Error('Video upload failed');
+                     const data = await response.json();
+                     userMessage.videoUrl = data.secure_url;
+                 } catch (e) {
+                     console.error("Failed to upload chat video", e);
+                 }
+            }
+            // -----------------------------------------------------------------------
+
+            // Add user message to Firestore
             await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), {
                 ...userMessage,
                 createdAt: serverTimestamp() as Timestamp,
@@ -242,6 +277,8 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                  else if (isVideoGenMode) newTitleText = `Video: ${message}`;
                  else if (analysisFile) newTitleText = `Analysis of ${analysisFile.name}`;
                  else if (audioFile) newTitleText = "Voice Message";
+                 else if (videoFiles.length > 0) newTitleText = "Video Message";
+                 else if (processedAttachments.length > 0) newTitleText = "File Attachment";
                  else newTitleText = message;
 
                 if (newTitleText && newTitleText.trim()) {
@@ -330,6 +367,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     Object.entries(webhookPayload).forEach(([key, value]) => payload.append(key, value as string));
                     payload.append('file', audioFile, audioFile.name);
                     fetchOptions = { method: 'POST', body: payload };
+                } else if (processedAttachments.length > 0) {
+                    // General Attachment Mode -> Send to Webhook as binary
+                    targetUrl = WEBHOOK_URL; // Assuming standard webhook can handle multipart if configured, or we adjust endpoint
+                    const payload = new FormData();
+                    payload.append('message', message);
+                    Object.entries(webhookPayload).forEach(([key, value]) => payload.append(key, value as string));
+                    processedAttachments.forEach((file) => {
+                        payload.append('files', file, file.name);
+                    });
+                    fetchOptions = { method: 'POST', body: payload };
                 } else {
                     targetUrl = WEBHOOK_URL;
                     fetchOptions = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, message: message }) };
@@ -342,7 +389,10 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 if (isAnalysisMode && contentType && contentType.includes("application/json")) {
                     const result = await response.json();
                     // Default to empty string if text/output/response is missing or null
-                    const aiResponseText = result.text || result.output || result.response || ""; 
+                    let aiResponseText = result.text || result.output || result.response || "";
+                    // REMOVED: "Here is your analysis result." line if present
+                    aiResponseText = aiResponseText.replace(/Here is your analysis result[\.\s]*/i, "").trim();
+
                     const analysisResultFile = result.file;
 
                     const aiMessageData: Omit<ChatMessage, 'id' | 'createdAt'> = {
@@ -351,18 +401,18 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                         isAnalysisResponse: true,
                     };
 
-                    // Extract PDF and Word explicitly as requested
+                    // Extract PDF and Word explicitly as requested with UPDATED NAMES
                     if (result.pdf) {
                         aiMessageData.analysisPdf = {
                             url: result.pdf,
-                            name: "PDF File"
+                            name: "PDF File" // Changed from "PDF DOCUMENT"/edit to "PDF File"
                         };
                     }
 
                     if (result.word) {
                         aiMessageData.analysisWord = {
                             url: result.word,
-                            name: "Word File"
+                            name: "Word File" // Changed from "WORD DOCUMENT"/edit to "Word File"
                         };
                     }
 
@@ -892,7 +942,7 @@ const ChatMessages: React.FC<{
 };
 
 const ChatInput: React.FC<{
-    onSendMessage: (message: string, files: File[], audioFile: File | null) => void,
+    onSendMessage: (message: string, attachments: File[], audioFile: File | null) => void,
     isAnalysisMode: boolean,
     onToggleAnalysisMode: () => void,
     isImageGenMode: boolean,
@@ -910,10 +960,13 @@ const ChatInput: React.FC<{
     const [input, setInput] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const analysisInputRef = useRef<HTMLInputElement>(null);
+    const attachmentInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
+    
+    const [attachments, setAttachments] = useState<File[]>([]);
 
     // Close menu on click outside
     useEffect(() => {
@@ -1001,13 +1054,24 @@ const ChatInput: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isLoading || (!input.trim() && !analysisFile)) return;
-        onSendMessage(input, [], null);
+        if (isLoading || (!input.trim() && !analysisFile && attachments.length === 0)) return;
+        onSendMessage(input, attachments, null);
         setInput('');
+        setAttachments([]);
     };
     
     const handleAnalysisFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         onAnalysisFileSelect(e.target.files?.[0] || null);
+    };
+    
+    const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+    
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleSelectImageGen = () => {
@@ -1015,6 +1079,7 @@ const ChatInput: React.FC<{
         if (isVideoGenMode) onToggleVideoGenMode();
         if (!isImageGenMode) onToggleImageGenMode();
         setIsMenuOpen(false);
+        setAttachments([]); // Clear general attachments
     };
 
     const handleSelectVideoGen = () => {
@@ -1022,6 +1087,7 @@ const ChatInput: React.FC<{
         if (isImageGenMode) onToggleImageGenMode();
         if (!isVideoGenMode) onToggleVideoGenMode();
         setIsMenuOpen(false);
+        setAttachments([]);
     };
 
     const handleSelectAnalysis = () => {
@@ -1029,6 +1095,7 @@ const ChatInput: React.FC<{
         if (isVideoGenMode) onToggleVideoGenMode();
         if (!isAnalysisMode) onToggleAnalysisMode();
         setIsMenuOpen(false);
+        setAttachments([]);
     };
 
     const dismissMode = () => {
@@ -1039,7 +1106,7 @@ const ChatInput: React.FC<{
     };
     
     const isAnyModeActive = isImageGenMode || isAnalysisMode || isVideoGenMode;
-    const showSendIcon = input.trim().length > 0 || !!analysisFile;
+    const showSendIcon = input.trim().length > 0 || !!analysisFile || attachments.length > 0;
 
 
     return (
@@ -1055,7 +1122,7 @@ const ChatInput: React.FC<{
                             <div className="flex items-center space-x-2 text-primary text-sm font-semibold min-w-0">
                                 {isImageGenMode && <><svg className="w-5 h-5 text-purple-500 flex-shrink-0"><use href="#icon-image-gen"></use></svg><span className="truncate">Image Generation</span></>}
                                 {isVideoGenMode && <><svg className="w-5 h-5 text-blue-500 flex-shrink-0"><use href="#icon-video"></use></svg><span className="truncate">Video Generation</span></>}
-                                {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-enhance"></use></svg><span className="truncate">{analysisFile ? `Analyzing: ${analysisFile.name}` : 'Analysis Mode'}</span></>}
+                                {isAnalysisMode && <><svg className="w-5 h-5 text-green-500 flex-shrink-0"><use href="#icon-enhance"></use></svg><span className="truncate">Analysis Mode</span></>}
                             </div>
                             <button type="button" onClick={dismissMode} className="p-1 rounded-full hover:bg-hover flex-shrink-0">
                                 <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -1070,6 +1137,53 @@ const ChatInput: React.FC<{
                              </div>
                         )}
                     </div>
+                    
+                    {/* Attachment Previews (General Mode) */}
+                    {attachments.length > 0 && (
+                        <div className="px-4 pt-3 flex gap-2 overflow-x-auto scrollbar-hide">
+                            {attachments.map((file, index) => (
+                                <div key={index} className="relative flex-shrink-0 w-16 h-16 rounded-lg border border-primary overflow-hidden group">
+                                    {file.type.startsWith('image/') ? (
+                                        <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
+                                    ) : file.type.startsWith('video/') ? (
+                                        <div className="w-full h-full bg-black flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-white"><use href="#icon-video"></use></svg>
+                                        </div>
+                                    ) : (
+                                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-secondary"><use href="#icon-file-text"></use></svg>
+                                        </div>
+                                    )}
+                                    <button type="button" onClick={() => removeAttachment(index)} className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white hover:bg-red-500 transition-colors">
+                                        <svg className="w-3 h-3"><use href="#icon-x-close"></use></svg>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    {/* Analysis File Preview Card */}
+                    {isAnalysisMode && analysisFile && (
+                        <div className="mx-4 mt-2 mb-1 p-3 bg-secondary/50 border border-dashed border-primary rounded-xl flex items-center justify-between group">
+                             <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
+                                    <svg className="w-5 h-5"><use href="#icon-file-text"></use></svg>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium text-primary truncate">{analysisFile.name}</p>
+                                    <p className="text-xs text-secondary">Ready to analyze</p>
+                                </div>
+                             </div>
+                             <button 
+                                type="button" 
+                                onClick={() => onAnalysisFileSelect(null)} 
+                                className="p-1.5 text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                title="Remove file"
+                             >
+                                <svg className="w-5 h-5"><use href="#icon-x-close"></use></svg>
+                             </button>
+                        </div>
+                    )}
 
                     <div className="flex items-end p-2 space-x-1.5">
                         <div className="relative self-end" ref={menuRef}>
@@ -1094,9 +1208,27 @@ const ChatInput: React.FC<{
                             </button>
                         </div>
                         
-                        {isAnalysisMode ? (
+                        {/* General Attachment Clip (Visible when NO mode is active) */}
+                        {!isAnyModeActive && (
+                            <div className="self-end">
+                                <button type="button" onClick={() => attachmentInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition" title="Attach image or video">
+                                    <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
+                                </button>
+                                <input 
+                                    type="file" 
+                                    ref={attachmentInputRef} 
+                                    onChange={handleAttachmentChange} 
+                                    accept="image/*,video/*"
+                                    multiple
+                                    hidden 
+                                />
+                            </div>
+                        )}
+                        
+                        {/* Analysis File Input (Visible only in Analysis Mode) */}
+                        {isAnalysisMode && (
                              <div className="self-end">
-                                <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition">
+                                <button type="button" onClick={() => analysisInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-hover rounded-full hover:bg-primary/20 text-muted transition" title="Select Document">
                                     <svg className="w-6 h-6"><use href="#icon-paperclip"></use></svg>
                                 </button>
                                 <input 
@@ -1107,7 +1239,9 @@ const ChatInput: React.FC<{
                                     hidden 
                                 />
                             </div>
-                        ) : (
+                        )}
+                        
+                        {!isAnalysisMode && !isAnyModeActive && (
                              <div className="self-end">
                                 <button type="button" onClick={handleToggleListening} title="Speech-to-Text" className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full transition ${isListening ? 'mic-recording' : 'bg-hover text-muted hover:bg-primary/20'}`}>
                                     <svg className="w-5 h-5"><use href="#icon-microphone"></use></svg>
@@ -1126,7 +1260,7 @@ const ChatInput: React.FC<{
                                     handleSubmit(e); 
                                 } 
                             }}
-                            placeholder="Ask me anything..."
+                            placeholder={isAnalysisMode ? "Ask about this file..." : isImageGenMode ? "Describe image..." : isVideoGenMode ? "Describe video..." : "Ask me anything..."}
                             className="flex-1 bg-transparent text-primary placeholder-muted focus:outline-none focus:ring-0 resize-none self-center py-2 px-3 text-base"
                             rows={1}
                             style={{ wordBreak: 'break-word' }}
