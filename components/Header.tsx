@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Page, User, UserProfile } from '../types.ts';
 import Avatar from './Avatar.tsx';
@@ -89,8 +88,7 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
 
     const hoverTextColorClass = isHomePage ? 'hover:text-white' : 'hover:text-primary';
     const secondaryTextColorClass = isHomePage ? 'text-neutral-400' : 'text-secondary';
-    const logoColorClass = isHomePage ? 'text-white' : 'text-primary';
-
+    
     const AuthLinks: React.FC<{isMobile: boolean}> = ({ isMobile }) => {
         const baseClassName = isMobile 
             ? "w-full text-center font-medium text-primary border border-secondary rounded-full px-5 py-2 hover:bg-hover transition" 
@@ -186,11 +184,9 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                     <div className="flex justify-between items-center w-full">
                         {/* Left: Logo */}
                         <div className="flex-1 flex justify-start items-center">
-                            <div className="text-xl font-extrabold tracking-tighter flex items-center gap-2 cursor-pointer z-[101]" onClick={(e) => { handleNav(Page.Home, e); setMobileMenuOpen(false); }}>
-                                <svg viewBox="0 0 24 24" fill="currentColor" className={`w-6 h-6 ${isMobileMenuOpen ? 'text-white' : logoColorClass} transition-colors duration-300`}>
-                                     <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.95 1.48-2.95 1.47-2.95-1.47L12 11zm0 3.9l-10 5 10 5 10-5-10-5z"/>
-                                </svg>
-                                <span className={`${isMobileMenuOpen ? 'text-white' : logoColorClass} transition-colors duration-300`}>LazerDsgn.</span>
+                            <div className="flex items-center gap-3 cursor-pointer z-[101]" onClick={(e) => { handleNav(Page.Home, e); setMobileMenuOpen(false); }}>
+                                <img src="https://i.ibb.co/XxZJfyVV/Lazer-Dsgn-1.png" alt="Lazer-Dsgn" className="h-10 md:h-12 w-auto object-contain" />
+                                <span className="text-xl font-bold tracking-tight text-white font-sans">LazerDsgn.</span>
                             </div>
                         </div>
 
@@ -226,11 +222,9 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                 
                 {/* Menu Header: Logo & Cross Icon */}
                 <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-900/30">
-                    <div className="flex items-center gap-2 text-white font-extrabold text-xl tracking-tighter">
-                         <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                             <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.95 1.48-2.95 1.47-2.95-1.47L12 11zm0 3.9l-10 5 10 5 10-5-10-5z"/>
-                        </svg>
-                        <span>LazerDsgn.</span>
+                    <div className="flex items-center gap-3">
+                         <img src="https://i.ibb.co/XxZJfyVV/Lazer-Dsgn-1.png" alt="Lazer-Dsgn" className="h-10 w-auto object-contain" />
+                         <span className="text-xl font-bold tracking-tight text-white font-sans">LazerDsgn.</span>
                     </div>
                     <button onClick={() => setMobileMenuOpen(false)} className="text-white p-2 hover:text-neutral-300 transition-colors">
                         <svg className="w-8 h-8"><use href="#icon-x-close"></use></svg>
