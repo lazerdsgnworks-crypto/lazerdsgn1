@@ -11,6 +11,7 @@ export default defineConfig({
       // Replaced it with a path resolution from the current working directory,
       // which is the project root when running Vite.
       "@": path.resolve("./src"),
+      base: process.env.VITE_BASE_PATH || "/"
     },
   },
 })
