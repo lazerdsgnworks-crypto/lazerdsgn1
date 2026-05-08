@@ -2,61 +2,55 @@ import React, { useEffect, useRef } from 'react';
 
 const projects = [
   {
-    title: "Aura Health",
-    category: "Branding & Identity",
-    imageUrl: "https://images.unsplash.com/photo-1558655146-364adaf1fcc9?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
+    title: "Poster",
+    category: "Design",
+    imageUrl: "https://i.ibb.co/nNcpt02s/IMG-5556.jpg"
   },
   {
-    title: "QuantumLeap",
-    category: "UI/UX Design",
-    imageUrl: "https://images.unsplash.com/photo-1541462608143-67571c6738dd?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
+    title: "Website hero page",
+    category: "Web Design",
+    imageUrl: "https://i.ibb.co/0yNmhN2M/IMG-5351.jpg"
   },
   {
-    title: "CodeFlow IDE",
-    category: "Web Development",
-    imageUrl: "https://images.unsplash.com/photo-1605379399642-870262d3d051?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
-  },
-  
-  {
-    title: "Fintech Solutions",
-    category: "Digital Marketing",
-    imageUrl: "https://images.unsplash.com/photo-1554224155-1696413565d3?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=880&q=80"
-  },
-  
-  {
-    title: "Creative Hub",
-    category: "Web App Design",
-    imageUrl: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?q=80&w=800",
+    title: "Reve Brand identity",
+    category: "Brand Identity",
+    imageUrl: "https://i.ibb.co/r2SgQ87s/IMG-4996.jpg"
   },
   {
-    title: "UrbanWear",
-    category: "Fashion Branding",
-    imageUrl: "https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?q=80&w=800",
+    title: "rmayd",
+    category: "Design",
+    imageUrl: "https://i.ibb.co/Kz77x8qx/IMG-5374.jpg"
   },
   {
-    title: "DataViz Pro",
-    category: "UI/UX Design",
-    imageUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800",
-  },
-  
-  
-  {
-    title: "Rhythm",
-    category: "Music Streaming Service",
-    imageUrl: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=800",
+    title: "SCULPT Brand Identity",
+    category: "Brand Identity",
+    imageUrl: "https://i.ibb.co/TDcP760j/SCULPT-Brand-Identity-FULL-PROJECT-ON-BEHANCE-Made-by-lazer-dsgn-For-commercial-works-and-p.jpg"
   },
   {
-    title: "Voyage",
-    category: "Travel App",
-    imageUrl: "https://images.unsplash.com/photo-1522199755839-a2bacb67c546?q=80&w=800",
+    title: "Green Grove Gardens — vol. 1",
+    category: "Brand Identity",
+    imageUrl: "https://i.ibb.co/xS76h0hd/Green-Grove-Gardens-Brand-Identity-For-commercial-work-visit-my-websitehttps-lazergraphics-odo-1.jpg"
   },
- 
   {
-    title: "Mindscape",
-    category: "AI Wellness App",
-    imageUrl: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800"
+    title: "Verve Brand Identity",
+    category: "Brand Identity",
+    imageUrl: "https://i.ibb.co/gbCcC2C9/Verve-Brand-Identity-Verve-is-a-tech-startup-specializing-in-virtual-reality-experiences-Our.jpg"
+  },
+  {
+    title: "Horizon Quest Brand Identity",
+    category: "Brand Identity",
+    imageUrl: "https://i.ibb.co/BbS4kHM/Horizon-Quest-Brand-Identity-Horizon-Quest-is-an-outdoor-adventure-brand-that-encourages-explora.jpg"
+  },
+  {
+    title: "Givenchy — reimagined by AI",
+    category: "AI Campaign",
+    imageUrl: "https://i.ibb.co/p64y3FHJ/Givenchy-reimagined-by-AI-a-surreal-tale-of-couture-light-and-fantasy-woven-into-every-pixel.jpg"
+  },
+  {
+    title: "PUMA — UVU collection AI campaign",
+    category: "AI Campaign",
+    imageUrl: "https://i.ibb.co/sJ3T2yDQ/PUMA-AI-CAMPAIGN-UVU-COLLECTION-lazerdsgn.jpg"
   }
-  
 ];
 
 const PortfolioPage: React.FC = () => {

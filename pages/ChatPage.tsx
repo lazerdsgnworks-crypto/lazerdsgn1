@@ -21,10 +21,11 @@ declare global {
 }
 
 const TEMP_TITLE_PREFIX = 'New Chat -';
-const WEBHOOK_URL = 'https://umarworks5.app.n8n.cloud/webhook/chatinput';
-const VOICE_WEBHOOK_URL = 'https://umarworks5.app.n8n.cloud/webhook/voice';
-const ANALYSIS_WEBHOOK_URL = 'https://umarworks5.app.n8n.cloud/webhook/analyze';
-const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://umarworks5.app.n8n.cloud/webhook/analysis';
+const WEBHOOK_URL = 'https://n8n.umardsgn.tech/webhook/chatinput';
+const VOICE_WEBHOOK_URL = 'https://n8n.umardsgn.tech/webhook/voice';
+const ANALYSIS_IMAGE_WEBHOOK_URL = 'https://n8n.umardsgn.tech/webhook/analyze';
+const ANALYSIS_DOCUMENT_WEBHOOK_URL = 'https://n8n.umardsgn.tech/webhook/analysis';
+const ANALYSIS_TEXT_ONLY_WEBHOOK_URL = 'https://n8n.umardsgn.tech/webhook/analysis';
 const APP_ID = 'default-lazerdsgn-app';
 const CHATS_COLLECTION = `artifacts/${APP_ID}/users/`;
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
@@ -307,7 +308,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
             };
 
             if (isImageGenMode) {
-                const genResponse = await fetch('https://umarworks5.app.n8n.cloud/webhook/imagegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message }), signal });
+                const genResponse = await fetch('https://n8n.umardsgn.tech/webhook/imagegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message }), signal });
                 if (!genResponse.ok) throw new Error('Image generation service failed.');
                 const genResult = await genResponse.json();
                 const tempImageUrl = extractUrlFromResponse(genResult);
@@ -325,7 +326,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                 const cloudinaryData = await cloudinaryResponse.json();
                 await addDoc(collection(db, `${CHATS_COLLECTION}${user.uid}/sessions/${currentSessionId}/messages`), { text: `Here's the image for your prompt:`, role: 'ai', imageUrl: cloudinaryData.secure_url, createdAt: serverTimestamp() as Timestamp });
             } else if (isVideoGenMode) {
-                const genResponse = await fetch('https://umarworks5.app.n8n.cloud/webhook/videogen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message, ratio: videoAspectRatio }), signal });
+                const genResponse = await fetch('https://n8n.umardsgn.tech/webhook/videogen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, prompt: message, ratio: videoAspectRatio }), signal });
                 if (!genResponse.ok) throw new Error(`Video generation service failed with status ${genResponse.status}.`);
                 const genResult = await genResponse.json();
                 const tempVideoUrl = extractUrlFromResponse(genResult);
@@ -350,7 +351,11 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
 
                 if (isAnalysisMode) {
                     if (analysisFile) {
-                        targetUrl = ANALYSIS_WEBHOOK_URL;
+                        if (analysisFile.type.startsWith('image/')) {
+                            targetUrl = ANALYSIS_IMAGE_WEBHOOK_URL;
+                        } else {
+                            targetUrl = ANALYSIS_DOCUMENT_WEBHOOK_URL;
+                        }
                         const payload = new FormData();
                         payload.append('message', message);
                         Object.entries(webhookPayload).forEach(([key, value]) => payload.append(key, value as string));
@@ -523,7 +528,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ user, userProfile, openDeleteModal,
                     if (audioUrl) await updateDoc(aiMessageRef, { audioUrl });
 
                     if (shouldGenerateTitle && !isAnalysisMode) {
-                        fetch('https://umarworks5.app.n8n.cloud/webhook/titlegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, history: [{ role: 'user', text: message }, { role: 'ai', text: finalAiText }] }) })
+                        fetch('https://n8n.umardsgn.tech/webhook/titlegen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...webhookPayload, history: [{ role: 'user', text: message }, { role: 'ai', text: finalAiText }] }) })
                         .then(res => res.ok ? res.json() : null)
                         .then(titleResult => {
                             if (!titleResult) return;

@@ -68,7 +68,7 @@ const Sidebar: React.FC<{
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.2, delay: 0.1 }}
-                  className="font-bold text-lg text-primary overflow-hidden whitespace-nowrap">LazerDsgn.</motion.span>
+                  className="font-bold text-lg text-primary overflow-hidden whitespace-nowrap">umardsgn_</motion.span>
             )}
             </AnimatePresence>
           </div>
@@ -132,7 +132,7 @@ const Sidebar: React.FC<{
             >
              <div>
                 <div className="flex items-center justify-between px-4 mb-8">
-                    <span className="font-bold text-lg text-primary">LazerDsgn.</span>
+                    <span className="font-bold text-lg text-primary">umardsgn_</span>
                     <button onClick={() => setIsOpen(false)} className="p-1 rounded-md text-secondary hover:text-primary hover:bg-bg-hover">
                         <X size={20} />
                     </button>

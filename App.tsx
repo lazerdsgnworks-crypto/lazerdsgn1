@@ -53,8 +53,8 @@ const LoginForm: React.FC<{
     
     return (
         <div>
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold tracking-tight text-primary">LazerDsgn.</h1>
+            <div className="text-center mb-6 flex justify-center">
+                <img src="https://i.ibb.co/0RMj29Lh/umar-3.png" alt="umar (3)" className="h-24 md:h-32 object-contain" border="0" />
             </div>
             <h2 className="text-3xl font-bold text-center text-primary mb-2">Welcome Back</h2>
             <p className="text-center text-secondary mb-8">Log in to continue your journey.</p>
@@ -144,8 +144,8 @@ const SignupForm: React.FC<{
     
     return (
         <div>
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold tracking-tight text-primary">LazerDsgn.</h1>
+            <div className="text-center mb-6 flex justify-center">
+                <img src="https://i.ibb.co/0RMj29Lh/umar-3.png" alt="umar (3)" className="h-24 md:h-32 object-contain" border="0" />
             </div>
             <h2 className="text-3xl font-bold text-center text-primary mb-2">Create Account</h2>
             <p className="text-center text-secondary mb-8">Join our community of designers.</p>

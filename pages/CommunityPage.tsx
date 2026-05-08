@@ -17,8 +17,8 @@ import AudioPlayer from '../components/AudioPlayer.tsx';
 // --- Cloudinary Configuration ---
 const CLOUDINARY_UPLOAD_PRESET = "communityposts";
 const CLOUDINARY_CLOUD_NAME = "dsbtpkjvt";
-const AI_QUERY_WEBHOOK_URL = "https://umarworks5.app.n8n.cloud/webhook/queries";
-const ENHANCE_POST_WEBHOOK_URL = "https://umarworks5.app.n8n.cloud/webhook/enhancepost";
+const AI_QUERY_WEBHOOK_URL = "https://n8n.umardsgn.tech/webhook/queries";
+const ENHANCE_POST_WEBHOOK_URL = "https://n8n.umardsgn.tech/webhook/enhancepost";
 const POST_MAX_LENGTH = 500;
 // const USER_SEARCH_WEBHOOK_URL = "https://umarworks1.app.n8n.cloud/webhook/user-search";
 

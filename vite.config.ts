@@ -7,8 +7,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      // FIX: `__dirname` is not available in ES modules by default.
+      // Replaced it with a path resolution from the current working directory,
+      // which is the project root when running Vite.
       "@": path.resolve("./src"),
-      "lazerdsgn1": path.resolve("./src/lazerdsgn1"),
     },
   },
 })

@@ -103,12 +103,9 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                 <div className="relative" ref={profileMenuRef}>
                     <button onClick={() => setProfileMenuOpen(prev => !prev)} className={`flex items-center space-x-2 group p-1.5 -m-1.5 rounded-full transition-all duration-300 border border-transparent ${isProfileMenuOpen ? 'bg-white/10 border-white/10' : ''} ${isHomePage ? 'hover:bg-white/10' : 'hover:bg-hover'}`}>
                         <Avatar email={user.email!} photoURL={userProfile?.photoURL} size="sm" />
-                        <span className={`hidden sm:inline text-sm font-medium transition-colors ${isHomePage ? 'text-neutral-300 group-hover:text-white' : 'text-secondary group-hover:text-primary'}`}>
-                            {userProfile?.username ?? 'Profile'}
+                        <span className={`hidden sm:inline text-sm transition-colors ${isHomePage ? 'text-white' : 'text-primary'}`}>
+                            {userProfile?.username ?? 'Umar Arif'}
                         </span>
-                        <svg className={`w-4 h-4 transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''} ${isHomePage ? 'text-neutral-400' : 'text-muted'}`}>
-                            <use href="#icon-chevron-down"></use>
-                        </svg>
                     </button>
                     
                     {/* Enhanced Dropdown Menu */}
@@ -183,19 +180,18 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                 <div className={navInnerClass}>
                     <div className="flex justify-between items-center w-full">
                         {/* Left: Logo */}
-                        <div className="flex-1 flex justify-start items-center">
-                            <div className="flex items-center gap-3 cursor-pointer z-[101]" onClick={(e) => { handleNav(Page.Home, e); setMobileMenuOpen(false); }}>
-                                <img src="https://i.ibb.co/XxZJfyVV/Lazer-Dsgn-1.png" alt="Lazer-Dsgn" className="h-10 md:h-12 w-auto object-contain" />
-                                <span className="text-xl font-bold tracking-tight text-white font-sans">LazerDsgn.</span>
+                        <div className="flex-1 flex justify-start items-center relative h-8 md:h-10">
+                            <div className="flex items-center cursor-pointer z-[101] absolute top-1/2 -translate-y-1/2 -left-2" onClick={(e) => { handleNav(Page.Home, e); setMobileMenuOpen(false); }}>
+                                <img src="https://i.ibb.co/0RMj29Lh/umar-3.png" alt="umar (3)" className="h-24 md:h-32 object-contain" border="0" />
                             </div>
                         </div>
 
                         {/* Center: Nav Links (Desktop) */}
-                        <nav className={`hidden md:flex flex-1 justify-center space-x-8 text-sm font-medium items-center ${secondaryTextColorClass}`}>
-                            <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Home, e)}>Home</a>
-                            <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
-                            <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Community, e)}>Community</a>
-                            <a href="#" className={`transition-colors ${hoverTextColorClass}`} onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
+                        <nav className={`hidden md:flex flex-1 justify-center space-x-12 text-sm font-medium items-center ${secondaryTextColorClass}`}>
+                            <a href="#" className={`transition-colors text-white hover:text-white/80 font-normal`} onClick={(e) => handleNav(Page.Home, e)}>Home</a>
+                            <a href="#" className={`transition-colors text-white hover:text-white/80 font-normal`} onClick={(e) => handleNav(Page.Portfolio, e)}>Portfolio</a>
+                            <a href="#" className={`transition-colors text-white hover:text-white/80 font-normal`} onClick={(e) => handleNav(Page.Community, e)}>Community</a>
+                            <a href="#" className={`transition-colors text-white hover:text-white/80 font-normal`} onClick={(e) => handleNav(Page.Chat, e)}>Chat</a>
                         </nav>
 
                         {/* Right: AuthLinks (Desktop) */}
@@ -222,9 +218,8 @@ const Header: React.FC<HeaderProps> = ({ user, userProfile, navigateTo, onLogout
                 
                 {/* Menu Header: Logo & Cross Icon */}
                 <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-900/30">
-                    <div className="flex items-center gap-3">
-                         <img src="https://i.ibb.co/XxZJfyVV/Lazer-Dsgn-1.png" alt="Lazer-Dsgn" className="h-10 w-auto object-contain" />
-                         <span className="text-xl font-bold tracking-tight text-white font-sans">LazerDsgn.</span>
+                    <div className="flex items-center gap-3 relative h-8">
+                         <img src="https://i.ibb.co/0RMj29Lh/umar-3.png" alt="umar (3)" className="h-24 md:h-32 object-contain absolute top-1/2 -translate-y-1/2 -left-2" border="0" />
                     </div>
                     <button onClick={() => setMobileMenuOpen(false)} className="text-white p-2 hover:text-neutral-300 transition-colors">
                         <svg className="w-8 h-8"><use href="#icon-x-close"></use></svg>

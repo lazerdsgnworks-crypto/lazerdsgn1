@@ -14,40 +14,64 @@ interface HomePageProps {
 }
 
 const projectImages = [
-  
     {
-        url: "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?q=80&w=800",
-        title: "CodeConnect",
-        category: "Web App UI"
+        url: "https://i.ibb.co/nNcpt02s/IMG-5556.jpg",
+        title: "Poster",
+        category: "Design"
     },
     {
-        url: "https://images.unsplash.com/photo-1600132806370-bf17e65e942f?q=80&w=800",
-        title: "Ocular",
-        category: "Mobile UI/UX"
+        url: "https://i.ibb.co/0yNmhN2M/IMG-5351.jpg",
+        title: "Website hero page",
+        category: "Web Design"
     },
     {
-        url: "https://images.unsplash.com/photo-1526495124232-a04e1849168c?q=80&w=800",
-        title: "Artisan Roast",
-        category: "Packaging"
+        url: "https://i.ibb.co/r2SgQ87s/IMG-4996.jpg",
+        title: "Reve Brand identity",
+        category: "Brand Identity"
     },
     {
-        url: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?q=80&w=800",
-        title: "Flow",
-        category: "SaaS Platform"
+        url: "https://i.ibb.co/Kz77x8qx/IMG-5374.jpg",
+        title: "rmayd",
+        category: "Design"
     },
     {
-        url: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800",
-        title: "Gallery One",
-        category: "Print Design"
+        url: "https://i.ibb.co/TDcP760j/SCULPT-Brand-Identity-FULL-PROJECT-ON-BEHANCE-Made-by-lazer-dsgn-For-commercial-works-and-p.jpg",
+        title: "SCULPT Brand Identity",
+        category: "Brand Identity"
+    },
+    {
+        url: "https://i.ibb.co/xS76h0hd/Green-Grove-Gardens-Brand-Identity-For-commercial-work-visit-my-websitehttps-lazergraphics-odo-1.jpg",
+        title: "Green Grove Gardens — vol. 1",
+        category: "Brand Identity"
+    },
+    {
+        url: "https://i.ibb.co/gbCcC2C9/Verve-Brand-Identity-Verve-is-a-tech-startup-specializing-in-virtual-reality-experiences-Our.jpg",
+        title: "Verve Brand Identity",
+        category: "Brand Identity"
+    },
+    {
+        url: "https://i.ibb.co/BbS4kHM/Horizon-Quest-Brand-Identity-Horizon-Quest-is-an-outdoor-adventure-brand-that-encourages-explora.jpg",
+        title: "Horizon Quest Brand Identity",
+        category: "Brand Identity"
+    },
+    {
+        url: "https://i.ibb.co/p64y3FHJ/Givenchy-reimagined-by-AI-a-surreal-tale-of-couture-light-and-fantasy-woven-into-every-pixel.jpg",
+        title: "Givenchy — reimagined by AI",
+        category: "AI Campaign"
+    },
+    {
+        url: "https://i.ibb.co/sJ3T2yDQ/PUMA-AI-CAMPAIGN-UVU-COLLECTION-lazerdsgn.jpg",
+        title: "PUMA — UVU collection AI campaign",
+        category: "AI Campaign"
     }
 ];
 
 
 const testimonials = [
-    { name: "Saman Malik", title: "Brand Director", avatar: "https://placehold.co/40x40/333333/ffffff?text=S", text: "LazerDsgn guided our brand through a complex re-design process, providing ongoing expertise and ensuring our final look was pitch perfect." },
-    { name: "Ahmed Khan", title: "Marketing Lead", avatar: null, avatarInitial: "A", text: "The new visual system LazerDsgn delivered instantly elevated our presence in a crowded market. Their process is smooth and highly collaborative." },
-    { name: "Hassan Ali", title: "Digital Strategist", avatar: "https://placehold.co/40x40/333333/ffffff?text=H", text: "Our website conversions doubled after the UI/UX overhaul. LazerDsgn's focus on user experience married with beautiful design is unmatched." },
-    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png", text: "The robust design consultation and fast delivery from LazerDsgn have streamlined our production workflow, making our internal marketing significantly more efficient." },
+    { name: "Saman Malik", title: "Brand Director", avatar: "https://placehold.co/40x40/333333/ffffff?text=S", text: "umardsgn_ guided our brand through a complex re-design process, providing ongoing expertise and ensuring our final look was pitch perfect." },
+    { name: "Ahmed Khan", title: "Marketing Lead", avatar: null, avatarInitial: "A", text: "The new visual system umardsgn_ delivered instantly elevated our presence in a crowded market. Their process is smooth and highly collaborative." },
+    { name: "Hassan Ali", title: "Digital Strategist", avatar: "https://placehold.co/40x40/333333/ffffff?text=H", text: "Our website conversions doubled after the UI/UX overhaul. umardsgn_'s focus on user experience married with beautiful design is unmatched." },
+    { name: "Zainab Hussain", title: "Creative Manager", avatar: "https://i.ibb.co/c7BZmyt/Gemini-Generated-Image-qef4a1qef4a1qef4.png", text: "The robust design consultation and fast delivery from umardsgn_ have streamlined our production workflow, making our internal marketing significantly more efficient." },
     { name: "Maria Rodriguez", title: "Founder, Small Retail", avatar: null, avatarInitial: "M", text: "The execution of our campaign assets exceeded expectations. Every touchpoint felt integrated and premium, improving overall brand perception." },
 ];
 
@@ -177,73 +201,75 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
         <div ref={pageRef} className="page-transition bg-black min-h-screen w-full text-white selection:bg-blue-500/30 selection:text-white font-sans">
             
             {/* --- HERO SECTION --- */}
-            <section className="relative pt-32 pb-20 md:pt-52 md:pb-32 flex flex-col items-center text-center px-4 max-w-7xl mx-auto">
-                {/* Pill Badge */}
-                <div className="mb-8 md:mb-10 relative group">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1a1a] border border-[#333] transition-all hover:border-[#444] cursor-default animate-fadeIn">
-                        <span className="text-sm font-medium text-neutral-400">{timeAgo}: <span className="text-white">{badgeConfig.text}</span></span>
+            <section className="relative pt-24 md:pt-32 flex flex-col min-h-screen">
+                <div className="flex-1 flex flex-col justify-center items-start w-full px-4 max-w-[1400px] mx-auto z-10 relative pt-10 md:pt-20">
+
+                    {/* Buttons */}
+                    <div className="flex flex-row gap-4 animate-fadeIn w-full justify-start mb-6 md:mb-8" style={{ animationDelay: '0.1s' }}>
+                        {user ? (
+                            <>
+                                 <button 
+                                    onClick={() => navigateTo(Page.Community)} 
+                                    className="px-8 py-2.5 md:px-10 md:py-3 rounded-full bg-white text-black font-bold text-sm md:text-base hover:bg-neutral-200 transition-colors tracking-tighter"
+                                >
+                                    Community
+                                </button>
+                                <button 
+                                    onClick={() => navigateTo(Page.Chat)} 
+                                    className="px-8 py-2.5 md:px-10 md:py-3 rounded-full bg-black text-white border border-white font-bold text-sm md:text-base hover:bg-white/10 transition-colors tracking-tighter"
+                                >
+                                    Let's Chat
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button 
+                                    onClick={openLoginModal} 
+                                    className="px-8 py-2.5 md:px-10 md:py-3 rounded-full bg-white text-black font-bold text-sm md:text-base hover:bg-neutral-200 transition-colors tracking-tighter"
+                                >
+                                    login
+                                </button>
+                                <button 
+                                    onClick={openSignupModal} 
+                                    className="px-8 py-2.5 md:px-10 md:py-3 rounded-full bg-black text-white border border-white font-bold text-sm md:text-base hover:bg-white/10 transition-colors tracking-tighter"
+                                >
+                                    Sign up
+                                </button>
+                            </>
+                        )}
                     </div>
-                    {isAdmin && (
-                        <button 
-                            onClick={handleEditBadgeClick}
-                            className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 text-neutral-500 hover:text-white hover:bg-white/10 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                            title="Edit Badge"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                <path d="M21.731 2.269a2.625 2.625 0 1 1 3.71 3.71l-9.373 9.373-3.71.928.928-3.71 9.373-9.373ZM11.25 13.5V18h4.5l9.75-9.75-4.5-4.5-9.75 9.75Z" transform="translate(-7 -1)"/> 
-                            </svg>
-                        </button>
-                    )}
+
+                    {/* Headline */}
+                    {/* Desktop Version */}
+                    <h1 className="hidden md:block text-[80px] lg:text-[110px] font-bold text-white leading-none animate-fadeIn whitespace-nowrap" style={{ letterSpacing: '-1px' }}>
+                        Design that <span style={{ fontFamily: 'Playfair Display, serif', fontWeight: 700, fontStyle: 'italic', letterSpacing: '0px' }}>slays</span> everytime
+                    </h1>
+                    
+                    {/* Mobile Version */}
+                    <h1 className="md:hidden text-[14vw] sm:text-[12vw] font-bold text-white leading-[1] animate-fadeIn uppercase" style={{ letterSpacing: '-2px' }}>
+                        DESIGN<br/>
+                        THAT <span style={{ fontFamily: 'Playfair Display, serif', fontWeight: 700, fontStyle: 'italic', textTransform: 'capitalize', letterSpacing: '0px' }}>Slays</span><br/>
+                        EVERYTIME
+                    </h1>
+
                 </div>
 
-                {/* Headline */}
-                <h1 className="text-[40px] md:text-[54px] font-semibold tracking-tighter text-white mb-6 md:mb-8 leading-[1.1] animate-fadeIn" style={{ animationDelay: '0.1s', fontFamily: 'Poppins, sans-serif' }}>
-                    Design that Slays<br /> Every Time!
-                </h1>
-
-                {/* Subheadline */}
-                <p className="text-sm sm:text-base md:text-xl text-neutral-400 max-w-2xl mx-auto mb-10 md:mb-12 leading-relaxed animate-fadeIn" style={{ animationDelay: '0.2s' }}>
-                    We build bold, aesthetic-driven brands for creators, startups, and businesses that want to actually stand out. From scroll-stopping visuals to clean, future-ready identities.
-                </p>
-
-                {/* Buttons - Updated to match requested style */}
-                <div className="flex flex-row gap-3 sm:gap-4 animate-fadeIn w-full justify-center px-4 sm:w-auto" style={{ animationDelay: '0.3s' }}>
-                    {user ? (
-                        <>
-                             <button 
-                                onClick={() => navigateTo(Page.Community)} 
-                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-white text-black font-medium text-[15px] sm:text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)]"
-                            >
-                                Join Community
-                            </button>
-                            <button 
-                                onClick={() => navigateTo(Page.Chat)} 
-                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-[#111] text-white border border-[#222] font-medium text-[15px] sm:text-base hover:bg-[#222] transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto"
-                            >
-                                Let's Chat
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <button 
-                                onClick={openLoginModal} 
-                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-white text-black font-medium text-[15px] sm:text-base hover:bg-neutral-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)]"
-                            >
-                                Enter Studio
-                            </button>
-                            <button 
-                                onClick={openSignupModal} 
-                                className="px-6 py-3.5 sm:px-8 sm:py-4 rounded-full bg-[#111] text-white border border-[#222] font-medium text-[15px] sm:text-base hover:bg-[#222] transition-all transform hover:scale-[1.02] active:scale-[0.98] w-auto"
-                            >
-                                Start Creating
-                            </button>
-                        </>
-                    )}
+                <div className="w-full mt-6 flex-1 relative animate-fadeIn min-h-[40vh]" style={{ animationDelay: '0.2s' }}>
+                    <img 
+                        src="https://i.ibb.co/wrbCrjYd/umar-5.jpg" 
+                        alt="Hero background" 
+                        className="hidden md:block absolute inset-0 w-full h-full object-cover object-top"
+                    />
+                    <img 
+                        src="https://i.ibb.co/DHKtB5kc/umar-8.jpg" 
+                        alt="Hero background mobile" 
+                        className="md:hidden absolute inset-0 w-full h-full object-cover object-top"
+                    />
                 </div>
             </section>
 
             {/* --- PROJECTS SECTION --- */}
-            <section id="projects" className="py-20 md:py-32 border-t border-neutral-900">
+            <section id="projects" className="pt-8 pb-20 md:pt-12 md:pb-32 border-t border-neutral-900">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 flex justify-end items-end">
                     <button onClick={() => navigateTo(Page.Portfolio)} className="hidden md:block text-sm font-bold text-white border-b border-white/20 pb-1 hover:border-white transition-colors">View All Projects</button>
                 </div>
@@ -288,16 +314,16 @@ const HomePage: React.FC<HomePageProps> = ({ user, navigateTo, openSignupModal, 
                         
                         <div className="space-y-4 text-neutral-400 text-sm md:text-[15px] leading-relaxed mb-6">
                             <p>
-                                Lazerdsgn is a modern design studio built for brands that want clarity, identity, and impact — not just visuals. In a world full of noise and copy-paste design, we focus on precision, originality, and results. Every project is built with purpose, whether it’s branding, UI/UX, social media design, or full digital systems.
+                                umardsgn_ is a modern design studio built for brands that want clarity, identity, and impact — not just visuals. In a world full of noise and copy-paste design, we focus on precision, originality, and results. Every project is built with purpose, whether it’s branding, UI/UX, social media design, or full digital systems.
                             </p>
                             <p>
                                 The studio is led by Umar Arif, a designer with 5+ years of professional experience and 1,000+ completed projects across startups, creators, and growing businesses worldwide. His approach blends strategy, creativity, and clean aesthetics to create designs that not only look premium but connect with real audiences.
                             </p>
                             <p>
-                                At Lazerdsgn, design is more than decoration — it’s communication. We research your brand, understand your goals, and craft visuals that strengthen your identity and help you stand out in competitive spaces. From logos to full brand systems, every detail is intentional.
+                                At umardsgn_, design is more than decoration — it’s communication. We research your brand, understand your goals, and craft visuals that strengthen your identity and help you stand out in competitive spaces. From logos to full brand systems, every detail is intentional.
                             </p>
                             <p>
-                                Built for the new generation of founders and creators, Lazerdsgn also integrates modern tools and community-driven creativity to help brands evolve faster.
+                                Built for the new generation of founders and creators, umardsgn_ also integrates modern tools and community-driven creativity to help brands evolve faster.
                             </p>
                             <p>
                                 If you want design that speaks clearly, performs confidently, and feels unmistakably yours — you’re in the right place.

@@ -19,7 +19,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo }) => {
                     <div className="col-span-2 md:col-span-1">
                         <h3 className="text-3xl font-extrabold tracking-tighter text-primary mb-4">Stay <br /> Connected</h3>
                         <p className="text-secondary text-sm mb-4">
-                            Join our newsletter for the latest updates and exclusive offers from LazerDsgn.
+                            Join our newsletter for the latest updates and exclusive offers from umardsgn_.
                         </p>
                         <div className="flex items-center border border-secondary rounded-xl overflow-hidden p-1 bg-secondary max-w-xs">
                             <input type="email" placeholder="Enter your email" className="w-full px-3 py-2 text-sm border-none focus:ring-0 focus:outline-none placeholder-muted bg-transparent text-primary" />
@@ -61,7 +61,7 @@ const Footer: React.FC<FooterProps> = ({ navigateTo }) => {
                     </div>
                 </div>
                 <div className="pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-muted">
-                    <p>&copy; 2024 LazerDsgn. All rights reserved.</p>
+                    <p>&copy; 2024 umardsgn_. All rights reserved.</p>
                     <div className="flex space-x-6 mt-4 md:mt-0">
                         <a href="#" className="hover:text-primary transition">Privacy Policy</a>
                         <a href="#" className="hover:text-primary transition">Terms of Service</a>
